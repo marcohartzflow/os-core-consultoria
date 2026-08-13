@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder deploy step
+        run: echo "Deploy would happen here"
+
+  notify:
+    needs: deploy
+    if: always()
+    uses: MaximusFlow/.github/.github/workflows/notify-discord-deploy.yml@main
+    with:
+      status: ${{ needs.deploy.result }}
+    secrets: inherit
