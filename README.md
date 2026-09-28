@@ -16,7 +16,7 @@ docs/      documentação de arquitetura e conformidade
 ## Requisitos
 
 - Docker (Postgres sobe via `compose.yaml` automaticamente no `bootRun` e nos testes via Testcontainers)
-- JDK 17 ou superior no host para rodar o Gradle. O JDK 25 do toolchain é baixado automaticamente.
+- Qualquer JDK recente no `PATH` só para iniciar o Gradle. O JDK 25 que compila e roda o daemon é baixado sozinho (`apps/api/gradle/gradle-daemon-jvm.properties`, Gradle Daemon JVM criteria). No IntelliJ 2025.1+ isso vale automaticamente: não configure Gradle JVM à mão.
 - Node.js 24 e pnpm 11 (`corepack enable` respeita o campo `packageManager`)
 
 ## Rodando

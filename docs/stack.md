@@ -79,6 +79,10 @@ Regras que mantêm a troca de preset segura:
 3. Fontes entram por `--font-sans`, `--font-heading` e `--font-geist-mono` em `src/app/layout.tsx` + `globals.css`; o `apply` reescreve os dois.
 4. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build` e conferir as telas.
 
+## JDK: uma única fonte de verdade
+
+`apps/api/gradle/gradle-daemon-jvm.properties` (gerado por `./gradlew updateDaemonJvm --jvm-version=25 --jvm-vendor=adoptium`) diz ao Gradle qual JDK roda o daemon e de onde baixá-lo; o toolchain do `build.gradle.kts` diz qual compila. Ambos 25, Temurin. Consequência: o JDK do `PATH` ou do `JAVA_HOME` só inicia o wrapper e pode ser qualquer versão recente; IntelliJ 2025.1+ lê o mesmo arquivo. Referências: https://docs.gradle.org/current/userguide/gradle_daemon.html#sec:daemon_jvm_criteria e https://www.jetbrains.com/help/idea/gradle-jvm-selection.html
+
 ## Comandos oficiais de criação usados
 
 API, gerada pelo Spring Initializr:
