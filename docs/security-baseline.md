@@ -154,6 +154,11 @@ Controles implementados e cobertos por `AiToolsTests`:
 
 Aceitos com justificativa: token de convite na URL (uso único, 48 h, `Referrer-Policy: same-origin`); `style-src 'unsafe-inline'` (Radix posiciona popovers com `style`; scripts continuam só com nonce); sessão serializada com JDK serialization pelo Spring Session (conteúdo gerado pela própria aplicação, banco é fronteira de confiança).
 
+### Direitos do titular, LGPD art. 18 (2026-09-28)
+
+- Acesso (inciso II): `GET /api/me/data` devolve JSON com tudo que o portal guarda sobre a pessoa, seção por módulo (`account`, `sessions`, `conversations`, `audit`). Cada módulo que guarda dado pessoal implementa `PersonalDataContributor`; `PersonalDataService` agrega e audita (`privacy.data.exported`). Botão em Minha conta.
+- Eliminação/anonimização (inciso VI): `POST /api/iam/users/{id}/anonymize` (`iam.user.anonymize`, tool destrutiva `iam_anonymize_user`) só para conta já desativada: e-mail e nome viram placeholders, credencial e tokens somem, roles são removidas, sessões encerradas, conversas e memória do assistente apagadas. Conta anonimizada não reativa. A trilha de auditoria fica intacta (obrigação legal, art. 7 II e art. 16 I) e a linha `iam.user.anonymized` guarda só o id. Coberto por `PrivacyTests`.
+
 ### Trilha de auditoria consultável (2026-09-28)
 
 `GET /api/audit/events` (paginado, filtros por quem, ação, entidade e período) e `GET /api/audit/events.csv` (até 10.000 linhas, RFC 4180, prefixo neutralizado contra CSV injection) atrás de `audit.event.read` e `audit.event.export`. Exportar gera a própria linha `audit.exported`. Tool `audit_search` dá ao agente a mesma consulta sob a mesma permissão. Tela em Administração > Auditoria. Coberto por `AuditTrailTests`.

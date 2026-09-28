@@ -27,6 +27,7 @@ export interface UserSummary {
   lastLoginAt: string | null;
   roles: RoleRef[];
   createdAt: string;
+  anonymizedAt: string | null;
 }
 
 export interface InvitationIssued {

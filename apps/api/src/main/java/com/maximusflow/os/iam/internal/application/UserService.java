@@ -12,6 +12,7 @@ import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.ConflictException;
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
+import com.maximusflow.os.common.privacy.PersonalDataService;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.Destructive;
 import com.maximusflow.os.common.security.RequiresPermission;
@@ -58,11 +59,13 @@ public class UserService {
 
 	private final ApplicationEventPublisher events;
 
+	private final PersonalDataService personalData;
+
 	private final Clock clock;
 
 	UserService(UserRepository users, RoleRepository roles, AccountTokens tokens, AccountNotifier notifier,
 			AppLinks links, IamProperties properties, AuditRecorder audit, CurrentUser currentUser,
-			GrantGuard grantGuard, ApplicationEventPublisher events, Clock clock) {
+			GrantGuard grantGuard, ApplicationEventPublisher events, PersonalDataService personalData, Clock clock) {
 		this.users = users;
 		this.roles = roles;
 		this.tokens = tokens;
@@ -73,6 +76,7 @@ public class UserService {
 		this.currentUser = currentUser;
 		this.grantGuard = grantGuard;
 		this.events = events;
+		this.personalData = personalData;
 		this.clock = clock;
 	}
 
@@ -156,8 +160,32 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.disable", description = "Desativar e reativar usuários")
 	public UserSummary enable(UUID id) {
 		User user = load(id);
+		if (user.isAnonymized()) {
+			throw new DomainRuleException("Uma conta anonimizada não pode ser reativada");
+		}
 		user.enable();
 		this.audit.record("iam.user.enabled", "user", user.getId().toString(), null);
+		return UserSummary.of(user, this.clock.instant());
+	}
+
+	@Tool(name = "iam_anonymize_user",
+			description = "Anonimiza de forma irreversível os dados pessoais de um usuário já desativado (LGPD): "
+					+ "e-mail, nome, credenciais, conversas com o assistente. Exige confirmação da pessoa.")
+	@Destructive("Apaga os dados pessoais do usuário de forma irreversível")
+	@RequiresPermission(value = "iam.user.anonymize", description = "Anonimizar dados pessoais de usuários desativados")
+	public UserSummary anonymize(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
+		User user = load(id);
+		if (user.getId().equals(this.currentUser.require().getId())) {
+			throw new DomainRuleException("Você não pode anonimizar a própria conta por aqui");
+		}
+		if (user.getStatus() != AccountStatus.DISABLED) {
+			throw new DomainRuleException("Desative o usuário antes de anonimizar os dados");
+		}
+		if (user.isAnonymized()) {
+			throw new DomainRuleException("Os dados deste usuário já foram anonimizados");
+		}
+		this.personalData.erase(user.getId(), user.getEmail());
+		this.audit.record("iam.user.anonymized", "user", user.getId().toString(), null);
 		return UserSummary.of(user, this.clock.instant());
 	}
 

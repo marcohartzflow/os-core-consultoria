@@ -1,7 +1,8 @@
 import type { UserSummary } from "@/core/api/types";
 import { Badge } from "@/components/ui/badge";
 
-export function StatusBadge({ user }: { user: Pick<UserSummary, "status" | "locked"> }) {
+export function StatusBadge({ user }: { user: Pick<UserSummary, "status" | "locked" | "anonymizedAt"> }) {
+  if (user.anonymizedAt) return <Badge variant="outline">Anonimizado</Badge>;
   if (user.locked) return <Badge variant="destructive">Bloqueado</Badge>;
   switch (user.status) {
     case "ACTIVE":

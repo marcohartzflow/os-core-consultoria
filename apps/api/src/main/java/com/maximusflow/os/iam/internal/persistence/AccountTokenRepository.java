@@ -15,4 +15,6 @@ public interface AccountTokenRepository extends JpaRepository<AccountToken, UUID
 
 	void deleteByUserAndType(User user, TokenType type);
 
+	void deleteByUser(User user);
+
 }

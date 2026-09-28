@@ -30,6 +30,19 @@ export default function AccountPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <ChangePasswordCard />
         <SessionsCard />
+        <Card>
+          <CardHeader>
+            <CardTitle>Meus dados</CardTitle>
+            <CardDescription>Tudo que o portal guarda sobre você, em JSON (LGPD, art. 18).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" asChild>
+              <a href="/api/me/data" download>
+                Baixar meus dados
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </>
   );

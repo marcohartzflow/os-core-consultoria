@@ -59,6 +59,9 @@ public class User extends AuditableEntity {
 	@Column(name = "password_change_required", nullable = false)
 	private boolean passwordChangeRequired;
 
+	@Column(name = "anonymized_at")
+	private @Nullable Instant anonymizedAt;
+
 	@ManyToMany
 	@JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"),
 			inverseJoinColumns = @JoinColumn(name = "role_id"))
@@ -108,6 +111,28 @@ public class User extends AuditableEntity {
 		if (this.status == AccountStatus.INVITED) {
 			this.status = AccountStatus.ACTIVE;
 		}
+	}
+
+	/**
+	 * LGPD art. 18 VI: replaces every identifying field with placeholders and drops the credential. The
+	 * row (and its id, referenced by the audit trail) stays; the person is no longer identifiable.
+	 */
+	public void anonymize(Instant now) {
+		this.email = "anonymized-" + this.id + "@invalid";
+		this.name = "Titular removido";
+		this.passwordHash = null;
+		this.passwordChangeRequired = false;
+		this.roles = new HashSet<>();
+		this.status = AccountStatus.DISABLED;
+		this.anonymizedAt = now;
+	}
+
+	public boolean isAnonymized() {
+		return this.anonymizedAt != null;
+	}
+
+	public @Nullable Instant getAnonymizedAt() {
+		return this.anonymizedAt;
 	}
 
 	public void disable() {

@@ -78,6 +78,11 @@ class UserController {
 		return this.service.enable(id);
 	}
 
+	@PostMapping("/{id}/anonymize")
+	UserSummary anonymize(@PathVariable UUID id) {
+		return this.service.anonymize(id);
+	}
+
 	private static Set<UUID> orEmpty(@Nullable Set<UUID> ids) {
 		return (ids != null) ? ids : Set.of();
 	}

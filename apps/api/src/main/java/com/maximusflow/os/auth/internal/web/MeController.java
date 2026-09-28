@@ -7,6 +7,7 @@ import com.maximusflow.os.auth.internal.SessionAdminService;
 import com.maximusflow.os.auth.internal.SessionTerminator;
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.NotFoundException;
+import com.maximusflow.os.common.privacy.PersonalDataService;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.UserDirectory;
@@ -45,8 +46,11 @@ class MeController {
 
 	private final AuditRecorder audit;
 
+	private final PersonalDataService personalData;
+
 	MeController(CurrentUser currentUser, UserDirectory userDirectory, SessionTerminator sessions,
-			SessionAdminService sessionAdmin, AuditRecorder audit) {
+			SessionAdminService sessionAdmin, AuditRecorder audit, PersonalDataService personalData) {
+		this.personalData = personalData;
 		this.currentUser = currentUser;
 		this.userDirectory = userDirectory;
 		this.sessions = sessions;
@@ -59,6 +63,16 @@ class MeController {
 		OsPrincipal principal = this.currentUser.require();
 		return this.userDirectory.findById(principal.getId()).map(MeResponse::of)
 			.orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+	}
+
+	/** LGPD art. 18 II: everything the portal holds about the person, as a downloadable JSON document. */
+	@GetMapping(value = "/api/me/data", produces = "application/json")
+	org.springframework.http.ResponseEntity<java.util.Map<String, Object>> exportData() {
+		OsPrincipal principal = this.currentUser.require();
+		return org.springframework.http.ResponseEntity.ok()
+			.header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"meus-dados.json\"")
+			.header("X-Content-Type-Options", "nosniff")
+			.body(this.personalData.export(principal.getId(), principal.getEmail()));
 	}
 
 	/** Changes the password, keeps this session and terminates every other one (ASVS 7.4.3). */

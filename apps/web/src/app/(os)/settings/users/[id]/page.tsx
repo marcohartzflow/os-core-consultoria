@@ -13,6 +13,15 @@ import { PageHeader } from "@/core/ui/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -178,8 +187,18 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                   </Button>
                 </RequirePermission>
               )}
+              {user.status === "DISABLED" && !user.anonymizedAt && (
+                <RequirePermission permission="iam.user.anonymize">
+                  <AnonymizeDialog
+                    disabled={busy}
+                    onConfirm={() =>
+                      run("Dados pessoais anonimizados.", () => api(`/api/iam/users/${id}/anonymize`, { method: "POST" }))
+                    }
+                  />
+                </RequirePermission>
+              )}
               <RequirePermission permission="iam.user.disable">
-                {user.status === "DISABLED" ? (
+                {user.anonymizedAt ? null : user.status === "DISABLED" ? (
                   <Button
                     variant="outline"
                     disabled={busy}
@@ -217,5 +236,41 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         </Card>
       </div>
     </>
+  );
+}
+
+function AnonymizeDialog({ disabled, onConfirm }: { disabled: boolean; onConfirm: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" disabled={disabled}>
+          Anonimizar dados
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Anonimizar dados pessoais</DialogTitle>
+          <DialogDescription>
+            E-mail, nome, credenciais e conversas com o assistente são apagados de forma irreversível. A trilha de
+            auditoria mantém só o identificador interno. A conta não pode ser reativada depois.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setOpen(false);
+              void onConfirm();
+            }}
+          >
+            Anonimizar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
