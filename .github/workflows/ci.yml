@@ -25,6 +25,8 @@ jobs:
       - name: Build and test
         working-directory: apps/api
         run: ./gradlew build --no-daemon
+      - name: OpenAPI document is committed and current
+        run: git diff --exit-code -- packages/contracts/openapi.json
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,6 +46,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Generated types are committed and current
+        run: pnpm contracts && git diff --exit-code -- packages/contracts/src
       - run: pnpm lint && pnpm check-types && pnpm build
 
   images:

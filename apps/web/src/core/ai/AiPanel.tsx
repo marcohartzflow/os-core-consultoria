@@ -70,7 +70,7 @@ function AiPanel() {
       api<PendingActionView[]>(`/api/ai/conversations/${activeId}/actions`),
     ]).then(
       ([messages, actions]) => {
-        setLines(messages.map((m) => ({ kind: m.role, text: m.text })));
+        setLines(messages.map((m) => ({ kind: m.role === "user" ? "user" : "assistant", text: m.text })));
         setPending(actions);
       },
       (e: unknown) => setError(errorMessage(e)),

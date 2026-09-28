@@ -38,7 +38,8 @@ os-core/
       src/core/             auth, iam, painel de IA, client da API
       src/modules/          negócio do cliente (tasks/ é o exemplo)
     mobile/                 futuro (Expo)
-  packages/                 criado junto com o primeiro pacote compartilhado (client do OpenAPI); inexistente até lá
+  packages/
+    contracts/              tipos TypeScript gerados do OpenAPI da API (openapi.json + schema.d.ts, commitados)
   docs/
 ```
 
@@ -95,7 +96,7 @@ O browser só conhece o domínio do Next. O `next.config.ts` reescreve `/api/*` 
 
 - Next.js como frontend puro. Route handlers só se algo exigir BFF, o que não é o caso hoje. `src/proxy.ts` só redireciona pela presença do cookie; autorização é sempre da API.
 - Interface inteira sobre shadcn/ui com presets: componentes gerados em `src/components/ui`, identidade visual trocada com `shadcn apply --preset` (ver `stack.md`). Código próprio em `src/core` (auth, shell, iam) e `src/modules` (cliente) só compõe componentes do shadcn e usa tokens semânticos.
-- Client TypeScript gerado do OpenAPI do Spring (springdoc em `/api/v3/api-docs`) para `packages/contracts` (fase 3). Até lá, `src/core/api/types.ts` espelha os contratos à mão.
+- Tipos do front vêm de `packages/contracts`: `OpenApiContractTests` exporta o documento do springdoc para `openapi.json`, `pnpm contracts` gera `schema.d.ts` (openapi-typescript) e o CI falha se algum dos dois estiver desatualizado. `src/core/api/types.ts` só reexporta esses tipos; o client HTTP (`client.ts`) continua próprio, por causa do CSRF e do Problem Details.
 - Shell do portal monta menu a partir de `src/core/shell/navigation.ts` + `src/modules/navigation.ts`, filtrado pelas permissões do usuário (`GET /api/me`). Módulo sem permissão não aparece.
 - Painel de IA na lateral, com streaming token a token por SSE.
 

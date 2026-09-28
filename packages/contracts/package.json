@@ -1,0 +1,18 @@
+{
+  "name": "@maximusflow/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript types generated from the API's OpenAPI document (packages/contracts/openapi.json).",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts"
+    }
+  },
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o src/schema.d.ts --root-types --root-types-no-schema-prefix --empty-objects-unknown"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}

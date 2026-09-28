@@ -19,6 +19,8 @@ cd apps/api && ./gradlew test        # inclui ModularityTests
 cd ../.. && pnpm lint && pnpm check-types && pnpm build
 ```
 
+Mudou controller ou record da API? Rode os testes da API (eles regravam `packages/contracts/openapi.json`) e depois `pnpm contracts` para regerar os tipos. O CI falha se um dos dois arquivos estiver desatualizado.
+
 ## Regras que o CI e a revisão cobram
 
 1. Todo use case tem `@RequiresPermission`; controller não tem regra de negócio.

@@ -11,6 +11,7 @@
     "lint": "pnpm -r run lint",
     "check-types": "pnpm -r run check-types",
     "api": "cd apps/api && ./gradlew bootRun",
-    "api:test": "cd apps/api && ./gradlew test"
+    "api:test": "cd apps/api && ./gradlew test",
+    "contracts": "pnpm --filter @maximusflow/contracts generate"
   }
 }
