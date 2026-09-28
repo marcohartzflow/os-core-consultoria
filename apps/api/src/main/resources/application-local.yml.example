@@ -3,6 +3,14 @@ spring:
   ai:
     anthropic:
       api-key: sk-ant-...
+# Para testar e-mail localmente (ex.: Mailpit em localhost:1025), descomente:
+# spring:
+#   mail:
+#     host: localhost
+#     port: 1025
+# os:
+#   mail:
+#     from: OS <no-reply@localhost>
 springdoc:
   swagger-ui:
     enabled: true

@@ -62,6 +62,10 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      # /actuator/health drives the container health check; an SMTP outage must not restart the app.
+      enabled: false
 
 springdoc:
   api-docs:
@@ -73,6 +77,10 @@ os:
   app:
     # Base URL of the web portal, used in invitation and password-reset links.
     base-url: ${OS_APP_BASE_URL:http://localhost:3000}
+  mail:
+    # Invitation and reset e-mails go out as soon as spring.mail.host is set (see application-prod.yml).
+    from: ${OS_MAIL_FROM:}
+    portal-name: ${OS_MAIL_PORTAL_NAME:OS}
   auth:
     session:
       absolute-timeout: 12h

@@ -154,6 +154,10 @@ Controles implementados e cobertos por `AiToolsTests`:
 
 Aceitos com justificativa: token de convite na URL (uso único, 48 h, `Referrer-Policy: same-origin`); `style-src 'unsafe-inline'` (Radix posiciona popovers com `style`; scripts continuam só com nonce); sessão serializada com JDK serialization pelo Spring Session (conteúdo gerado pela própria aplicação, banco é fronteira de confiança).
 
+### E-mail de convite e reset (2026-09-28)
+
+`MailAccountNotifier` (ativo quando `spring.mail.host` está definido) envia os links por SMTP em texto puro, sem HTML, e loga só o endereço, nunca o link. `application-prod.yml` exige STARTTLS e define timeouts curtos. O indicador de saúde de mail fica desligado para uma falha de SMTP não derrubar o health check do container. Coberto por `MailAccountNotifierTests`.
+
 ### Senha do bootstrap (2026-09-28)
 
 A senha do primeiro administrador vem de variável de ambiente, ou seja, foi digitada por quem instalou. A conta nasce com `password_change_required`; até a pessoa definir a própria senha, a API só responde `GET /api/me`, `POST /api/me/password`, logout e CSRF (`PasswordChangeGateFilter`, 403 com `type urn:os:problem:password-change-required`) e o portal prende a pessoa em "Minha conta". Coberto por `PasswordChangeGateTests`. Desligável por `os.iam.bootstrap.require-password-change=false` (só faz sentido em teste).
