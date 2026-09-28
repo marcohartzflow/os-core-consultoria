@@ -1,0 +1,149 @@
+package com.maximusflow.os;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import com.maximusflow.os.ai.internal.application.ConversationService;
+import com.maximusflow.os.ai.internal.application.PendingActionService;
+import com.maximusflow.os.ai.internal.domain.PendingAction;
+import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
+import com.maximusflow.os.ai.internal.tools.RegisteredTool;
+import com.maximusflow.os.ai.internal.tools.ToolRegistry;
+import com.maximusflow.os.common.security.OsPrincipal;
+import com.maximusflow.os.iam.AccountSnapshot;
+import com.maximusflow.os.iam.UserDirectory;
+
+import jakarta.servlet.http.Cookie;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The agent's safety rails without calling the model: registry contents and permission filtering,
+ * destructive tools parked as pending actions, and confirmation executing the real use case under
+ * the confirming person's authorization.
+ */
+@Import(TestcontainersConfiguration.class)
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class AiToolsTests {
+
+	@Autowired
+	MockMvc mvc;
+
+	@Autowired
+	ToolRegistry registry;
+
+	@Autowired
+	PendingActionService pendingActions;
+
+	@Autowired
+	ConversationService conversations;
+
+	@Autowired
+	UserDirectory userDirectory;
+
+	@AfterEach
+	void clearContext() {
+		SecurityContextHolder.clearContext();
+	}
+
+	@Test
+	void everyToolRequiresAPermissionAndTheCatalogIsFilteredByIt() {
+		assertThat(this.registry.all()).extracting(RegisteredTool::name).contains("iam_list_users", "iam_get_user",
+				"iam_disable_user", "iam_list_roles");
+		assertThat(this.registry.all()).allSatisfy((tool) -> assertThat(tool.permission()).isNotBlank());
+		assertThat(this.registry.find("iam_disable_user")).get().extracting(RegisteredTool::destructive).isEqualTo(true);
+		assertThat(this.registry.find("iam_list_users")).get().extracting(RegisteredTool::destructive).isEqualTo(false);
+
+		assertThat(this.registry.forPermissions(Set.of("iam.user.read"))).extracting(RegisteredTool::name)
+			.containsExactly("iam_get_user", "iam_list_users");
+		assertThat(this.registry.forPermissions(Set.of())).isEmpty();
+	}
+
+	@Test
+	void toolsEndpointRequiresChatPermissionAndReturnsOnlyAllowedTools() throws Exception {
+		Cookie session = loginAsAdmin();
+		this.mvc.perform(get("/api/ai/tools").cookie(session))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.name == 'iam_disable_user')].destructive").value(true));
+		this.mvc.perform(get("/api/ai/tools")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void destructiveToolIsParkedAndOnlyRunsAfterConfirmation() {
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("teste").id();
+		RegisteredTool disable = this.registry.find("iam_disable_user").orElseThrow();
+
+		// The agent "calls" the destructive tool: nothing happens except a pending action.
+		var stub = new ConfirmingToolCallback(disable, (tool, args) -> this.pendingActions.park(conversationId, tool, args));
+		String reply = stub.call("{\"id\":\"" + UUID.randomUUID() + "\"}", new ToolContext(Map.of()));
+		assertThat(reply).contains("PENDING_CONFIRMATION");
+		var open = this.pendingActions.open(conversationId);
+		assertThat(open).hasSize(1);
+		assertThat(open.getFirst().tool()).isEqualTo("iam_disable_user");
+
+		// Rejecting closes it; confirming a closed action is refused.
+		var rejected = this.pendingActions.reject(open.getFirst().id());
+		assertThat(rejected.status()).isEqualTo(PendingAction.Status.REJECTED);
+		assertThat(this.pendingActions.open(conversationId)).isEmpty();
+
+		// Confirming runs the real use case, which applies its own rules (unknown user -> 404 mapped to FAILED).
+		UUID again = stub2(disable, conversationId).apply("{\"id\":\"" + UUID.randomUUID() + "\"}");
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(again))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		assertThat(this.pendingActions.open(conversationId)).isEmpty();
+	}
+
+	private java.util.function.Function<String, UUID> stub2(RegisteredTool tool, UUID conversationId) {
+		return (args) -> {
+			var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a));
+			String reply = stub.call(args, new ToolContext(Map.of()));
+			return UUID.fromString(reply.replaceAll(".*\"actionId\":\"([^\"]+)\".*", "$1"));
+		};
+	}
+
+	private void actAsAdmin() {
+		AccountSnapshot admin = this.userDirectory.findByEmail("admin@example.com").orElseThrow();
+		OsPrincipal principal = new OsPrincipal(admin.id(), admin.email(), admin.name(), null, true, true,
+				admin.permissions());
+		SecurityContext context = SecurityContextHolder.createEmptyContext();
+		context.setAuthentication(
+				UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
+		SecurityContextHolder.setContext(context);
+	}
+
+	private Cookie loginAsAdmin() throws Exception {
+		MvcResult csrf = this.mvc.perform(get("/api/auth/csrf")).andReturn();
+		Cookie xsrf = csrf.getResponse().getCookie("XSRF-TOKEN");
+		MvcResult login = this.mvc
+			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+			.andExpect(status().isOk())
+			.andReturn();
+		return login.getResponse().getCookie("OS_SESSION");
+	}
+
+}
