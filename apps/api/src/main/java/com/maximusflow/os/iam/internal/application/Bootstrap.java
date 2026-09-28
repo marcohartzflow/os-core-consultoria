@@ -85,7 +85,8 @@ class Bootstrap implements ApplicationRunner {
 			log.error("Bootstrap password rejected, first administrator not created: {}", ex.getMessage());
 			return;
 		}
-		User user = this.users.save(User.bootstrap(email, bootstrap.adminName(), hash, Set.of(admin)));
+		User user = this.users.save(User.bootstrap(email, bootstrap.adminName(), hash, Set.of(admin),
+				bootstrap.requirePasswordChange()));
 		this.audit.recordSystem("iam.user.bootstrapped", "user", user.getId().toString(),
 				Map.of("email", user.getEmail()));
 		log.warn("First administrator created: {}. Change the bootstrap password after the first login.",

@@ -41,6 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // The API only serves /api/me and the password change while the flag is set; keep the person on that screen.
+  useEffect(() => {
+    if (me?.passwordChangeRequired && pathname !== "/account") router.replace("/account");
+  }, [me, pathname, router]);
+
   const logout = useCallback(async () => {
     try {
       await api("/api/auth/logout", { method: "POST" });

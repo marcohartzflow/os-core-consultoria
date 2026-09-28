@@ -6,7 +6,7 @@ import type { SessionInfo } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { formatDateTime } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,14 @@ export default function AccountPage() {
   return (
     <>
       <PageHeader title="Minha conta" description={me.email} />
+      {me.passwordChangeRequired && (
+        <Alert className="mb-4">
+          <AlertTitle>Defina uma nova senha para continuar</AlertTitle>
+          <AlertDescription>
+            A senha atual foi definida por outra pessoa. O restante do portal fica bloqueado até você escolher a sua.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChangePasswordCard />
         <SessionsCard />
@@ -28,6 +36,7 @@ export default function AccountPage() {
 }
 
 function ChangePasswordCard() {
+  const { refresh } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -48,6 +57,7 @@ function ChangePasswordCard() {
       setNext("");
       setConfirm("");
       setMessage({ kind: "ok", text: "Senha alterada. Suas outras sessões foram encerradas." });
+      await refresh();
     } catch (e) {
       setMessage({ kind: "error", text: errorMessage(e) });
     } finally {

@@ -17,6 +17,7 @@ os:
       admin-email: admin@example.com
       admin-password: Admin-Password-2026
       admin-name: Admin
+      require-password-change: false
 logging:
   level:
     SECURITY: INFO

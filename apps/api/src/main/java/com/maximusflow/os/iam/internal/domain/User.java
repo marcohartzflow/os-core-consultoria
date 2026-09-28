@@ -55,6 +55,10 @@ public class User extends AuditableEntity {
 	@Column(name = "last_login_at")
 	private @Nullable Instant lastLoginAt;
 
+	/** Set for accounts whose password was chosen by someone else (bootstrap); cleared when the person sets their own. */
+	@Column(name = "password_change_required", nullable = false)
+	private boolean passwordChangeRequired;
+
 	@ManyToMany
 	@JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"),
 			inverseJoinColumns = @JoinColumn(name = "role_id"))
@@ -75,9 +79,11 @@ public class User extends AuditableEntity {
 	}
 
 	/** Creates an already-active account. Only used by the bootstrap of the first administrator. */
-	public static User bootstrap(String email, String name, String passwordHash, Set<Role> roles) {
+	public static User bootstrap(String email, String name, String passwordHash, Set<Role> roles,
+			boolean passwordChangeRequired) {
 		User user = new User(email, name, AccountStatus.ACTIVE, roles);
 		user.passwordHash = passwordHash;
+		user.passwordChangeRequired = passwordChangeRequired;
 		return user;
 	}
 
@@ -96,6 +102,7 @@ public class User extends AuditableEntity {
 	/** Completes an invitation or a password reset. Unlocks the account. */
 	public void setPassword(String passwordHash) {
 		this.passwordHash = passwordHash;
+		this.passwordChangeRequired = false;
 		this.failedLoginAttempts = 0;
 		this.lockedUntil = null;
 		if (this.status == AccountStatus.INVITED) {
@@ -159,6 +166,10 @@ public class User extends AuditableEntity {
 
 	public @Nullable Instant getLastLoginAt() {
 		return this.lastLoginAt;
+	}
+
+	public boolean isPasswordChangeRequired() {
+		return this.passwordChangeRequired;
 	}
 
 	public Set<Role> getRoles() {

@@ -24,7 +24,8 @@ public record IamProperties(@DefaultValue Lockout lockout, @DefaultValue Passwor
 
 	/** First administrator, created only when the users table is empty. */
 	public record Bootstrap(@Nullable String adminEmail, @Nullable String adminPassword,
-			@DefaultValue("Administrador") String adminName) {
+			@DefaultValue("Administrador") String adminName,
+			@DefaultValue("true") boolean requirePasswordChange) {
 	}
 
 }

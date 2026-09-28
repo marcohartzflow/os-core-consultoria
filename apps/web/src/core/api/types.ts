@@ -9,6 +9,8 @@ export interface Me {
   name: string;
   roles: string[];
   permissions: string[];
+  /** True until the person replaces a password chosen by someone else; the API refuses everything else meanwhile. */
+  passwordChangeRequired: boolean;
 }
 
 export interface RoleRef {

@@ -1,6 +1,8 @@
 package com.maximusflow.os.auth.internal;
 
 import java.time.Clock;
+
+import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +33,7 @@ import org.springframework.security.web.authentication.session.CompositeSessionA
 import org.springframework.security.web.authentication.session.ConcurrentSessionControlAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.header.writers.ClearSiteDataHeaderWriter;
@@ -64,7 +67,8 @@ class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository securityContextRepository,
 			SessionAuthenticationStrategy sessionAuthenticationStrategy, AuthProperties properties, Clock clock,
-			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
+			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver, ObjectMapper json)
+			throws Exception {
 		var problemHandlers = new ProblemDetailSecurityHandlers(exceptionResolver);
 		http
 			.securityContext((context) -> context.securityContextRepository(securityContextRepository))
@@ -73,6 +77,7 @@ class SecurityConfig {
 					SecurityContextHolderFilter.class)
 			.addFilterBefore(new AbsoluteSessionTimeoutFilter(properties.session().absoluteTimeout(), clock),
 					SecurityContextHolderFilter.class)
+			.addFilterAfter(new PasswordChangeGateFilter(json), AuthorizationFilter.class)
 			.csrf((csrf) -> csrf.spa())
 			.authorizeHttpRequests((authorize) -> authorize
 				.requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()

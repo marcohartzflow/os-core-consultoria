@@ -80,7 +80,7 @@ class UserDirectoryImpl implements UserDirectory {
 
 	private static AccountSnapshot snapshot(User user) {
 		return new AccountSnapshot(user.getId(), user.getEmail(), user.getName(), user.getPasswordHash(),
-				user.getStatus(), user.getLockedUntil(),
+				user.getStatus(), user.getLockedUntil(), user.isPasswordChangeRequired(),
 				user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()), user.permissions());
 	}
 

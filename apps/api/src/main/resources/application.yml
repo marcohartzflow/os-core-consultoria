@@ -95,6 +95,8 @@ os:
       admin-email: ${OS_BOOTSTRAP_ADMIN_EMAIL:}
       admin-password: ${OS_BOOTSTRAP_ADMIN_PASSWORD:}
       admin-name: ${OS_BOOTSTRAP_ADMIN_NAME:Administrador}
+      # The bootstrap password was typed into a config file, so the administrator must replace it on first login.
+      require-password-change: true
   ai:
     pending-action-ttl: 5m
     max-messages: 40
