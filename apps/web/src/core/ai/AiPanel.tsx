@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Bot, Plus, Send, Wrench } from "lucide-react";
 import { api, errorMessage, mutationHeaders } from "@/core/api/client";
 import type { ChatMessage, ConversationSummary, PendingActionView } from "@/core/api/types";
@@ -16,7 +18,8 @@ type Line =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string; streaming?: boolean }
   | { kind: "tool"; text: string }
-  | { kind: "note"; text: string };
+  | { kind: "note"; text: string }
+  | { kind: "link"; text: string; href: string };
 
 /** Slide-over chat with the portal agent. Rendered only for people holding `ai.chat.use`. */
 export function AiPanelTrigger() {
@@ -37,7 +40,13 @@ export function AiPanelTrigger() {
   );
 }
 
+/** Only internal paths, exactly as the API validates them; never a full URL. */
+function internalPath(path: unknown): string | null {
+  return typeof path === "string" && path.startsWith("/") && !path.startsWith("//") ? path : null;
+}
+
 function AiPanel() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
@@ -142,6 +151,14 @@ function AiPanel() {
               },
             ]);
             break;
+          case "ui_action": {
+            const href = data.type === "navigate" ? internalPath(data.path) : null;
+            if (href) {
+              setLines((l) => [...l, { kind: "link", text: data.label || href, href }]);
+              router.push(href);
+            }
+            break;
+          }
           case "token":
             setLines((l) => {
               const last = l[l.length - 1];
@@ -311,6 +328,12 @@ function LineView({ line }: { line: Line }) {
       );
     case "note":
       return <div className="text-xs text-muted-foreground italic">{line.text}</div>;
+    case "link":
+      return (
+        <Link href={line.href} className="text-xs underline underline-offset-2">
+          {line.text}
+        </Link>
+      );
   }
 }
 

@@ -21,6 +21,7 @@ import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.common.security.RequiresPermission;
+import com.maximusflow.os.common.ui.UiAction;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.client.ChatClient;
@@ -91,7 +92,7 @@ public class AgentService {
 	 */
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
 	public Reply chat(UUID conversationId, String userMessage, @Nullable Consumer<ToolEvents.Event> listener,
-			Consumer<String> onToken) {
+			@Nullable Consumer<UiAction> uiListener, Consumer<String> onToken) {
 		if (userMessage.isBlank() || userMessage.length() > this.properties.maxUserMessageLength()) {
 			throw new DomainRuleException("Mensagem vazia ou longa demais");
 		}
@@ -102,7 +103,8 @@ public class AgentService {
 		SecurityContext securityContext = SecurityContextHolder.getContext();
 
 		List<ToolCallback> callbacks = toolsFor(actor).stream()
-			.map((tool) -> new ContextPropagatingToolCallback(wrap(tool, conversationId), securityContext, id, listener))
+			.map((tool) -> new ContextPropagatingToolCallback(wrap(tool, conversationId), securityContext, id, listener,
+					uiListener))
 			.map(ToolCallback.class::cast)
 			.toList();
 		this.audit.record("ai.turn.started", "ai_conversation", id, Map.of("tools", callbacks.size()));

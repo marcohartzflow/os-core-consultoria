@@ -13,6 +13,8 @@ import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.common.security.Destructive;
 import com.maximusflow.os.common.security.RequiresPermission;
+import com.maximusflow.os.common.ui.UiAction;
+import com.maximusflow.os.common.ui.UiActions;
 import com.maximusflow.os.iam.AccountSnapshot;
 import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.UserDirectory;
@@ -93,6 +95,7 @@ public class TaskService {
 		Task task = this.tasks.save(Task.open(title, description, activeAssignee(assigneeId), dueDate));
 		this.audit.record("tasks.task.created", "task", task.getId().toString(),
 				Map.of("title", task.getTitle(), "assigneeId", String.valueOf(task.getAssigneeId())));
+		UiActions.publish(new UiAction.Navigate("/tasks", "Ver tarefas"));
 		return summary(task, new HashMap<>());
 	}
 

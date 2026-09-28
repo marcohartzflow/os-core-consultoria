@@ -4,6 +4,8 @@ import java.util.function.Consumer;
 
 import com.maximusflow.os.common.audit.AuditContext;
 import com.maximusflow.os.common.audit.AuditOrigin;
+import com.maximusflow.os.common.ui.UiAction;
+import com.maximusflow.os.common.ui.UiActions;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.model.ToolContext;
@@ -28,12 +30,16 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 
 	private final @Nullable Consumer<ToolEvents.Event> listener;
 
+	private final @Nullable Consumer<UiAction> uiListener;
+
 	public ContextPropagatingToolCallback(ToolCallback delegate, SecurityContext securityContext,
-			String conversationId, @Nullable Consumer<ToolEvents.Event> listener) {
+			String conversationId, @Nullable Consumer<ToolEvents.Event> listener,
+			@Nullable Consumer<UiAction> uiListener) {
 		this.delegate = delegate;
 		this.securityContext = securityContext;
 		this.conversationId = conversationId;
 		this.listener = listener;
+		this.uiListener = uiListener;
 	}
 
 	@Override
@@ -51,8 +57,8 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 		SecurityContext previous = SecurityContextHolder.getContext();
 		SecurityContextHolder.setContext(this.securityContext);
 		try {
-			return AuditContext.with(AuditOrigin.AI_TOOL, this.conversationId,
-					() -> ToolEvents.listen(this.listener, () -> this.delegate.call(toolInput, toolContext)));
+			return AuditContext.with(AuditOrigin.AI_TOOL, this.conversationId, () -> ToolEvents.listen(this.listener,
+					() -> UiActions.listen(this.uiListener, () -> this.delegate.call(toolInput, toolContext))));
 		}
 		finally {
 			SecurityContextHolder.setContext(previous);

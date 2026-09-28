@@ -2,7 +2,7 @@
 
 O diferencial do OS é que todo o sistema é operável pelo agente, e o agente só consegue fazer o que o usuário logado pode fazer. Este documento define como isso funciona no módulo `ai`.
 
-Estado (2026-09-28): implementado no `os-core` conforme abaixo. Classes: `ToolRegistry`, `AuditedToolCallback`, `ConfirmingToolCallback`, `AgentService`, `PendingActionService`, `ConversationService`, `AiController`. Tools no `iam`: `iam_list_users`, `iam_get_user`, `iam_list_roles` e `iam_disable_user` (destrutiva). Tools do módulo de exemplo `tasks`: `tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete` e `tasks_delete` (destrutiva). A resposta chega token a token (evento `token`), intercalada com `tool_call`, `tool_failed` e `action_pending`; `done` traz o texto completo. Pendência: ações de UI.
+Estado (2026-09-28): implementado no `os-core` conforme abaixo. Classes: `ToolRegistry`, `AuditedToolCallback`, `ConfirmingToolCallback`, `AgentService`, `PendingActionService`, `ConversationService`, `AiController`. Tools no `iam`: `iam_list_users`, `iam_get_user`, `iam_list_roles` e `iam_disable_user` (destrutiva). Tools do módulo de exemplo `tasks`: `tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete` e `tasks_delete` (destrutiva). A resposta chega token a token (evento `token`), intercalada com `tool_call`, `tool_failed`, `action_pending` e `ui_action`; `done` traz o texto completo.
 
 ## Princípios
 
@@ -81,7 +81,7 @@ Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conve
 
 - `MessageChatMemoryAdvisor` com `MessageWindowChatMemory` sobre `JdbcChatMemoryRepository` (starter `spring-ai-starter-model-chat-memory-repository-jdbc`). Tabela criada por Flyway, `initialize-schema=never`.
 - Conversa pertence a um usuário. `GET /api/ai/conversations` lista só as do usuário atual. Admin não lê conversa alheia; auditoria já registra as ações.
-- Resposta por SSE (`text/event-stream`) com eventos tipados: `token`, `tool_call`, `tool_failed`, `action_pending`, `done` (texto completo), `error`. `ui_action` fica para as ações de UI.
+- Resposta por SSE (`text/event-stream`) com eventos tipados: `token`, `tool_call`, `tool_failed`, `action_pending`, `ui_action`, `done` (texto completo), `error`.
 
 ## Modelo e opções
 
@@ -93,7 +93,7 @@ Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conve
 
 ## Ações de UI
 
-Tool pode devolver, além do resultado, um `UiAction` (`navigate`, `openForm`, `highlight`). O front interpreta a estrutura tipada e age. Nunca HTML, nunca script. Isso torna o portal operável, não só consultável.
+Um use case pode, enquanto roda como tool, publicar `UiActions.publish(new UiAction.Navigate("/tasks", "Ver tarefas"))` (pacote `common.ui`). Fora do agente (REST) não há ouvinte e a chamada não faz nada. Dentro do agente, `ContextPropagatingToolCallback` captura o ouvinte e o `AiController` envia o evento SSE `ui_action` (`{type: "navigate", path, label}`); o painel mostra um link e navega. Só caminhos internos (`/...`), validados nos dois lados; nunca HTML, nunca script. A ação nasce no nosso código, não no texto do modelo, então não pode ser forjada pela conversa. Exemplos no core: `tasks_create` leva para `/tasks`, `iam_get_user` abre a ficha do usuário. Outros tipos (`highlight`, `openForm`) entram quando um módulo precisar.
 
 ## O que um módulo novo precisa fazer
 

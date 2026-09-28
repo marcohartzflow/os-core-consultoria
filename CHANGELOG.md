@@ -15,6 +15,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Direitos do titular (LGPD art. 18): exportação dos próprios dados e anonimização de conta desativada.
 - Envio de e-mail por SMTP quando configurado.
 - Segundo fator (TOTP + códigos de recuperação), obrigatório para administradores.
+- Tipos TypeScript gerados do OpenAPI (`packages/contracts`), verificados no CI.
+- Ações de UI emitidas por tools (`navigate`), mostradas e executadas no painel do assistente.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
 
 ### Ação necessária no fork

@@ -16,6 +16,8 @@ import com.maximusflow.os.common.privacy.PersonalDataService;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.Destructive;
 import com.maximusflow.os.common.security.RequiresPermission;
+import com.maximusflow.os.common.ui.UiAction;
+import com.maximusflow.os.common.ui.UiActions;
 import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.UserDisabled;
 import com.maximusflow.os.iam.internal.IamProperties;
@@ -93,7 +95,9 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
 	@Transactional(readOnly = true)
 	public UserSummary get(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
-		return UserSummary.of(load(id), this.clock.instant());
+		User user = load(id);
+		UiActions.publish(new UiAction.Navigate("/settings/users/" + user.getId(), "Abrir " + user.getName()));
+		return UserSummary.of(user, this.clock.instant());
 	}
 
 	@RequiresPermission(value = "iam.user.create", description = "Convidar usuários")

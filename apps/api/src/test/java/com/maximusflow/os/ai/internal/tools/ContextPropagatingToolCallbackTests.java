@@ -9,6 +9,8 @@ import java.util.concurrent.Executors;
 import com.maximusflow.os.common.audit.AuditContext;
 import com.maximusflow.os.common.audit.AuditOrigin;
 import com.maximusflow.os.common.security.OsPrincipal;
+import com.maximusflow.os.common.ui.UiAction;
+import com.maximusflow.os.common.ui.UiActions;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
@@ -31,6 +33,7 @@ class ContextPropagatingToolCallbackTests {
 		context.setAuthentication(
 				UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
 		List<ToolEvents.Event> received = new ArrayList<>();
+		List<UiAction> uiActions = new ArrayList<>();
 
 		ToolCallback delegate = new ToolCallback() {
 			@Override
@@ -46,13 +49,14 @@ class ContextPropagatingToolCallbackTests {
 			@Override
 			public String call(String input, ToolContext toolContext) {
 				ToolEvents.publish(new ToolEvents.ToolCalled("probe"));
+				UiActions.publish(new UiAction.Navigate("/tasks", "Ver tarefas"));
 				var auth = SecurityContextHolder.getContext().getAuthentication();
 				return ((OsPrincipal) auth.getPrincipal()).getEmail() + "|"
 						+ AuditContext.current().map(AuditContext.Scope::origin).orElse(null) + "|"
 						+ AuditContext.current().map(AuditContext.Scope::correlationId).orElse(null);
 			}
 		};
-		var wrapped = new ContextPropagatingToolCallback(delegate, context, "conv-1", received::add);
+		var wrapped = new ContextPropagatingToolCallback(delegate, context, "conv-1", received::add, uiActions::add);
 
 		try (var executor = Executors.newSingleThreadExecutor()) {
 			String result = CompletableFuture.supplyAsync(() -> wrapped.call("{}", null), executor).get();
@@ -64,6 +68,7 @@ class ContextPropagatingToolCallbackTests {
 			assertThat(clean).isTrue();
 		}
 		assertThat(received).containsExactly(new ToolEvents.ToolCalled("probe"));
+		assertThat(uiActions).containsExactly(new UiAction.Navigate("/tasks", "Ver tarefas"));
 	}
 
 }

@@ -10,6 +10,7 @@ import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
 import com.maximusflow.os.ai.internal.tools.ToolEvents;
 import com.maximusflow.os.common.error.RateLimitedException;
+import com.maximusflow.os.common.ui.UiAction;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -95,7 +96,7 @@ class AiController {
 
 	/**
 	 * One agent turn as a Server-Sent Events stream: {@code token} as the model writes, interleaved
-	 * with {@code tool_call}, {@code tool_failed} and {@code action_pending}; then {@code done} with
+	 * with {@code tool_call}, {@code tool_failed}, {@code action_pending} and {@code ui_action}; then {@code done} with
 	 * the full text (or {@code error}). The turn runs on a virtual thread carrying the caller's
 	 * security context.
 	 */
@@ -105,7 +106,7 @@ class AiController {
 		Runnable turn = () -> {
 			try {
 				AgentService.Reply reply = this.agent.chat(id, body.text(), (event) -> emit(emitter, event),
-						(token) -> emitToken(emitter, token));
+						(action) -> emitUiAction(emitter, action), (token) -> emitToken(emitter, token));
 				emitter.send(SseEmitter.event().name("done").data(Map.of("text", reply.text())));
 				emitter.complete();
 			}
@@ -132,6 +133,18 @@ class AiController {
 	@PostMapping("/actions/{id}/reject")
 	PendingActionService.PendingActionView reject(@PathVariable UUID id) {
 		return this.pendingActions.reject(id);
+	}
+
+	private static void emitUiAction(SseEmitter emitter, UiAction action) {
+		try {
+			switch (action) {
+				case UiAction.Navigate n -> emitter.send(SseEmitter.event().name("ui_action")
+					.data(Map.of("type", "navigate", "path", n.path(), "label", n.label())));
+			}
+		}
+		catch (IOException ex) {
+			throw new IllegalStateException("SSE client disconnected", ex);
+		}
 	}
 
 	private static void emitToken(SseEmitter emitter, String token) {
