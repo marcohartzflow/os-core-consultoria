@@ -31,7 +31,7 @@ git fetch upstream
 git checkout -b chore/upstream-$(date +%Y-%m) main
 git merge upstream/main          # conflitos só aparecem se a regra acima foi quebrada
 cd apps/api && ./gradlew test    # inclui ModularityTests
-cd ../.. && pnpm install && pnpm turbo run lint check-types build
+cd ../.. && pnpm install && pnpm lint && pnpm check-types && pnpm build
 ```
 
 Abra PR no fork, revise as notas de versão do core (breaking changes ficam em `docs/architecture.md` e nas mensagens de commit `feat!:`), faça deploy em homologação, depois produção conforme `deploy.md` (backup antes).

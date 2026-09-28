@@ -6,14 +6,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "check-types": "turbo run check-types",
+    "dev": "pnpm --filter @maximusflow/web dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "check-types": "pnpm -r run check-types",
     "api": "cd apps/api && ./gradlew bootRun",
     "api:test": "cd apps/api && ./gradlew test"
-  },
-  "devDependencies": {
-    "turbo": "^2"
   }
 }

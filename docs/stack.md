@@ -40,7 +40,6 @@ Notas do Spring Boot 4 que afetam o código:
 |---|---|---|
 | Node.js | 24 LTS (`.node-version`) | https://nodejs.org/en/about/previous-releases |
 | pnpm | 11.5 (campo `packageManager`) | https://pnpm.io/ |
-| Turborepo | 2.x | https://turborepo.dev/docs |
 | Next.js | 16.3.x, App Router, Turbopack | https://nextjs.org/docs e https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites |
 | React | 19.2.x | https://react.dev/ |
 | TypeScript | 5.x | https://www.typescriptlang.org/docs/ |
@@ -76,7 +75,7 @@ Regras que mantêm a troca de preset segura:
 1. `src/components/ui/**` e `src/hooks/**` são gerados pelo CLI. Nunca editar à mão: `apply` sobrescreve. Componentes próprios ficam em `src/core/**` e `src/modules/**` e compõem os do shadcn.
 2. Só tokens semânticos nas classes (`bg-background`, `text-muted-foreground`, `bg-primary`, `border-border`, `bg-sidebar`, `rounded-lg` etc). Nunca cor crua (`bg-blue-600`), nunca `oklch(...)` fora do `globals.css`.
 3. Fontes entram por `--font-sans`, `--font-heading` e `--font-geist-mono` em `src/app/layout.tsx` + `globals.css`; o `apply` reescreve os dois.
-4. Depois de um `apply`, rodar `pnpm turbo run lint check-types build` e conferir as telas.
+4. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build` e conferir as telas.
 
 ## Comandos oficiais de criação usados
 
