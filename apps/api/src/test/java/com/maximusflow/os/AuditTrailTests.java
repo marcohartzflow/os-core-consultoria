@@ -33,7 +33,7 @@ class AuditTrailTests {
 	void administratorSeesTheLoginAndCanExportCsv() throws Exception {
 		Cookie session = loginAsAdmin();
 
-		this.mvc.perform(get("/api/audit/events").cookie(session).param("action", "auth.login").param("page", "0"))
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("action", "auth.login.success").param("actorEmail", "ADMIN@example").param("page", "0"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.page.size").value(50))
 			.andExpect(jsonPath("$.content[0].action").value("auth.login.success"))

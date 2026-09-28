@@ -38,6 +38,8 @@ pnpm api
 pnpm dev
 ```
 
+No IntelliJ, abra a raiz do repositório e use a run configuration compartilhada `OsApiApplication` (`.run/`): ela roda com working directory `apps/api`, onde está o `compose.yaml`, e com o perfil `local`.
+
 Copie `apps/api/src/main/resources/application-local.yml.example` para `application-local.yml`, preencha `ANTHROPIC_API_KEY` e os dados do primeiro administrador (`os.iam.bootstrap.*`), e rode com `SPRING_PROFILES_ACTIVE=local`. O primeiro admin é criado só quando a tabela de usuários está vazia. Depois, convide os demais em Administração > Usuários; sem servidor de e-mail configurado, o link do convite aparece na resposta e no log da API.
 
 Interface: shadcn/ui com presets. Componentes novos entram com `pnpm dlx shadcn@latest add <componente>` em `apps/web`; a identidade visual inteira troca com `pnpm dlx shadcn@latest apply --preset <codigo>`. Detalhes e regras em `docs/stack.md`.

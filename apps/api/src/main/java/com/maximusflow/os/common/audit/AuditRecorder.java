@@ -2,6 +2,7 @@ package com.maximusflow.os.common.audit;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.UUID;
 
 import com.maximusflow.os.common.security.CurrentUser;
 
@@ -45,6 +46,17 @@ public class AuditRecorder {
 		this.repository.save(new AuditEvent(this.clock.instant(), (actor != null) ? actor.getId() : null,
 				(actor != null) ? actor.getEmail() : null, origin(), action, entityType, entityId, serialize(details),
 				ip(), correlation()));
+	}
+
+	/**
+	 * Records an action of a known user before the security context exists for them, e.g. a
+	 * successful login (the event fires before the context is stored).
+	 */
+	@Transactional
+	public void recordFor(UUID actorId, String actorEmail, String action, @Nullable String entityType,
+			@Nullable String entityId, @Nullable Map<String, ?> details) {
+		this.repository.save(new AuditEvent(this.clock.instant(), actorId, actorEmail, origin(), action, entityType,
+				entityId, serialize(details), ip(), correlation()));
 	}
 
 	/** Records an action for which there is no authenticated user, e.g. a failed login. */

@@ -35,7 +35,8 @@ class AuthenticationEventsListener {
 		if (event.getAuthentication().getPrincipal() instanceof OsPrincipal principal) {
 			this.userDirectory.recordLoginSuccess(principal.getId());
 			security.info("login success user={}", Sanitize.forLog(principal.getEmail()));
-			this.audit.record("auth.login.success", "user", principal.getId().toString(), null);
+			this.audit.recordFor(principal.getId(), principal.getEmail(), "auth.login.success", "user",
+					principal.getId().toString(), null);
 		}
 	}
 
