@@ -2,20 +2,13 @@
 
 Base a partir da qual a Maximus Flow desenvolve o "OS" de cada cliente: um portal único que centraliza os sistemas da empresa e é operável por um agente de IA que respeita as permissões do usuário logado.
 
-- Arquitetura e decisões: [`docs/architecture.md`](docs/architecture.md)
-- Stack, versões e documentação oficial: [`docs/stack.md`](docs/stack.md)
-- Segurança, auditoria e LGPD: [`docs/security-baseline.md`](docs/security-baseline.md)
-- Agente de IA: [`docs/ai-agent.md`](docs/ai-agent.md)
-- Como criar um módulo de negócio: [`docs/new-module.md`](docs/new-module.md)
-- Deploy em um servidor (Compose + Caddy): [`docs/deploy.md`](docs/deploy.md)
-- Fork por cliente e manutenção mensal: [`docs/fork.md`](docs/fork.md)
+Documentação completa, com ordem de leitura por público, em [`docs/README.md`](docs/README.md). Como contribuir: [`CONTRIBUTING.md`](CONTRIBUTING.md). Mudanças por versão: [`CHANGELOG.md`](CHANGELOG.md). Reporte de vulnerabilidades: [`SECURITY.md`](SECURITY.md).
 
 ## Estrutura
 
 ```
 apps/api   Spring Boot 4.1 (Java 25, Gradle)  ->  http://localhost:8080
 apps/web   Next.js 16 (App Router)            ->  http://localhost:3000, repassa /api/* para o Spring
-packages/  pacotes compartilhados (contracts gerados do OpenAPI)
 deploy/    Compose, Caddyfile e backup para instalar um OS em um servidor
 docs/      documentação de arquitetura e conformidade
 ```

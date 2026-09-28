@@ -1,0 +1,36 @@
+# Continuous deployment of a client instance. os-core itself has nothing to deploy: this workflow
+# only runs in a fork where the repository variable DEPLOY_HOST is set. It updates the server over
+# SSH by running deploy/update.sh (backup, rebuild, restart).
+#
+# Fork setup: Settings > Secrets and variables > Actions
+#   variables: DEPLOY_HOST (host name or IP), DEPLOY_USER (default "deploy"), DEPLOY_PATH (default "/opt/os")
+#   secrets:   DEPLOY_SSH_KEY (private key of a user allowed to run docker on the server)
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to server
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ vars.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+      - name: Update the instance
+        run: |
+          ssh "${{ vars.DEPLOY_USER || 'deploy' }}@${{ vars.DEPLOY_HOST }}" \
+            "cd '${{ vars.DEPLOY_PATH || '/opt/os' }}' && git fetch --prune && git checkout --force '${{ github.sha }}' && deploy/update.sh"

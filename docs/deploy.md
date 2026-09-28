@@ -25,10 +25,11 @@ Entre em `https://<OS_DOMAIN>` com o e-mail e a senha de `OS_BOOTSTRAP_*`. O por
 
 ```bash
 cd /opt/os && git pull            # ou git merge upstream/main no fork
-cd deploy && ./backup.sh          # sempre antes de migrar
-docker compose up -d --build      # Flyway aplica as migrações no boot da API
-docker compose logs --tail 100 api
+deploy/update.sh                  # backup, rebuild, restart; Flyway aplica as migrações no boot da API
+docker compose -f deploy/compose.yaml logs --tail 100 api
 ```
+
+Com o workflow `cd.yml` configurado no fork (variável `DEPLOY_HOST` e secret `DEPLOY_SSH_KEY`), o mesmo script roda sozinho a cada push na `main`. O usuário SSH precisa pertencer ao grupo `docker` e ter o repositório clonado em `DEPLOY_PATH`.
 
 Reverter: `git checkout <tag-anterior>` e `docker compose up -d --build`. Migrações do Flyway não desfazem sozinhas; se a versão anterior não conhece o schema novo, restaure o backup feito antes da atualização.
 

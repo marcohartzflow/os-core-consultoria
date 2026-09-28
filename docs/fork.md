@@ -16,7 +16,7 @@ Depois, no fork:
 1. Identidade visual: `cd apps/web && pnpm dlx shadcn@latest apply --preset <codigo>`. Nenhum componente é editado à mão.
 2. Nome do portal: `OS_MAIL_PORTAL_NAME` e o título em `apps/web/src/core/shell/AppShell.tsx` (único ponto com o texto "OS").
 3. Módulos de negócio: siga `new-module.md`. O módulo de exemplo `tasks` pode ficar ou ser removido (pacote `com.maximusflow.os.tasks`, migração `V6__tasks.sql` só se o banco ainda não existe, `src/modules/tasks`, entrada em `src/modules/navigation.ts`, rota `src/app/(os)/tasks`).
-4. Deploy: `deploy.md`.
+4. Deploy: `deploy.md`. Para deploy automático a cada push na `main`, defina no repositório do fork a variável `DEPLOY_HOST` (e opcionalmente `DEPLOY_USER`, `DEPLOY_PATH`) e o secret `DEPLOY_SSH_KEY`; o workflow `cd.yml` já existe e fica inativo sem a variável.
 
 ## Regras que mantêm o merge limpo
 

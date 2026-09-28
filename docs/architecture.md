@@ -38,7 +38,7 @@ os-core/
       src/core/             auth, iam, painel de IA, client da API
       src/modules/          negócio do cliente (tasks/ é o exemplo)
     mobile/                 futuro (Expo)
-  packages/                 pacotes compartilhados entre web e mobile (ex.: contracts do OpenAPI)
+  packages/                 criado junto com o primeiro pacote compartilhado (client do OpenAPI); inexistente até lá
   docs/
 ```
 

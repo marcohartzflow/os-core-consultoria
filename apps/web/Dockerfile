@@ -6,7 +6,6 @@ RUN npm install --global pnpm@11.5.0
 WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
-COPY packages packages
 RUN pnpm install --frozen-lockfile --filter @maximusflow/web...
 COPY apps/web apps/web
 # Rewrites of /api/* are compiled at build time; inside Compose the API is reachable as http://api:8080.
