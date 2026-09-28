@@ -25,7 +25,7 @@ os-core/
     api/                    Spring Boot (Gradle, Kotlin DSL, Java 25)
       src/main/java/com/maximusflow/os/
         OsApiApplication.java
-        common/             módulo aberto: erros, paginação, auditoria base
+        common/             módulo aberto: erros, segurança, auditoria (gravação e consulta)
         auth/               módulo core: sessão, login, convite, senha
         iam/                módulo core: users, roles, permissions
         ai/                 módulo core: agente, tool registry, confirmação, auditoria de tools

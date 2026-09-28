@@ -85,6 +85,27 @@ export interface ToolView {
   destructive: boolean;
 }
 
+export type AuditOrigin = "REST" | "AI_TOOL" | "SYSTEM";
+
+export interface AuditEventView {
+  id: string;
+  occurredAt: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  origin: AuditOrigin;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  details: Record<string, unknown> | null;
+  ip: string | null;
+  correlationId: string | null;
+}
+
+export interface Paged<T> {
+  content: T[];
+  page: { size: number; number: number; totalElements: number; totalPages: number };
+}
+
 export interface ProblemDetail {
   status: number;
   title?: string;

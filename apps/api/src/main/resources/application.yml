@@ -73,6 +73,17 @@ springdoc:
   swagger-ui:
     enabled: false
 
+spring.mail:
+  # SMTP is optional: set SPRING_MAIL_HOST (plus PORT, USERNAME, PASSWORD) and OS_MAIL_FROM to send
+  # invitations and resets by e-mail; without a host the links are returned to the administrator.
+  properties:
+    mail.smtp.auth: true
+    mail.smtp.starttls.enable: true
+    mail.smtp.starttls.required: true
+    mail.smtp.connectiontimeout: 5000
+    mail.smtp.timeout: 10000
+    mail.smtp.writetimeout: 10000
+
 os:
   app:
     # Base URL of the web portal, used in invitation and password-reset links.

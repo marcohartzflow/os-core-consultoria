@@ -23,6 +23,8 @@ extra["springModulithVersion"] = "2.1.1"
 extra["springdocVersion"] = "3.1.1"
 extra["bouncyCastleVersion"] = "1.80"
 
+val mockitoAgent by configurations.creating
+
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -61,6 +63,8 @@ dependencies {
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
 	testImplementation("org.testcontainers:testcontainers-postgresql")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	// Mockito's inline mock maker must be loaded as a Java agent; dynamic attach is deprecated by the JDK.
+	mockitoAgent("org.mockito:mockito-core") { isTransitive = false }
 }
 
 dependencyManagement {
@@ -72,6 +76,9 @@ dependencyManagement {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	doFirst {
+		jvmArgs("-javaagent:${mockitoAgent.asPath}")
+	}
 	// Testcontainers mounts the Docker socket of the Docker *host* into Ryuk. With Colima the client
 	// socket lives under ~/.colima, which does not exist inside the VM; /var/run/docker.sock does,
 	// and it is also the right path for Docker Desktop and Linux. Testcontainers 2 reads this only

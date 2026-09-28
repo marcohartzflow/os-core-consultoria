@@ -1,0 +1,14 @@
+# Context for apps/web/Dockerfile (repository root).
+.git
+.github
+.turbo
+.idea
+node_modules
+**/node_modules
+**/.next
+**/.turbo
+apps/api
+deploy
+docs
+**/.env
+**/.env.local

@@ -50,6 +50,7 @@ class PasswordChangeGateFilter extends OncePerRequestFilter {
 			problem.setTitle("Troca de senha obrigatória");
 			response.setStatus(HttpStatus.FORBIDDEN.value());
 			response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+			response.setCharacterEncoding("UTF-8");
 			response.getWriter().write(this.json.writeValueAsString(problem));
 			return;
 		}

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ShieldCheck, Users } from "lucide-react";
+import { LayoutDashboard, ScrollText, ShieldCheck, Users } from "lucide-react";
 import { moduleNavigation } from "@/modules/navigation";
 
 export interface NavItem {
@@ -25,6 +25,7 @@ export function navigationFor(hasPermission: (permission: string) => boolean): N
       items: [
         { label: "Usuários", href: "/settings/users", icon: Users, permission: "iam.user.read" },
         { label: "Roles e permissões", href: "/settings/roles", icon: ShieldCheck, permission: "iam.role.read" },
+        { label: "Auditoria", href: "/settings/audit", icon: ScrollText, permission: "audit.event.read" },
       ],
     },
   ];

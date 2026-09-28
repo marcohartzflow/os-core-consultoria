@@ -1,8 +1,12 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const apiUrl = process.env.API_URL ?? "http://localhost:8080";
 
 const nextConfig: NextConfig = {
+  // Imagem Docker mínima (apps/web/Dockerfile). A raiz do monorepo entra no trace para o pnpm workspace.
+  output: "standalone",
+  outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
   // Uma origem só: o browser fala com /api/* no Next, o Next repassa ao Spring.
   // Sem CORS, cookie de sessão fica first-party, SSE do chat funciona com EventSource.
   rewrites() {

@@ -1,0 +1,8 @@
+# Terminates TLS (automatic certificates via Let's Encrypt) and forwards everything to the web app,
+# which proxies /api/* to the API. Caddy sets X-Forwarded-For/Proto; Spring trusts them only from
+# internal networks (forward-headers-strategy: native), which the Compose network is.
+{$OS_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy web:3000
+}

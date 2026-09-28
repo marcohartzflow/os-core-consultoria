@@ -154,6 +154,10 @@ Controles implementados e cobertos por `AiToolsTests`:
 
 Aceitos com justificativa: token de convite na URL (uso único, 48 h, `Referrer-Policy: same-origin`); `style-src 'unsafe-inline'` (Radix posiciona popovers com `style`; scripts continuam só com nonce); sessão serializada com JDK serialization pelo Spring Session (conteúdo gerado pela própria aplicação, banco é fronteira de confiança).
 
+### Trilha de auditoria consultável (2026-09-28)
+
+`GET /api/audit/events` (paginado, filtros por quem, ação, entidade e período) e `GET /api/audit/events.csv` (até 10.000 linhas, RFC 4180, prefixo neutralizado contra CSV injection) atrás de `audit.event.read` e `audit.event.export`. Exportar gera a própria linha `audit.exported`. Tool `audit_search` dá ao agente a mesma consulta sob a mesma permissão. Tela em Administração > Auditoria. Coberto por `AuditTrailTests`.
+
 ### E-mail de convite e reset (2026-09-28)
 
 `MailAccountNotifier` (ativo quando `spring.mail.host` está definido) envia os links por SMTP em texto puro, sem HTML, e loga só o endereço, nunca o link. `application-prod.yml` exige STARTTLS e define timeouts curtos. O indicador de saúde de mail fica desligado para uma falha de SMTP não derrubar o health check do container. Coberto por `MailAccountNotifierTests`.
