@@ -2,7 +2,7 @@
 
 O diferencial do OS é que todo o sistema é operável pelo agente, e o agente só consegue fazer o que o usuário logado pode fazer. Este documento define como isso funciona no módulo `ai`.
 
-Estado (2026-09-28): implementado no `os-core` conforme abaixo. Classes: `ToolRegistry`, `AuditedToolCallback`, `ConfirmingToolCallback`, `AgentService`, `PendingActionService`, `ConversationService`, `AiController`. Tools no `iam`: `iam_list_users`, `iam_get_user`, `iam_list_roles` e `iam_disable_user` (destrutiva). Tools do módulo de exemplo `tasks`: `tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete` e `tasks_delete` (destrutiva). Pendências: streaming token a token (hoje a resposta chega inteira no evento `message`; `tool_call` e `action_pending` chegam durante o turno) e ações de UI.
+Estado (2026-09-28): implementado no `os-core` conforme abaixo. Classes: `ToolRegistry`, `AuditedToolCallback`, `ConfirmingToolCallback`, `AgentService`, `PendingActionService`, `ConversationService`, `AiController`. Tools no `iam`: `iam_list_users`, `iam_get_user`, `iam_list_roles` e `iam_disable_user` (destrutiva). Tools do módulo de exemplo `tasks`: `tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete` e `tasks_delete` (destrutiva). A resposta chega token a token (evento `token`), intercalada com `tool_call`, `tool_failed` e `action_pending`; `done` traz o texto completo. Pendência: ações de UI.
 
 ## Princípios
 
@@ -56,7 +56,7 @@ O `ToolCallingManager` é configurado com `resolutionFallbackEnabled(false)` (pa
 
 Mesmo com o catálogo filtrado, o método do use case tem `@RequiresPermission`. Se o modelo tentar chamar uma tool fora da lista (o Spring AI já rejeita nome desconhecido), ou se a permissão do usuário mudar no meio da conversa, a chamada cai em `AccessDeniedException`, que é convertida em mensagem de erro para o modelo pelo `ToolExecutionExceptionProcessor` e registrada no log de segurança.
 
-O `SecurityContext` precisa estar presente na thread que executa a tool. O turno roda em uma virtual thread (`DelegatingSecurityContextRunnable` no `AiController`) e o Spring AI executa as tools nessa mesma thread (`ChatClient.call()`), então `SecurityContext`, `AuditContext` e `ToolEvents` (todos thread-scoped) valem dentro de cada tool. Quando o streaming token a token entrar (`stream()`), a propagação para as threads do Reactor precisa ser explícita.
+O `SecurityContext` precisa estar presente na thread que executa a tool. O turno roda em uma virtual thread (`DelegatingSecurityContextRunnable` no `AiController`), mas em streaming (`ChatClient.stream()`) o Spring AI executa as tools em threads do Reactor. `ContextPropagatingToolCallback` captura `SecurityContext`, escopo do `AuditContext` e listener de `ToolEvents` no início do turno e os restabelece em volta de cada chamada, em qualquer thread, limpando depois. `ContextPropagatingToolCallbackTests` prova isso.
 
 ## Confirmação humana
 
@@ -81,7 +81,7 @@ Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conve
 
 - `MessageChatMemoryAdvisor` com `MessageWindowChatMemory` sobre `JdbcChatMemoryRepository` (starter `spring-ai-starter-model-chat-memory-repository-jdbc`). Tabela criada por Flyway, `initialize-schema=never`.
 - Conversa pertence a um usuário. `GET /api/ai/conversations` lista só as do usuário atual. Admin não lê conversa alheia; auditoria já registra as ações.
-- Resposta por SSE (`text/event-stream`) com eventos tipados: `token`, `tool_call`, `tool_result`, `action_pending`, `ui_action`, `done`, `error`.
+- Resposta por SSE (`text/event-stream`) com eventos tipados: `token`, `tool_call`, `tool_failed`, `action_pending`, `done` (texto completo), `error`. `ui_action` fica para as ações de UI.
 
 ## Modelo e opções
 

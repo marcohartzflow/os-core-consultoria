@@ -94,18 +94,19 @@ class AiController {
 	}
 
 	/**
-	 * One agent turn as a Server-Sent Events stream: {@code tool_call}, {@code tool_failed},
-	 * {@code action_pending}, then {@code message} and {@code done} (or {@code error}). The turn runs
-	 * on a virtual thread carrying the caller's security context.
+	 * One agent turn as a Server-Sent Events stream: {@code token} as the model writes, interleaved
+	 * with {@code tool_call}, {@code tool_failed} and {@code action_pending}; then {@code done} with
+	 * the full text (or {@code error}). The turn runs on a virtual thread carrying the caller's
+	 * security context.
 	 */
 	@PostMapping(value = "/conversations/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	SseEmitter send(@PathVariable UUID id, @Valid @RequestBody MessageRequest body) {
 		SseEmitter emitter = new SseEmitter(0L);
 		Runnable turn = () -> {
 			try {
-				AgentService.Reply reply = this.agent.chat(id, body.text(), (event) -> emit(emitter, event));
-				emitter.send(SseEmitter.event().name("message").data(Map.of("text", reply.text())));
-				emitter.send(SseEmitter.event().name("done").data(Map.of()));
+				AgentService.Reply reply = this.agent.chat(id, body.text(), (event) -> emit(emitter, event),
+						(token) -> emitToken(emitter, token));
+				emitter.send(SseEmitter.event().name("done").data(Map.of("text", reply.text())));
 				emitter.complete();
 			}
 			catch (Exception ex) {
@@ -131,6 +132,15 @@ class AiController {
 	@PostMapping("/actions/{id}/reject")
 	PendingActionService.PendingActionView reject(@PathVariable UUID id) {
 		return this.pendingActions.reject(id);
+	}
+
+	private static void emitToken(SseEmitter emitter, String token) {
+		try {
+			emitter.send(SseEmitter.event().name("token").data(Map.of("text", token)));
+		}
+		catch (IOException ex) {
+			throw new IllegalStateException("SSE client disconnected", ex);
+		}
 	}
 
 	private static void emit(SseEmitter emitter, ToolEvents.Event event) {

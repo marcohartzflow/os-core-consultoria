@@ -12,11 +12,10 @@ import com.maximusflow.os.ai.internal.AiProperties;
 import com.maximusflow.os.ai.internal.domain.Conversation;
 import com.maximusflow.os.ai.internal.tools.AuditedToolCallback;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
+import com.maximusflow.os.ai.internal.tools.ContextPropagatingToolCallback;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
 import com.maximusflow.os.ai.internal.tools.ToolEvents;
 import com.maximusflow.os.ai.internal.tools.ToolRegistry;
-import com.maximusflow.os.common.audit.AuditContext;
-import com.maximusflow.os.common.audit.AuditOrigin;
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.security.CurrentUser;
@@ -28,6 +27,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,9 +81,17 @@ public class AgentService {
 			.map((t) -> new ToolView(t.name(), t.description(), t.destructive())).toList();
 	}
 
+	/**
+	 * One agent turn. Tokens are handed to {@code onToken} as the model produces them; tool events go
+	 * to {@code listener}. Blocks the calling thread until the turn ends, so the caller (a virtual
+	 * thread per request) can write SSE frames in order. Tool calls run on Reactor threads with the
+	 * turn's security context, audit scope and listener re-established by
+	 * {@link ContextPropagatingToolCallback}. No transaction spans the model call: the use cases the
+	 * tools invoke open their own.
+	 */
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
-	@Transactional
-	public Reply chat(UUID conversationId, String userMessage, @Nullable Consumer<ToolEvents.Event> listener) {
+	public Reply chat(UUID conversationId, String userMessage, @Nullable Consumer<ToolEvents.Event> listener,
+			Consumer<String> onToken) {
 		if (userMessage.isBlank() || userMessage.length() > this.properties.maxUserMessageLength()) {
 			throw new DomainRuleException("Mensagem vazia ou longa demais");
 		}
@@ -90,19 +99,30 @@ public class AgentService {
 		Conversation conversation = this.conversations.requireOwned(conversationId);
 		this.conversations.touch(conversation, userMessage);
 		String id = conversationId.toString();
+		SecurityContext securityContext = SecurityContextHolder.getContext();
 
-		List<ToolCallback> callbacks = toolsFor(actor).stream().map((tool) -> wrap(tool, conversationId)).toList();
+		List<ToolCallback> callbacks = toolsFor(actor).stream()
+			.map((tool) -> new ContextPropagatingToolCallback(wrap(tool, conversationId), securityContext, id, listener))
+			.map(ToolCallback.class::cast)
+			.toList();
 		this.audit.record("ai.turn.started", "ai_conversation", id, Map.of("tools", callbacks.size()));
 
-		String text = AuditContext.with(AuditOrigin.AI_TOOL, id,
-				() -> ToolEvents.listen(listener, () -> this.chatClient.prompt()
-					.user(userMessage)
-					.toolCallbacks(callbacks.toArray(ToolCallback[]::new))
-					.toolContext(Map.of("conversationId", id))
-					.advisors((a) -> a.param(ChatMemory.CONVERSATION_ID, id))
-					.call()
-					.content()));
-		return new Reply((text != null) ? text : "");
+		StringBuilder full = new StringBuilder();
+		Iterable<String> tokens = this.chatClient.prompt()
+			.user(userMessage)
+			.tools(callbacks.toArray(ToolCallback[]::new))
+			.toolContext(Map.of("conversationId", id))
+			.advisors((a) -> a.param(ChatMemory.CONVERSATION_ID, id))
+			.stream()
+			.content()
+			.toIterable();
+		for (String token : tokens) {
+			if (token != null && !token.isEmpty()) {
+				full.append(token);
+				onToken.accept(token);
+			}
+		}
+		return new Reply(full.toString());
 	}
 
 	private List<RegisteredTool> toolsFor(OsPrincipal actor) {

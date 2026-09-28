@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type Line =
   | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string }
+  | { kind: "assistant"; text: string; streaming?: boolean }
   | { kind: "tool"; text: string }
   | { kind: "note"; text: string };
 
@@ -142,8 +142,23 @@ function AiPanel() {
               },
             ]);
             break;
-          case "message":
-            setLines((l) => [...l, { kind: "assistant", text: data.text }]);
+          case "token":
+            setLines((l) => {
+              const last = l[l.length - 1];
+              if (last?.kind === "assistant" && last.streaming) {
+                return [...l.slice(0, -1), { kind: "assistant", text: last.text + data.text, streaming: true }];
+              }
+              return [...l, { kind: "assistant", text: data.text, streaming: true }];
+            });
+            break;
+          case "done":
+            setLines((l) => {
+              const last = l[l.length - 1];
+              if (last?.kind === "assistant" && last.streaming) {
+                return [...l.slice(0, -1), { kind: "assistant", text: data.text || last.text }];
+              }
+              return data.text ? [...l, { kind: "assistant", text: data.text }] : l;
+            });
             break;
           case "error":
             setError(data.message);

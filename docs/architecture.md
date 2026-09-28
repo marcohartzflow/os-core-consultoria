@@ -97,7 +97,7 @@ O browser só conhece o domínio do Next. O `next.config.ts` reescreve `/api/*` 
 - Interface inteira sobre shadcn/ui com presets: componentes gerados em `src/components/ui`, identidade visual trocada com `shadcn apply --preset` (ver `stack.md`). Código próprio em `src/core` (auth, shell, iam) e `src/modules` (cliente) só compõe componentes do shadcn e usa tokens semânticos.
 - Client TypeScript gerado do OpenAPI do Spring (springdoc em `/api/v3/api-docs`) para `packages/contracts` (fase 3). Até lá, `src/core/api/types.ts` espelha os contratos à mão.
 - Shell do portal monta menu a partir de `src/core/shell/navigation.ts` + `src/modules/navigation.ts`, filtrado pelas permissões do usuário (`GET /api/me`). Módulo sem permissão não aparece.
-- Painel de IA fixo na lateral, com streaming (fase 3).
+- Painel de IA na lateral, com streaming token a token por SSE.
 
 ## 6. Autorização
 
@@ -115,6 +115,6 @@ Detalhado em `ai-agent.md`. Resumo: cada use case anotado com `@Tool` e `@Requir
 
 1. Feita. Skeleton: monorepo, api gerada pelo Spring Initializr, web gerada pelo `create-next-app`, Postgres via Docker Compose, Flyway, Modulith, CI.
 2. Feita. `auth` + `iam`: login por sessão, CSRF, lockout, convite, reset de senha, roles, catálogo de permissões, `@RequiresPermission`, bootstrap do primeiro admin, `GET /api/me`, sessões, trilha de auditoria, shell web com shadcn/ui e telas de usuários, roles e conta.
-3. Feita (sem streaming token a token). `ai`: registry por scan de `@Tool` + `@RequiresPermission`, filtro por permissão, enforce no use case, confirmação humana para `@Destructive`, auditoria por tool call com origem `AI_TOOL`, conversas por usuário com memória JDBC, SSE com eventos de tool e ação pendente, painel no front. Pendente: client TypeScript gerado do OpenAPI, streaming de tokens, ações de UI.
+3. Feita. `ai`: registry por scan de `@Tool` + `@RequiresPermission`, filtro por permissão, enforce no use case, confirmação humana para `@Destructive`, auditoria por tool call com origem `AI_TOOL`, conversas por usuário com memória JDBC, SSE com eventos de tool e ação pendente, painel no front. Pendente: client TypeScript gerado do OpenAPI, ações de UI.
 4. Feita. Módulo de exemplo `tasks`: use case anotado aparece como REST e como tool (`tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete`, `tasks_delete` destrutiva), tela em `src/modules/tasks`, entrada de menu em `src/modules/navigation.ts`. Guia passo a passo em `new-module.md`.
 5. Primeiro cliente: fork com remote `upstream`.

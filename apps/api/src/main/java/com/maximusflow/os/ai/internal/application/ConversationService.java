@@ -85,7 +85,8 @@ public class ConversationService {
 			.orElseThrow(() -> new NotFoundException("Conversa não encontrada"));
 	}
 
-	void touch(Conversation conversation, String firstUserMessage) {
+	/** Public so the transactional proxy applies when the agent calls it outside a transaction. */
+	public void touch(Conversation conversation, String firstUserMessage) {
 		conversation.touch(this.clock.instant());
 		if (conversation.getTitle().isBlank()) {
 			String title = firstUserMessage.strip();
