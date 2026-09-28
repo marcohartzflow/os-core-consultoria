@@ -1,0 +1,14 @@
+server:
+  # TLS terminates at the client's reverse proxy. Tomcat's RemoteIpValve trusts X-Forwarded-* only
+  # from internal (RFC 1918 / loopback) proxies, so a request that reaches Tomcat directly cannot
+  # spoof its scheme, host or client IP. Bind the app to a private interface or firewall port 8080.
+  forward-headers-strategy: native
+
+springdoc:
+  api-docs:
+    enabled: false
+
+logging:
+  level:
+    # Invitation and reset links must never reach shipped logs. Provide an e-mail AccountNotifier.
+    com.maximusflow.os.iam.internal.application.LoggingAccountNotifier: WARN

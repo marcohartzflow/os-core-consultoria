@@ -1,0 +1,25 @@
+# Copie para application-local.yml (ignorado pelo git) e ative com SPRING_PROFILES_ACTIVE=local.
+spring:
+  ai:
+    anthropic:
+      api-key: sk-ant-...
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /api/swagger-ui.html
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor: DEBUG
+os:
+  auth:
+    session:
+      # http://localhost sem TLS
+      cookie-secure: false
+  iam:
+    password:
+      # Evita chamar o Have I Been Pwned em desenvolvimento.
+      check-compromised: false
+    bootstrap:
+      admin-email: admin@example.com
+      admin-password: troque-esta-senha-local
+      admin-name: Admin Local

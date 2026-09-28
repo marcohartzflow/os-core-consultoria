@@ -50,3 +50,12 @@ logs/
 *.jar
 *.war
 *.ear
+# Node / Next / Turbo
+node_modules/
+.next/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Spring Modulith docs output
+apps/api/build/spring-modulith-docs/

@@ -1,0 +1,101 @@
+spring:
+  application:
+    name: os-api
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+  modulith:
+    events:
+      completion-mode: ARCHIVE
+      republish-outstanding-events-on-restart: true
+      jdbc:
+        schema-initialization:
+          enabled: false
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        model: claude-opus-5
+        max-tokens: 16000
+        cache-options:
+          strategy: SYSTEM_ONLY
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: never
+    tools:
+      limits:
+        # Caps per agent turn (LLM10 unbounded consumption, LLM06 excessive agency).
+        max-calls-per-tool-default: 10
+        max-total-tool-calls: 30
+        on-limit-exceeded: RETURN_ERROR_RESPONSE
+  docker:
+    compose:
+      skip:
+        in-tests: true
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  api-docs:
+    path: /api/v3/api-docs
+  swagger-ui:
+    enabled: false
+
+os:
+  app:
+    # Base URL of the web portal, used in invitation and password-reset links.
+    base-url: ${OS_APP_BASE_URL:http://localhost:3000}
+  auth:
+    session:
+      absolute-timeout: 12h
+      max-concurrent: 3
+      # Cookie OS_SESSION is HttpOnly + SameSite=Lax always; Secure only off for plain-HTTP dev (profile local).
+      cookie-secure: true
+  iam:
+    lockout:
+      max-attempts: 5
+      duration: 15m
+    password:
+      min-length: 12
+      max-length: 128
+      check-compromised: true
+    tokens:
+      invitation-ttl: 48h
+      password-reset-ttl: 1h
+    bootstrap:
+      # First administrator, created only when the users table is empty.
+      admin-email: ${OS_BOOTSTRAP_ADMIN_EMAIL:}
+      admin-password: ${OS_BOOTSTRAP_ADMIN_PASSWORD:}
+      admin-name: ${OS_BOOTSTRAP_ADMIN_NAME:Administrador}
+  ai:
+    pending-action-ttl: 5m
+    max-messages: 40
+    max-user-message-length: 4000

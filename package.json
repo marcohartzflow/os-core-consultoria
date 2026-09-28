@@ -1,0 +1,19 @@
+{
+  "name": "os-core",
+  "private": true,
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "api": "cd apps/api && ./gradlew bootRun",
+    "api:test": "cd apps/api && ./gradlew test"
+  },
+  "devDependencies": {
+    "turbo": "^2"
+  }
+}

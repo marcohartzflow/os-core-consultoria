@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /apps/api
+    schedule:
+      interval: weekly
+    groups:
+      spring:
+        patterns:
+          - "org.springframework*"
+      all-others:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "org.springframework*"
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+      all-others:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

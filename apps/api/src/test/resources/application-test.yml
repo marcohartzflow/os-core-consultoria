@@ -1,0 +1,22 @@
+spring:
+  ai:
+    anthropic:
+      api-key: test-key
+os:
+  auth:
+    session:
+      cookie-secure: false
+    rate-limit:
+      # The flow tests fire many requests from one address; the limiter itself has a unit test.
+      login-per-minute: 1000
+      recovery-per-minute: 1000
+  iam:
+    password:
+      check-compromised: false
+    bootstrap:
+      admin-email: admin@example.com
+      admin-password: Admin-Password-2026
+      admin-name: Admin
+logging:
+  level:
+    SECURITY: INFO
