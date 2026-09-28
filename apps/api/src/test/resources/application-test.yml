@@ -18,6 +18,10 @@ os:
       admin-password: Admin-Password-2026
       admin-name: Admin
       require-password-change: false
+    mfa:
+      # Flow tests use the bootstrap administrator without a second factor; MfaTests turn the policy on.
+      require-for-system-role: false
+      encryption-key: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdCE=
 logging:
   level:
     SECURITY: INFO

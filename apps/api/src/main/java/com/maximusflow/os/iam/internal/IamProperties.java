@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties("os.iam")
 public record IamProperties(@DefaultValue Lockout lockout, @DefaultValue Password password, @DefaultValue Tokens tokens,
-		@DefaultValue Bootstrap bootstrap) {
+		@DefaultValue Bootstrap bootstrap, @DefaultValue Mfa mfa) {
 
 	/** Brute-force protection: lock the account for {@code duration} after {@code maxAttempts} failures. */
 	public record Lockout(@DefaultValue("5") int maxAttempts, @DefaultValue("15m") Duration duration) {
@@ -20,6 +20,14 @@ public record IamProperties(@DefaultValue Lockout lockout, @DefaultValue Passwor
 	}
 
 	public record Tokens(@DefaultValue("48h") Duration invitationTtl, @DefaultValue("1h") Duration passwordResetTtl) {
+	}
+
+	/**
+	 * Second factor. {@code encryptionKey} protects TOTP secrets at rest (32 random bytes, Base64).
+	 * {@code issuer} is the name shown in authenticator apps.
+	 */
+	public record Mfa(@DefaultValue("true") boolean requireForSystemRole, @DefaultValue("false") boolean requireForAll,
+			@Nullable String encryptionKey, @DefaultValue("OS") String issuer) {
 	}
 
 	/** First administrator, created only when the users table is empty. */

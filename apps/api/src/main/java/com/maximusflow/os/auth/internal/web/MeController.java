@@ -3,6 +3,7 @@ package com.maximusflow.os.auth.internal.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.maximusflow.os.auth.internal.MfaGateFilter;
 import com.maximusflow.os.auth.internal.SessionAdminService;
 import com.maximusflow.os.auth.internal.SessionTerminator;
 import com.maximusflow.os.common.audit.AuditRecorder;
@@ -59,9 +60,9 @@ class MeController {
 	}
 
 	@GetMapping("/api/me")
-	MeResponse me() {
+	MeResponse me(HttpServletRequest request) {
 		OsPrincipal principal = this.currentUser.require();
-		return this.userDirectory.findById(principal.getId()).map(MeResponse::of)
+		return this.userDirectory.findById(principal.getId()).map((a) -> MeResponse.of(a, MfaGateFilter.verified(request)))
 			.orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
 	}
 

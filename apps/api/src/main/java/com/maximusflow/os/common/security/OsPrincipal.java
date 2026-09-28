@@ -39,13 +39,18 @@ public final class OsPrincipal implements UserDetails, CredentialsContainer, Ser
 
 	private final boolean passwordChangeRequired;
 
+	private final boolean mfaEnabled;
+
+	private final boolean mfaRequired;
+
 	public OsPrincipal(UUID id, String email, String name, @Nullable String password, boolean enabled,
 			boolean accountNonLocked, Set<String> permissions) {
-		this(id, email, name, password, enabled, accountNonLocked, permissions, false);
+		this(id, email, name, password, enabled, accountNonLocked, permissions, false, false, false);
 	}
 
 	public OsPrincipal(UUID id, String email, String name, @Nullable String password, boolean enabled,
-			boolean accountNonLocked, Set<String> permissions, boolean passwordChangeRequired) {
+			boolean accountNonLocked, Set<String> permissions, boolean passwordChangeRequired, boolean mfaEnabled,
+			boolean mfaRequired) {
 		this.id = id;
 		this.email = email;
 		this.name = name;
@@ -55,6 +60,18 @@ public final class OsPrincipal implements UserDetails, CredentialsContainer, Ser
 		this.authorities = permissions.stream().sorted().map(SimpleGrantedAuthority::new)
 			.map(GrantedAuthority.class::cast).toList();
 		this.passwordChangeRequired = passwordChangeRequired;
+		this.mfaEnabled = mfaEnabled;
+		this.mfaRequired = mfaRequired;
+	}
+
+	/** The person finished second-factor enrolment; each session must then pass it. */
+	public boolean isMfaEnabled() {
+		return this.mfaEnabled;
+	}
+
+	/** Policy demands a second factor for this account (system role or global setting). */
+	public boolean isMfaRequired() {
+		return this.mfaRequired;
 	}
 
 	/** True until the person replaces a password someone else chose for them. */

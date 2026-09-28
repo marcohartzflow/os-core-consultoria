@@ -5,6 +5,12 @@ import java.util.Locale;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.UserDirectory;
 
+import com.maximusflow.os.common.audit.AuditRecorder;
+import com.maximusflow.os.common.error.DomainRuleException;
+import com.maximusflow.os.common.logging.Sanitize;
+import com.maximusflow.os.common.security.CurrentUser;
+import com.maximusflow.os.common.security.MfaSession;
+import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -38,6 +44,17 @@ class AuthController {
 	record LoginRequest(@NotBlank @Size(max = 320) String email, @NotBlank @Size(max = 128) String password) {
 	}
 
+	record MfaRequest(@NotBlank @Size(max = 20) String code) {
+	}
+
+	static final int MAX_MFA_FAILURES = 5;
+
+	private static final org.slf4j.Logger security = org.slf4j.LoggerFactory.getLogger("SECURITY");
+
+	private final CurrentUser currentUser;
+
+	private final AuditRecorder audit;
+
 	private final AuthenticationManager authenticationManager;
 
 	private final SessionAuthenticationStrategy sessionStrategy;
@@ -47,7 +64,10 @@ class AuthController {
 	private final UserDirectory userDirectory;
 
 	AuthController(AuthenticationManager authenticationManager, SessionAuthenticationStrategy sessionStrategy,
-			SecurityContextRepository securityContextRepository, UserDirectory userDirectory) {
+			SecurityContextRepository securityContextRepository, UserDirectory userDirectory, CurrentUser currentUser,
+			AuditRecorder audit) {
+		this.currentUser = currentUser;
+		this.audit = audit;
 		this.authenticationManager = authenticationManager;
 		this.sessionStrategy = sessionStrategy;
 		this.securityContextRepository = securityContextRepository;
@@ -70,7 +90,41 @@ class AuthController {
 		this.securityContextRepository.saveContext(context, request, response);
 
 		OsPrincipal principal = (OsPrincipal) authentication.getPrincipal();
-		return this.userDirectory.findById(principal.getId()).map(MeResponse::of).orElseThrow();
+		return this.userDirectory.findById(principal.getId()).map((a) -> MeResponse.of(a, false)).orElseThrow();
+	}
+
+	/**
+	 * Second step of the login when the account has a second factor: a TOTP or recovery code. Five
+	 * failures end the session. Replayed codes are refused by the IAM module.
+	 */
+	@PostMapping("/mfa")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void verifyMfa(@Valid @RequestBody MfaRequest body, HttpServletRequest request) {
+		OsPrincipal principal = this.currentUser.require();
+		HttpSession session = request.getSession(false);
+		if (session == null) {
+			throw new IllegalStateException("Authenticated request without session");
+		}
+		if (this.userDirectory.verifyMfa(principal.getId(), body.code())) {
+			session.setAttribute(MfaSession.VERIFIED, Boolean.TRUE);
+			session.removeAttribute(MfaSession.FAILURES);
+			this.audit.recordFor(principal.getId(), principal.getEmail(), "auth.mfa.verified", "user",
+					principal.getId().toString(), null);
+			return;
+		}
+		Integer failures = (Integer) session.getAttribute(MfaSession.FAILURES);
+		int count = (failures != null) ? failures + 1 : 1;
+		session.setAttribute(MfaSession.FAILURES, count);
+		security.warn("mfa failure user={} attempt={}", Sanitize.forLog(principal.getEmail()), count);
+		if (count >= MAX_MFA_FAILURES) {
+			this.audit.recordFor(principal.getId(), principal.getEmail(), "auth.mfa.locked", "user",
+					principal.getId().toString(), null);
+			session.invalidate();
+			SecurityContextHolder.clearContext();
+			throw new org.springframework.security.authentication.BadCredentialsException(
+					"Muitas tentativas. Entre de novo");
+		}
+		throw new DomainRuleException("Código inválido");
 	}
 
 	/** Forces the deferred CSRF token to be generated so the {@code XSRF-TOKEN} cookie is written. */

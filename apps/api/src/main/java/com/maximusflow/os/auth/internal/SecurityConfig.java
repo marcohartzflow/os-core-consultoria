@@ -77,7 +77,8 @@ class SecurityConfig {
 					SecurityContextHolderFilter.class)
 			.addFilterBefore(new AbsoluteSessionTimeoutFilter(properties.session().absoluteTimeout(), clock),
 					SecurityContextHolderFilter.class)
-			.addFilterAfter(new PasswordChangeGateFilter(json), AuthorizationFilter.class)
+			.addFilterAfter(new MfaGateFilter(json), AuthorizationFilter.class)
+			.addFilterAfter(new PasswordChangeGateFilter(json), MfaGateFilter.class)
 			.csrf((csrf) -> csrf.spa())
 			.authorizeHttpRequests((authorize) -> authorize
 				.requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()

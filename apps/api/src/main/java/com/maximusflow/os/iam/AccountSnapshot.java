@@ -11,8 +11,8 @@ import org.jspecify.annotations.Nullable;
  * purpose: the auth module needs it to authenticate and erases it right after.
  */
 public record AccountSnapshot(UUID id, String email, String name, @Nullable String passwordHash,
-		AccountStatus status, @Nullable Instant lockedUntil, boolean passwordChangeRequired, Set<String> roleNames,
-		Set<String> permissions) {
+		AccountStatus status, @Nullable Instant lockedUntil, boolean passwordChangeRequired, boolean mfaEnabled,
+		boolean mfaRequired, Set<String> roleNames, Set<String> permissions) {
 
 	public boolean isLocked(Instant now) {
 		return this.lockedUntil != null && this.lockedUntil.isAfter(now);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "@/core/api/client";
 import type { SessionInfo } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { MfaCard } from "@/core/auth/MfaCard";
 import { formatDateTime } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,7 +29,16 @@ export default function AccountPage() {
         </Alert>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
+        {(me.mfa.required && !me.mfa.enabled) && (
+          <Alert className="lg:col-span-2">
+            <AlertTitle>Configure o segundo fator para continuar</AlertTitle>
+            <AlertDescription>
+              A sua conta exige um aplicativo autenticador. O restante do portal fica bloqueado até a configuração.
+            </AlertDescription>
+          </Alert>
+        )}
         <ChangePasswordCard />
+        <MfaCard />
         <SessionsCard />
         <Card>
           <CardHeader>

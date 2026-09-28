@@ -10,6 +10,7 @@ import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.iam.AccountSnapshot;
+import com.maximusflow.os.iam.MfaStatus;
 import com.maximusflow.os.iam.UserDirectory;
 import com.maximusflow.os.iam.internal.IamProperties;
 import com.maximusflow.os.iam.internal.domain.Role;
@@ -31,10 +32,13 @@ class UserDirectoryImpl implements UserDirectory {
 
 	private final AuditRecorder audit;
 
+	private final MfaService mfa;
+
 	private final Clock clock;
 
 	UserDirectoryImpl(UserRepository users, PasswordPolicy passwordPolicy, IamProperties properties,
-			AuditRecorder audit, Clock clock) {
+			AuditRecorder audit, MfaService mfa, Clock clock) {
+		this.mfa = mfa;
 		this.users = users;
 		this.passwordPolicy = passwordPolicy;
 		this.properties = properties;
@@ -45,13 +49,13 @@ class UserDirectoryImpl implements UserDirectory {
 	@Override
 	@Transactional(readOnly = true)
 	public Optional<AccountSnapshot> findByEmail(String email) {
-		return this.users.findByEmail(User.normalizeEmail(email)).map(UserDirectoryImpl::snapshot);
+		return this.users.findByEmail(User.normalizeEmail(email)).map(this::snapshot);
 	}
 
 	@Override
 	@Transactional(readOnly = true)
 	public Optional<AccountSnapshot> findById(UUID id) {
-		return this.users.findWithRolesById(id).map(UserDirectoryImpl::snapshot);
+		return this.users.findWithRolesById(id).map(this::snapshot);
 	}
 
 	@Override
@@ -78,9 +82,22 @@ class UserDirectoryImpl implements UserDirectory {
 		this.audit.record("iam.password.changed", "user", user.getId().toString(), Map.of("via", "self-service"));
 	}
 
-	private static AccountSnapshot snapshot(User user) {
+	@Override
+	@Transactional(readOnly = true)
+	public MfaStatus mfaStatus(UUID userId) {
+		return this.mfa.status(userId);
+	}
+
+	@Override
+	public boolean verifyMfa(UUID userId, String code) {
+		return this.mfa.verify(userId, code);
+	}
+
+	private AccountSnapshot snapshot(User user) {
+		MfaStatus mfaStatus = this.mfa.status(user.getId());
 		return new AccountSnapshot(user.getId(), user.getEmail(), user.getName(), user.getPasswordHash(),
-				user.getStatus(), user.getLockedUntil(), user.isPasswordChangeRequired(),
+				user.getStatus(), user.getLockedUntil(), user.isPasswordChangeRequired(), mfaStatus.enabled(),
+				mfaStatus.required(),
 				user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()), user.permissions());
 	}
 

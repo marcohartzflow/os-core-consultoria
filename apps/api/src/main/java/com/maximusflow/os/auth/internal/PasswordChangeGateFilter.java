@@ -29,7 +29,7 @@ class PasswordChangeGateFilter extends OncePerRequestFilter {
 	static final URI PROBLEM_TYPE = URI.create("urn:os:problem:password-change-required");
 
 	private static final Set<String> ALLOWED = Set.of("GET /api/me", "POST /api/me/password",
-			"POST /api/auth/logout", "GET /api/auth/csrf");
+			"POST /api/auth/logout", "GET /api/auth/csrf", "POST /api/auth/mfa");
 
 	private final ObjectMapper json;
 

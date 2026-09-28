@@ -19,6 +19,10 @@ logging:
   level:
     org.springframework.ai.chat.client.advisor: DEBUG
 os:
+  iam:
+    mfa:
+      # openssl rand -base64 32 (só para desenvolvimento local)
+      encryption-key: ZGV2LW9ubHktZGV2LW9ubHktZGV2LW9ubHktZGV2MDE=
   auth:
     session:
       # http://localhost sem TLS

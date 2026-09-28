@@ -220,6 +220,21 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                   </Button>
                 )}
               </RequirePermission>
+              {!isSelf && !user.anonymizedAt && (
+                <RequirePermission permission="iam.user.mfa.reset">
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      void run("Segundo fator redefinido. A pessoa configura de novo no próximo acesso.", () =>
+                        api(`/api/iam/users/${id}/mfa/reset`, { method: "POST" }),
+                      )
+                    }
+                  >
+                    Redefinir segundo fator
+                  </Button>
+                </RequirePermission>
+              )}
               <RequirePermission permission="auth.session.terminate">
                 <Button
                   variant="outline"

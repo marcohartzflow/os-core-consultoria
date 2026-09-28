@@ -11,6 +11,19 @@ export interface Me {
   permissions: string[];
   /** True until the person replaces a password chosen by someone else; the API refuses everything else meanwhile. */
   passwordChangeRequired: boolean;
+  /** Second factor: enabled = enrolled; required = policy; verified = this session passed it. */
+  mfa: { enabled: boolean; required: boolean; verified: boolean };
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  required: boolean;
+  recoveryCodesLeft: number;
+}
+
+export interface MfaSetup {
+  secret: string;
+  otpauthUri: string;
 }
 
 export interface RoleRef {

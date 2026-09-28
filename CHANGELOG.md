@@ -14,6 +14,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Trilha de auditoria consultável e exportável em CSV.
 - Direitos do titular (LGPD art. 18): exportação dos próprios dados e anonimização de conta desativada.
 - Envio de e-mail por SMTP quando configurado.
+- Segundo fator (TOTP + códigos de recuperação), obrigatório para administradores.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
 
 ### Ação necessária no fork

@@ -46,6 +46,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const sections = navigationFor(hasPermission);
 
+  // Second factor pending: no navigation, only the verification screen and a way out.
+  if (me.mfa.enabled && !me.mfa.verified) {
+    return (
+      <div className="flex min-h-svh flex-col">
+        <header className="flex h-12 items-center gap-2 border-b px-4">
+          <span className="text-sm font-semibold">OS</span>
+          <span className="ml-auto text-xs text-muted-foreground">{me.email}</span>
+        </header>
+        <div className="flex flex-1 items-center justify-center p-6">{children}</div>
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider>
       <Sidebar>

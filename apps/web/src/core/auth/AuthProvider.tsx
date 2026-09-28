@@ -41,9 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  // The API only serves /api/me and the password change while the flag is set; keep the person on that screen.
+  // The API gates the session until these are resolved; keep the person on the right screen.
   useEffect(() => {
-    if (me?.passwordChangeRequired && pathname !== "/account") router.replace("/account");
+    if (!me) return;
+    if (me.mfa.enabled && !me.mfa.verified) {
+      if (pathname !== "/mfa") router.replace("/mfa");
+      return;
+    }
+    if ((me.passwordChangeRequired || (me.mfa.required && !me.mfa.enabled)) && pathname !== "/account") {
+      router.replace("/account");
+    }
   }, [me, pathname, router]);
 
   const logout = useCallback(async () => {

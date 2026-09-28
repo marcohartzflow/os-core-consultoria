@@ -36,6 +36,7 @@ class RateLimitFilter extends OncePerRequestFilter {
 		var recovery = new RateLimiter(properties.recoveryPerMinute(), Duration.ofMinutes(1), clock);
 		this.limiters = Map.of(
 				"POST /api/auth/login", login,
+				"POST /api/auth/mfa", recovery,
 				"POST /api/iam/password-reset/request", recovery,
 				"POST /api/iam/password-reset/confirm", recovery,
 				"POST /api/iam/invitations/accept", recovery);

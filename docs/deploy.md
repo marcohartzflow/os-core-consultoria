@@ -70,6 +70,7 @@ browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Sprin
 | `OS_DOMAIN` | sim | Domínio público; vira `OS_APP_BASE_URL=https://<domínio>` e o host do Caddy |
 | `POSTGRES_PASSWORD` | sim | Senha do banco (gere com `openssl rand -base64 32`) |
 | `ANTHROPIC_API_KEY` | sim | Assistente |
+| `OS_MFA_ENCRYPTION_KEY` | sim | Cifra os segredos TOTP; gere uma vez (`openssl rand -base64 32`) e nunca troque, ou todos precisam reconfigurar o segundo fator |
 | `OS_BOOTSTRAP_ADMIN_EMAIL`, `OS_BOOTSTRAP_ADMIN_PASSWORD`, `OS_BOOTSTRAP_ADMIN_NAME` | só na primeira subida | Primeiro administrador |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `OS_MAIL_FROM`, `OS_MAIL_PORTAL_NAME` | não | E-mail de convite e reset; sem host, o link aparece para o administrador no portal |
 

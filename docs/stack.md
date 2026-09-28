@@ -12,6 +12,7 @@ Versões verificadas em 2026-09-28 nas fontes oficiais. Ao atualizar, confira a 
 | Spring Security | 7.1.x (gerenciado pelo Boot) | | https://docs.spring.io/spring-security/reference/ |
 | Spring Session JDBC | 4.1.1 | Sessão no Postgres | https://docs.spring.io/spring-session/reference/ e https://docs.spring.io/spring-session/reference/configuration/jdbc.html |
 | Spring Boot Mail (`spring-boot-starter-mail`) | 4.1.1 | E-mail de convite e reset por SMTP | https://docs.spring.io/spring-boot/reference/io/email.html |
+| Spring Security Crypto (`AesBytesEncryptor`) | 7.1 | Cifra dos segredos TOTP em repouso | https://docs.spring.io/spring-security/reference/features/integrations/cryptography.html |
 | Spring Data JPA + Hibernate ORM | Boot-managed, Hibernate 7.4.x | | https://docs.spring.io/spring-data/jpa/reference/ e https://hibernate.org/orm/documentation/ |
 | Spring Modulith | 2.1.1 | Fronteiras de módulo verificadas em teste, eventos com registry JDBC | https://docs.spring.io/spring-modulith/reference/ |
 | Spring AI | 2.0.1 | Starter Anthropic, tool calling, chat memory | https://docs.spring.io/spring-ai/reference/ |
@@ -41,6 +42,7 @@ Notas do Spring Boot 4 que afetam o código:
 | Node.js | 24 LTS (`.node-version`) | https://nodejs.org/en/about/previous-releases |
 | pnpm | 11.5 (campo `packageManager`) | https://pnpm.io/ |
 | Next.js | 16.3.x, App Router, Turbopack | https://nextjs.org/docs e https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites |
+| qrcode | 1.5.x | QR do otpauth:// na ativação do segundo fator (gerado no browser, data URL) | https://github.com/soldair/node-qrcode |
 | React | 19.2.x | https://react.dev/ |
 | TypeScript | 5.x | https://www.typescriptlang.org/docs/ |
 | Tailwind CSS | 4.x | https://tailwindcss.com/docs |

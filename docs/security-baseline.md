@@ -154,6 +154,10 @@ Controles implementados e cobertos por `AiToolsTests`:
 
 Aceitos com justificativa: token de convite na URL (uso único, 48 h, `Referrer-Policy: same-origin`); `style-src 'unsafe-inline'` (Radix posiciona popovers com `style`; scripts continuam só com nonce); sessão serializada com JDK serialization pelo Spring Session (conteúdo gerado pela própria aplicação, banco é fronteira de confiança).
 
+### Segundo fator (2026-09-28)
+
+TOTP (RFC 6238, HMAC-SHA1, 6 dígitos, 30 s, janela de ±1 passo) implementado em `Totp` com replay bloqueado por `last_used_step`, mais 10 códigos de recuperação de uso único (SHA-256). Segredo cifrado em repouso com AES-GCM (`OS_MFA_ENCRYPTION_KEY`, 32 bytes). Política: obrigatório para a role de sistema (`os.iam.mfa.require-for-system-role`), opcional para os demais, `require-for-all` disponível. Sessão nova fica presa em `POST /api/auth/mfa` até um código válido (`MfaGateFilter`, 403 `urn:os:problem:mfa-required`); quem é obrigado e não configurou fica preso na tela de conta (`urn:os:problem:mfa-enrolment-required`). Cinco falhas encerram a sessão; rate limit por IP no endpoint. Uso de código de recuperação vira auditoria e log `SECURITY`. Pessoa desativa só com senha e código e só se a política não exigir; administrador com `iam.user.mfa.reset` redefine o fator de outra pessoa, nunca o próprio. Coberto por `MfaTests`.
+
 ### Direitos do titular, LGPD art. 18 (2026-09-28)
 
 - Acesso (inciso II): `GET /api/me/data` devolve JSON com tudo que o portal guarda sobre a pessoa, seção por módulo (`account`, `sessions`, `conversations`, `audit`). Cada módulo que guarda dado pessoal implementa `PersonalDataContributor`; `PersonalDataService` agrega e audita (`privacy.data.exported`). Botão em Minha conta.

@@ -10,6 +10,8 @@ import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.internal.domain.Role;
 import com.maximusflow.os.iam.internal.domain.User;
 import com.maximusflow.os.iam.internal.persistence.AccountTokenRepository;
+import com.maximusflow.os.iam.internal.persistence.MfaRecoveryCodeRepository;
+import com.maximusflow.os.iam.internal.persistence.UserMfaRepository;
 import com.maximusflow.os.iam.internal.persistence.UserRepository;
 
 import org.jspecify.annotations.Nullable;
@@ -27,11 +29,18 @@ class AccountDataContributor implements PersonalDataContributor {
 
 	private final AccountTokenRepository tokens;
 
+	private final UserMfaRepository mfa;
+
+	private final MfaRecoveryCodeRepository recoveryCodes;
+
 	private final Clock clock;
 
-	AccountDataContributor(UserRepository users, AccountTokenRepository tokens, Clock clock) {
+	AccountDataContributor(UserRepository users, AccountTokenRepository tokens, UserMfaRepository mfa,
+			MfaRecoveryCodeRepository recoveryCodes, Clock clock) {
 		this.users = users;
 		this.tokens = tokens;
+		this.mfa = mfa;
+		this.recoveryCodes = recoveryCodes;
 		this.clock = clock;
 	}
 
@@ -53,6 +62,8 @@ class AccountDataContributor implements PersonalDataContributor {
 	public void erase(UUID userId, String email) {
 		this.users.findWithRolesById(userId).ifPresent((user) -> {
 			this.tokens.deleteByUser(user);
+			this.recoveryCodes.deleteByUserId(user.getId());
+			this.mfa.deleteById(user.getId());
 			user.anonymize(this.clock.instant());
 		});
 	}

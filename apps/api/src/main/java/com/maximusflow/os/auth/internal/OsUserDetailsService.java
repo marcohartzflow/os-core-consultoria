@@ -38,7 +38,8 @@ class OsUserDetailsService implements UserDetailsService {
 		// placeholder hash is never compared.
 		String password = (account.passwordHash() != null) ? account.passwordHash() : "{disabled}";
 		return new OsPrincipal(account.id(), account.email(), account.name(), password, enabled,
-				!account.isLocked(this.clock.instant()), account.permissions(), account.passwordChangeRequired());
+				!account.isLocked(this.clock.instant()), account.permissions(), account.passwordChangeRequired(),
+				account.mfaEnabled(), account.mfaRequired());
 	}
 
 }

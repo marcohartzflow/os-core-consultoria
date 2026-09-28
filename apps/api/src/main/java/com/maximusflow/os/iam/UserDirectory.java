@@ -22,4 +22,9 @@ public interface UserDirectory {
 	 */
 	void changePassword(UUID userId, String currentPassword, String newPassword);
 
+	MfaStatus mfaStatus(UUID userId);
+
+	/** Checks a TOTP or recovery code for the login flow. False for accounts without a second factor. */
+	boolean verifyMfa(UUID userId, String code);
+
 }
