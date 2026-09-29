@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 import { useTable } from "@tanstack/react-table";
 import {
-  BookKey,
-  KeyRound,
   Lock,
   MoreHorizontal,
   Pencil,
@@ -32,7 +30,6 @@ import {
 import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table/features";
 import { EmptyState, ErrorState, fieldError, FormError, notifySuccess, TableSkeleton } from "@/core/ui/feedback";
 import { PageHeader } from "@/core/ui/page-header";
-import { StatCard, StatGrid } from "@/core/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -207,16 +204,6 @@ export default function RolesPage() {
 
   const search = (table.getColumn("name")?.getFilterValue() as string | undefined) ?? "";
 
-  const stats = useMemo(() => {
-    if (!roles) return null;
-    const system = roles.find((role) => role.system);
-    return {
-      total: roles.length,
-      custom: roles.filter((role) => !role.system).length,
-      fullAccess: system?.userCount ?? 0,
-    };
-  }, [roles]);
-  const reserved = catalog?.filter((permission) => permission.reserved).length;
 
   return (
     <>
@@ -233,44 +220,6 @@ export default function RolesPage() {
         }
       />
 
-      <StatGrid>
-        <StatCard
-          icon={ShieldHalf}
-          label="Roles"
-          value={stats?.total ?? null}
-          hint={stats ? `${stats.custom} personalizadas e ${stats.total - stats.custom} de sistema` : "Sistema e personalizadas"}
-        />
-        {mayReadCatalog && (
-          <StatCard
-            icon={BookKey}
-            label="Permissões no catálogo"
-            value={catalog?.length ?? null}
-            hint="Declaradas pelos módulos do portal"
-          />
-        )}
-        {mayReadCatalog && (
-          <StatCard
-            icon={Lock}
-            label="Permissões reservadas"
-            value={reserved ?? null}
-            hint="Só a role de sistema concede"
-            badge={<Badge variant="outline">Só administrador</Badge>}
-          />
-        )}
-        <StatCard
-          icon={KeyRound}
-          label="Pessoas com acesso total"
-          value={stats?.fullAccess ?? null}
-          hint="Contas com a role de sistema"
-          badge={
-            stats && stats.fullAccess < 2 ? (
-              <Badge variant="destructive">Abaixo do mínimo</Badge>
-            ) : (
-              stats && <Badge variant="secondary">Ok</Badge>
-            )
-          }
-        />
-      </StatGrid>
 
       <Tabs defaultValue="roles" className="gap-4">
         <TabsList variant="line" className="w-full justify-start border-b ps-0 *:data-[slot=tabs-trigger]:flex-none">

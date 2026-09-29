@@ -8,7 +8,6 @@ import {
   CircleCheck,
   CircleDashed,
   CircleSlash,
-  Clock,
   LayoutGrid,
   Lock,
   Rows3,
@@ -40,8 +39,6 @@ import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table
 import { EmptyState, ErrorState, fieldError, FormError, notifySuccess, TableSkeleton } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
-import { StatCard, StatGrid } from "@/core/ui/stat-card";
-import { isActiveAccount } from "@/core/iam/accounts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -257,19 +254,6 @@ export default function UsersPage() {
     [users],
   );
 
-  const stats = useMemo(() => {
-    if (!users) return null;
-    const states = users.map(stateOf);
-    const live = users.filter(isActiveAccount);
-    return {
-      total: users.filter((user) => !user.anonymizedAt).length,
-      active: states.filter((s) => s === "active").length,
-      invited: states.filter((s) => s === "invited").length,
-      blocked: states.filter((s) => s === "locked" || s === "disabled").length,
-      withoutMfa: live.filter((user) => !user.mfaEnabled).length,
-      live: live.length,
-    };
-  }, [users]);
 
   const filtered = table.state.columnFilters.length > 0;
   const rows = table.getRowModel().rows;
@@ -299,40 +283,6 @@ export default function UsersPage() {
         </Alert>
       )}
 
-      <StatGrid>
-        <StatCard
-          icon={Users}
-          label="Contas"
-          value={stats?.total ?? null}
-          hint="Todas, exceto anonimizadas"
-          badge={stats && <Badge variant="outline">{stats.active} ativas</Badge>}
-        />
-        <StatCard
-          icon={Clock}
-          label="Convites pendentes"
-          value={stats?.invited ?? null}
-          hint="Ainda não definiram a senha"
-        />
-        <StatCard
-          icon={Lock}
-          label="Bloqueadas ou desativadas"
-          value={stats?.blocked ?? null}
-          hint="Não conseguem entrar agora"
-        />
-        <StatCard
-          icon={ShieldAlert}
-          label="Sem duas etapas"
-          value={stats?.withoutMfa ?? null}
-          hint={stats ? `De ${stats.live} contas ativas` : "Contas ativas"}
-          badge={
-            stats && stats.withoutMfa > 0 ? (
-              <Badge variant="destructive">Atenção</Badge>
-            ) : (
-              stats && <Badge variant="secondary">Tudo certo</Badge>
-            )
-          }
-        />
-      </StatGrid>
 
       <Card>
         <CardHeader className="border-b">

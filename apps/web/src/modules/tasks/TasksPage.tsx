@@ -4,11 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useTable } from "@tanstack/react-table";
 import {
-  CalendarClock,
   CircleCheck,
   CircleDashed,
   ClipboardList,
-  ListTodo,
   Plus,
   Search,
   TriangleAlert,
@@ -31,14 +29,13 @@ import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table
 import { EmptyState, ErrorState, TableSkeleton } from "@/core/ui/feedback";
 import { formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
-import { StatCard, StatGrid } from "@/core/ui/stat-card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { addDays, dueOf, formatDay, isoDay } from "./dates";
+import { dueOf, formatDay } from "./dates";
 import { TaskActions } from "./TaskActions";
 import { TaskDialog } from "./TaskDialog";
 import type { TaskSummary } from "./types";
@@ -248,23 +245,6 @@ export function TasksPage() {
     ];
   }, [tasks]);
 
-  const stats = useMemo(() => {
-    if (!tasks) return null;
-    const now = new Date();
-    const today = isoDay(now);
-    const inAWeek = isoDay(addDays(now, 7));
-    const monthAgo = addDays(now, -30).getTime();
-    const open = tasks.filter((task) => task.status === "OPEN");
-    return {
-      open: open.length,
-      unassigned: open.filter((task) => !task.assignee).length,
-      overdue: open.filter((task) => dueOf(task, now) === "overdue").length,
-      dueSoon: open.filter((task) => task.dueDate && task.dueDate >= today && task.dueDate <= inAWeek).length,
-      done: tasks.filter(
-        (task) => task.status === "DONE" && task.completedAt && new Date(task.completedAt).getTime() >= monthAgo,
-      ).length,
-    };
-  }, [tasks]);
 
   return (
     <>
@@ -281,31 +261,6 @@ export function TasksPage() {
         }
       />
 
-      <StatGrid>
-        <StatCard
-          icon={ListTodo}
-          label="Abertas"
-          value={stats?.open ?? null}
-          hint={stats && stats.unassigned > 0 ? `${stats.unassigned} sem responsável` : "Todas com responsável"}
-        />
-        <StatCard
-          icon={TriangleAlert}
-          label="Atrasadas"
-          value={stats?.overdue ?? null}
-          hint="Abertas com prazo vencido"
-          badge={
-            stats &&
-            (stats.overdue > 0 ? <Badge variant="destructive">Atenção</Badge> : <Badge variant="secondary">Em dia</Badge>)
-          }
-        />
-        <StatCard
-          icon={CalendarClock}
-          label="Vencem em 7 dias"
-          value={stats?.dueSoon ?? null}
-          hint="Abertas com prazo de hoje até a próxima semana"
-        />
-        <StatCard icon={CircleCheck} label="Concluídas" value={stats?.done ?? null} hint="Nos últimos 30 dias" />
-      </StatGrid>
 
       <Card>
         <CardHeader className="border-b">

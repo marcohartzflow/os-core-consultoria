@@ -6,7 +6,6 @@ import type { DateRange } from "react-day-picker";
 import { ptBR } from "react-day-picker/locale";
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
   Bot,
   CalendarRange,
   ChevronLeft,
@@ -17,22 +16,19 @@ import {
   Download,
   Filter,
   ListFilter,
-  LogIn,
   MousePointerClick,
   ScrollText,
   Search,
   Settings2,
-  ShieldAlert,
   X,
 } from "lucide-react";
 import { api } from "@/core/api/client";
-import type { AuditActivityDay, AuditEventView, AuditOrigin, Paged } from "@/core/api/types";
+import type { AuditEventView, AuditOrigin, Paged } from "@/core/api/types";
 import { useLoad } from "@/core/api/useLoad";
 import { RequirePermission } from "@/core/auth/AuthProvider";
 import { EmptyState, ErrorState, TableSkeleton } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
-import { StatCard, StatGrid } from "@/core/ui/stat-card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,8 +77,6 @@ const ORIGINS: { value: AuditOrigin; label: string; icon: LucideIcon }[] = [
   { value: "AI_TOOL", label: "Assistente", icon: Bot },
   { value: "SYSTEM", label: "Sistema", icon: Cog },
 ];
-
-const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -172,10 +166,6 @@ function When({ iso }: { iso: string }) {
   );
 }
 
-function sum(days: AuditActivityDay[] | null, pick: (day: AuditActivityDay) => number): number | null {
-  return days ? days.reduce((total, day) => total + pick(day), 0) : null;
-}
-
 export default function AuditPage() {
   // Other screens link here pre-filtered (e.g. the activity tab of a user: ?entityId=…).
   const params = useSearchParams();
@@ -201,9 +191,6 @@ export default function AuditPage() {
   const search = query(applied, page);
 
   const events = useLoad(() => api<Paged<AuditEventView>>(`/api/audit/events${search}`), search);
-  const activity = useLoad(() =>
-    api<AuditActivityDay[]>(`/api/audit/activity?days=7&zone=${encodeURIComponent(TIME_ZONE)}`),
-  );
 
   function update(patch: Partial<Filter>) {
     setFilter((current) => ({ ...current, ...patch }));
@@ -216,10 +203,6 @@ export default function AuditPage() {
   }
 
   const result = events.data;
-  const days = activity.error ? null : activity.data;
-  const failures = sum(days, (d) => d.loginFailure);
-  const statValue = (value: number | null) => (activity.error ? "—" : value);
-  const statHint = (text: string) => (activity.error ? "Não foi possível carregar" : text);
   const totalPages = Math.max(result?.page.totalPages ?? 1, 1);
 
   return (
@@ -239,39 +222,6 @@ export default function AuditPage() {
         }
       />
 
-      <StatGrid>
-        <StatCard
-          icon={Activity}
-          label="Eventos em 7 dias"
-          value={statValue(sum(days, (d) => d.rest + d.aiTool + d.system))}
-          hint={statHint("Tudo o que foi registrado na semana")}
-        />
-        <StatCard
-          icon={LogIn}
-          label="Logins com sucesso"
-          value={statValue(sum(days, (d) => d.loginSuccess))}
-          hint={statHint("Entradas no portal em 7 dias")}
-        />
-        <StatCard
-          icon={ShieldAlert}
-          label="Logins falhos"
-          value={statValue(failures)}
-          hint={statHint("Senha errada ou conta bloqueada")}
-          badge={
-            failures === null ? undefined : failures > 0 ? (
-              <Badge variant="destructive">Atenção</Badge>
-            ) : (
-              <Badge variant="secondary">Nenhum</Badge>
-            )
-          }
-        />
-        <StatCard
-          icon={Bot}
-          label="Ações do assistente"
-          value={statValue(sum(days, (d) => d.aiTool))}
-          hint={statHint("Ferramentas executadas pelo agente")}
-        />
-      </StatGrid>
 
       <Card>
         <CardHeader className="border-b">
