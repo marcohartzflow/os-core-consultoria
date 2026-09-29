@@ -19,6 +19,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Ações de UI emitidas por tools (`navigate`), mostradas e executadas no painel do assistente.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
 
+### Segurança
+
+Revisão completa de 2026-09-29 (três frentes: auth/iam, agente de IA, web/deploy). Corrigido:
+
+- Login dentro de uma sessão já verificada pelo segundo fator herdava a verificação; agora todo login começa uma sessão nova.
+- Reenvio de convite, edição, desativação, reativação, anonimização e reset do segundo fator exigem que o ator tenha todas as permissões do alvo (`GrantGuard.assertCanManage`).
+- Confirmação de ação destrutiva do assistente é reivindicada atomicamente (`PENDING` para `EXECUTING`): duas confirmações concorrentes executam uma vez; expiração é registrada e auditada.
+- Resultado de tool nunca entra no prompt de sistema; o desfecho vira nota fixa no papel de usuário, oculta na tela e na exportação.
+- Falhas de código MFA contam no lockout da conta e são auditadas (`iam.mfa.failed`).
+- `audit_event` é append-only por trigger (`V10`), para qualquer role.
+- Link de convite só é devolvido ao administrador quando não há entrega por e-mail.
+- Eventos de domínio carregam só o id do usuário (o arquivo de eventos guardava e-mail após anonimização).
+- Turno do assistente cancela ao desconectar ou por timeout (`os.ai.turn-timeout`); limite de turnos simultâneos por pessoa (`os.ai.max-concurrent-turns-per-user`).
+- Tokens de convite e reset, códigos de recuperação e passos TOTP são de uso único decidido no banco; códigos de recuperação com HMAC sob a chave de MFA; troca de senha apaga tokens de reset pendentes.
+- Verificação de senha vazada indisponível recusa a senha com mensagem clara (fail-closed); e-mail de reset sai fora da requisição.
+- `UiAction.Navigate` só aceita caminho absoluto simples; rate limiter por /64 em IPv6, poda limitada, sem perder hits.
+- Web reage a 401 e aos 403 de gate em qualquer chamada; tela de conta não dispara chamadas bloqueadas pelo gate.
+- CD com host key fixada, imagens construídas no CI e publicadas no registry (`update.sh <tag>`, rollback pela tag anterior); Compose sem capabilities, sem ganho de privilégio, read-only, limites de memória e processos; Caddy com limite de corpo; backup criptografado com `age` e `restore.sh`.
+
 ### Ação necessária no fork
 
 - Primeira versão; nada a migrar.
+- Deploy: defina `DEPLOY_HOST_KEY` e `OS_IMAGE_REPOSITORY`; gere um par de chaves `age` para o backup (`BACKUP_AGE_RECIPIENT`); em produção `OS_APP_BASE_URL` passa a ser obrigatório (o Compose já o define a partir de `OS_DOMAIN`).
