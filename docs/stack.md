@@ -46,14 +46,14 @@ Notas do Spring Boot 4 que afetam o código:
 | React | 19.2.x | https://react.dev/ |
 | TypeScript | 5.x | https://www.typescriptlang.org/docs/ |
 | Tailwind CSS | 4.x | https://tailwindcss.com/docs |
-| shadcn/ui (CLI v4, presets) | `shadcn@latest`, style `radix-nova`, base Radix, ícones Lucide | https://ui.shadcn.com/docs/cli, https://ui.shadcn.com/docs/theming, https://ui.shadcn.com/create |
+| shadcn/ui (CLI v4, presets) | `shadcn@latest`, style `radix-luma` (preset `b5KafGdxD`), base Radix, ícones Lucide | https://ui.shadcn.com/docs/cli, https://ui.shadcn.com/docs/theming, https://ui.shadcn.com/create |
 | openapi-typescript | 7.x | https://openapi-ts.dev/ (tipos gerados em `packages/contracts` a partir do `openapi.json` que o teste `OpenApiContractTests` escreve) |
 
 ### shadcn/ui e presets
 
 Toda a interface é construída sobre componentes do shadcn/ui, e a identidade visual inteira vem de um **preset** (estilo, cor base, tema, fonte, ícones, raio). Trocar a cara de um OS de cliente é um comando, sem tocar em componente.
 
-Preset atual do `os-core`: `b2fA` (`https://ui.shadcn.com/create?preset=b2fA`). Foi gerado com `pnpm dlx shadcn@latest init -y -d --base radix --css-variables` e confirmado com `pnpm dlx shadcn@latest preset resolve`.
+Preset atual do `os-core`: `b5KafGdxD` (`https://ui.shadcn.com/create?preset=b5KafGdxD`): estilo `luma`, cor base `neutral`, tema e gráficos `sky`, fonte Inter, raio padrão, ícones Lucide, menus `inverted-translucent`. Aplicado em 2026-09-29 com `pnpm dlx shadcn@latest apply --preset b5KafGdxD -y`; cada componente de `src/components/ui` foi conferido depois com `pnpm dlx shadcn@latest add <componente> --dry-run --overwrite`, e todos saíram idênticos ao registry do preset. O projeto começou com `init -y -d --base radix --css-variables` (preset `b2fA`, estilo `nova`).
 
 Comandos (sempre em `apps/web`):
 
@@ -75,9 +75,10 @@ pnpm dlx shadcn@latest add <componente>
 Regras que mantêm a troca de preset segura:
 
 1. `src/components/ui/**` e `src/hooks/**` são gerados pelo CLI. Nunca editar à mão: `apply` sobrescreve. Componentes próprios ficam em `src/core/**` e `src/modules/**` e compõem os do shadcn.
-2. Só tokens semânticos nas classes (`bg-background`, `text-muted-foreground`, `bg-primary`, `border-border`, `bg-sidebar`, `rounded-lg` etc). Nunca cor crua (`bg-blue-600`), nunca `oklch(...)` fora do `globals.css`.
-3. Fontes entram por `--font-sans`, `--font-heading` e `--font-geist-mono` em `src/app/layout.tsx` + `globals.css`; o `apply` reescreve os dois.
-4. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build` e conferir as telas.
+2. Só tokens semânticos nas classes (`bg-background`, `text-muted-foreground`, `bg-primary`, `border-border`, `bg-sidebar` etc). Nunca cor crua (`bg-blue-600`), nunca `oklch(...)` fora do `globals.css`.
+3. Nada de caixa desenhada à mão (div com borda, fundo e raio próprios): o formato muda de preset para preset (o `luma` usa cantos bem arredondados, o `nova` quase retos) e uma caixa própria fica fora do padrão. Use o componente equivalente: `Card`, `Alert`, `Item` (linhas, balões do chat), `Textarea readOnly` (blocos de texto ou código), `Badge`.
+4. Fontes entram por `--font-sans`, `--font-heading` e `--font-geist-mono` em `src/app/layout.tsx` + `globals.css`; o `apply` reescreve os dois.
+5. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build`, conferir cada componente com `add <componente> --dry-run --overwrite` (tudo deve sair `identical`) e conferir as telas.
 
 ## JDK: uma única fonte de verdade
 

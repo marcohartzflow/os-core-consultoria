@@ -7,9 +7,9 @@ import { Bot, Plus, Send, Wrench } from "lucide-react";
 import { api, errorMessage, mutationHeaders } from "@/core/api/client";
 import type { ChatMessage, ConversationSummary, PendingActionView } from "@/core/api/types";
 import { RequirePermission } from "@/core/auth/AuthProvider";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Item, ItemContent } from "@/components/ui/item";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -271,21 +271,23 @@ function AiPanel() {
             <LineView key={index} line={line} />
           ))}
           {pending.map((action) => (
-            <div key={action.id} className="rounded-lg border border-destructive/40 bg-card p-3 text-sm">
-              <div className="mb-1 flex items-center gap-2">
-                <Badge variant="destructive">Confirmação</Badge>
-                <span className="font-mono text-xs text-muted-foreground">{action.tool}</span>
-              </div>
-              <p>{action.summary}</p>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="destructive" onClick={() => void resolve(action, "confirm")}>
-                  Confirmar
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => void resolve(action, "reject")}>
-                  Recusar
-                </Button>
-              </div>
-            </div>
+            <Alert key={action.id} variant="destructive">
+              <AlertTitle className="flex items-center gap-2">
+                Confirmação
+                <span className="font-mono text-xs font-normal text-muted-foreground">{action.tool}</span>
+              </AlertTitle>
+              <AlertDescription>
+                <p>{action.summary}</p>
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" variant="destructive" onClick={() => void resolve(action, "confirm")}>
+                    Confirmar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void resolve(action, "reject")}>
+                    Recusar
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           ))}
           {busy && <p className="text-xs text-muted-foreground">Pensando…</p>}
           {error && (
@@ -331,12 +333,16 @@ function LineView({ line }: { line: Line }) {
   switch (line.kind) {
     case "user":
       return (
-        <div className="ml-8 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground whitespace-pre-wrap">
-          {line.text}
-        </div>
+        <Item variant="outline" size="sm" className="ml-8 w-auto">
+          <ItemContent className="whitespace-pre-wrap">{line.text}</ItemContent>
+        </Item>
       );
     case "assistant":
-      return <div className="mr-8 rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap">{line.text}</div>;
+      return (
+        <Item variant="muted" size="sm" className="mr-8 w-auto">
+          <ItemContent className="whitespace-pre-wrap">{line.text}</ItemContent>
+        </Item>
+      );
     case "tool":
       return (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">

@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
 // shadcn maps `font-sans` to --font-sans and `font-mono` to --font-geist-mono (see globals.css).
 // Applying a preset with a different font rewrites both this file and globals.css.
-const fontSans = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
+const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
 const fontMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -26,7 +24,7 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${fontSans.variable} ${fontMono.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={cn("h-full", "antialiased", fontMono.variable, "font-sans", inter.variable)}>
       <body className="flex min-h-full flex-col">
         <TooltipProvider>{children}</TooltipProvider>
       </body>

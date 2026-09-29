@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 /** Enrol, confirm and (when policy allows) disable the second factor of the current account. */
 export function MfaCard() {
@@ -107,7 +108,12 @@ export function MfaCard() {
             <AlertTitle>Guarde estes códigos de recuperação</AlertTitle>
             <AlertDescription>
               <p>Cada um vale uma vez, para entrar sem o celular. Eles não aparecem de novo.</p>
-              <pre className="mt-2 rounded-md bg-muted p-2 font-mono text-xs">{recovery.join("\n")}</pre>
+              <Textarea
+                readOnly
+                aria-label="Códigos de recuperação"
+                className="mt-2 font-mono text-xs"
+                value={recovery.join("\n")}
+              />
               <Button size="sm" variant="outline" className="mt-2" onClick={() => setRecovery(null)}>
                 Já guardei
               </Button>

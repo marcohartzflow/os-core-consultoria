@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -180,9 +181,12 @@ export default function AuditPage() {
                       event.action
                     )}
                     {open === event.id && event.details && (
-                      <pre className="mt-2 max-w-xl overflow-x-auto rounded-md bg-muted p-2 text-xs whitespace-pre-wrap">
-                        {JSON.stringify(event.details, null, 2)}
-                      </pre>
+                      <Textarea
+                        readOnly
+                        aria-label={`Detalhes de ${event.action}`}
+                        className="mt-2 max-w-xl font-mono text-xs"
+                        value={JSON.stringify(event.details, null, 2)}
+                      />
                     )}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
