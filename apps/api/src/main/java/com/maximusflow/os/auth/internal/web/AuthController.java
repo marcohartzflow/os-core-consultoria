@@ -81,6 +81,14 @@ class AuthController {
 		Authentication authentication = this.authenticationManager
 			.authenticate(UsernamePasswordAuthenticationToken.unauthenticated(email, body.password()));
 
+		// A login never inherits the previous session: its second-factor state, failure counter and any
+		// other attribute belong to the person who was logged in before, who may be someone else.
+		HttpSession previous = request.getSession(false);
+		if (previous != null) {
+			previous.invalidate();
+		}
+		SecurityContextHolder.clearContext();
+
 		// Session fixation protection, concurrent session limit, registry (same as the filter-based flow).
 		this.sessionStrategy.onAuthentication(authentication, request, response);
 

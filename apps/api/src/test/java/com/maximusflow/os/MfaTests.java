@@ -120,6 +120,20 @@ class MfaTests {
 		MvcResult me = this.mvc.perform(get("/api/me").cookie(second.cookie())).andReturn();
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + firstMatch(me, "\"id\"\\s*:\\s*\"([^\"]+)\"") + "/mfa/reset"), second))
 			.andExpect(status().is(422));
+
+		// Logging in inside a verified session starts over: the new session is gated, the old one is gone.
+		MvcResult relogin = this.mvc
+			.perform(withCsrf(post("/api/auth/login"), second).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mfa.verified").value(false))
+			.andReturn();
+		Cookie fresh = relogin.getResponse().getCookie("OS_SESSION");
+		assertThat(fresh.getValue()).isNotEqualTo(second.cookie().getValue());
+		this.mvc.perform(get("/api/iam/users").cookie(fresh))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.type").value("urn:os:problem:mfa-required"));
+		this.mvc.perform(get("/api/me").cookie(second.cookie())).andExpect(status().isUnauthorized());
 	}
 
 	private String currentCode(byte[] secret) {
