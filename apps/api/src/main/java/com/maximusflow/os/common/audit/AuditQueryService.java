@@ -79,7 +79,7 @@ public class AuditQueryService {
 		}
 	}
 
-	private static String csv(@Nullable String value) {
+	static String csv(@Nullable String value) {
 		if (value == null) {
 			return "";
 		}

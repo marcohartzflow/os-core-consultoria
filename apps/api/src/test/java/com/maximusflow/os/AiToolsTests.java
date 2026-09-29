@@ -77,6 +77,9 @@ class AiToolsTests {
 	@Autowired
 	ChatMemory chatMemory;
 
+	@Autowired
+	org.springframework.jdbc.core.JdbcTemplate jdbc;
+
 	@AfterEach
 	void clearContext() {
 		SecurityContextHolder.clearContext();
@@ -172,6 +175,59 @@ class AiToolsTests {
 		assertThat(memory).isNotEmpty().allSatisfy((m) -> assertThat(m.getMessageType()).isEqualTo(MessageType.USER));
 		assertThat(memory).allSatisfy((m) -> assertThat(m.getText()).startsWith("[portal] ").doesNotContain("Excluir uma vez"));
 		assertThat(this.conversations.messages(conversationId)).isEmpty();
+	}
+
+	@Test
+	void anExpiredActionCannotBeConfirmedAndTheExpiryIsRecorded() {
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("teste").id();
+		UUID taskId = this.tasks.create("Expira", null, null, null).id();
+		UUID actionId = stub2(this.registry.find("tasks_delete").orElseThrow(), conversationId)
+			.apply("{\"id\":\"" + taskId + "\"}");
+		this.jdbc.update("UPDATE ai_pending_action SET expires_at = now() - interval '1 second' WHERE id = ?", actionId);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(actionId))
+			.isInstanceOf(com.maximusflow.os.common.error.DomainRuleException.class);
+		assertThat(this.jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id = ?", String.class, actionId))
+			.isEqualTo("EXPIRED");
+		assertThat(this.jdbc.queryForObject(
+				"SELECT count(*) FROM audit_event WHERE action = 'ai.action.expired' AND entity_id = ?", Integer.class,
+				actionId.toString())).isEqualTo(1);
+		// Nothing ran.
+		assertThat(this.tasks.get(taskId).title()).isEqualTo("Expira");
+	}
+
+	@Test
+	void anotherPersonCannotSeeOrResolveSomeoneElsesConversationOrAction() {
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("do admin").id();
+		UUID taskId = this.tasks.create("Alheia", null, null, null).id();
+		UUID actionId = stub2(this.registry.find("tasks_delete").orElseThrow(), conversationId)
+			.apply("{\"id\":\"" + taskId + "\"}");
+
+		// Same permissions, different person: every lookup answers 404, never "forbidden".
+		actAs(UUID.randomUUID(), Set.of("ai.chat.use", "tasks.task.read", "tasks.task.delete"));
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.conversations.messages(conversationId))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		assertThat(this.pendingActions.open(conversationId)).isEmpty();
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(actionId))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.reject(actionId))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.conversations.delete(conversationId))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		assertThat(this.conversations.mine()).isEmpty();
+
+		actAsAdmin();
+		assertThat(this.pendingActions.open(conversationId)).hasSize(1);
+	}
+
+	private void actAs(UUID id, Set<String> permissions) {
+		OsPrincipal principal = new OsPrincipal(id, "outra@example.com", "Outra", null, true, true, permissions);
+		SecurityContext context = SecurityContextHolder.createEmptyContext();
+		context.setAuthentication(
+				UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
+		SecurityContextHolder.setContext(context);
 	}
 
 	private java.util.function.Function<String, UUID> stub2(RegisteredTool tool, UUID conversationId) {

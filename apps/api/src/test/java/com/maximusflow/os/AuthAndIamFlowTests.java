@@ -275,6 +275,64 @@ class AuthAndIamFlowTests {
 			.andExpect(status().is(422));
 	}
 
+	@Test
+	@Order(10)
+	void roleManagersCanOnlyShapeRolesWithinWhatTheyHold() throws Exception {
+		Session admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+		MvcResult roles = this.mvc.perform(get("/api/iam/roles").cookie(admin.cookie())).andExpect(status().isOk())
+			.andReturn();
+		String adminRoleId = firstMatch(roles, "\"id\":\"([^\"]+)\",\"name\":\"Administrador\"");
+		String roleManagerId = jsonValue(this.mvc
+			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\"Gestor de roles\",\"permissions\":[\"iam.role.read\",\"iam.role.create\","
+						+ "\"iam.role.update\",\"iam.role.delete\",\"tasks.task.read\"]}"))
+			.andExpect(status().isCreated())
+			.andReturn(), "id");
+		String auditorsId = jsonValue(this.mvc
+			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\"Auditoria\",\"permissions\":[\"audit.event.read\",\"audit.event.export\"]}"))
+			.andExpect(status().isCreated())
+			.andReturn(), "id");
+		MvcResult invited = this.mvc
+			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"rita@example.com\",\"name\":\"Rita\",\"roleIds\":[\"" + roleManagerId + "\"]}"))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String link = jsonValue(invited, "invitationLink");
+		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"token\":\"" + link.substring(link.lastIndexOf('/') + 1)
+					+ "\",\"password\":\"Rita-Password-2026\"}"))
+			.andExpect(status().isNoContent());
+		Session rita = login("rita@example.com", "Rita-Password-2026");
+
+		// Creating: only permissions she holds.
+		this.mvc.perform(withCsrf(post("/api/iam/roles"), rita.csrf()).cookie(rita.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Leitura\",\"permissions\":[\"tasks.task.read\"]}"))
+			.andExpect(status().isCreated());
+		this.mvc.perform(withCsrf(post("/api/iam/roles"), rita.csrf()).cookie(rita.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Escalada\",\"permissions\":[\"iam.user.disable\"]}"))
+			.andExpect(status().isForbidden());
+		// Editing or deleting a role that grants more than she holds: refused, even to remove permissions.
+		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+			.put("/api/iam/roles/" + auditorsId), rita.csrf()).cookie(rita.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Auditoria\",\"permissions\":[]}"))
+			.andExpect(status().isForbidden());
+		this.mvc.perform(withCsrf(delete("/api/iam/roles/" + auditorsId), rita.csrf()).cookie(rita.cookie()))
+			.andExpect(status().isForbidden());
+		// The system role is never editable.
+		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+			.put("/api/iam/roles/" + adminRoleId), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Administrador\",\"permissions\":[]}"))
+			.andExpect(status().is(422));
+	}
+
 	// helpers
 
 	record Csrf(Cookie cookie, String token) {

@@ -2,12 +2,16 @@ package com.maximusflow.os.ai.internal.tools;
 
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import com.maximusflow.os.common.ScopedListener;
 
 import org.jspecify.annotations.Nullable;
 
 /**
  * Thread-scoped listener so tool wrappers can report progress to whoever is driving the agent turn
- * (the SSE controller). Tools run on the same thread as the chat call.
+ * (the SSE controller). {@link ContextPropagatingToolCallback} re-binds it on the thread that runs
+ * each tool call.
  */
 public final class ToolEvents {
 
@@ -23,34 +27,17 @@ public final class ToolEvents {
 	public record ActionPending(UUID actionId, String tool, String summary) implements Event {
 	}
 
-	private static final ThreadLocal<Consumer<Event>> LISTENER = new ThreadLocal<>();
+	private static final ScopedListener<Event> LISTENER = new ScopedListener<>();
 
 	private ToolEvents() {
 	}
 
 	public static void publish(Event event) {
-		Consumer<Event> listener = LISTENER.get();
-		if (listener != null) {
-			listener.accept(event);
-		}
+		LISTENER.publish(event);
 	}
 
-	public static <T> T listen(@Nullable Consumer<Event> listener, java.util.function.Supplier<T> work) {
-		Consumer<Event> previous = LISTENER.get();
-		if (listener != null) {
-			LISTENER.set(listener);
-		}
-		try {
-			return work.get();
-		}
-		finally {
-			if (previous != null) {
-				LISTENER.set(previous);
-			}
-			else {
-				LISTENER.remove();
-			}
-		}
+	public static <T> T listen(@Nullable Consumer<Event> listener, Supplier<T> work) {
+		return LISTENER.listen(listener, work);
 	}
 
 }

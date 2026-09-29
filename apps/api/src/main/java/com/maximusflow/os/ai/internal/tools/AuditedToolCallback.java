@@ -57,9 +57,13 @@ public final class AuditedToolCallback implements ToolCallback {
 		Instant started = this.clock.instant();
 		try {
 			String result = this.delegate.call(toolInput, toolContext);
-			this.audit.record("ai.tool.executed", "ai_tool", name,
-					Map.of("arguments", toolInput, "durationMs", Duration.between(started, this.clock.instant()).toMillis()));
-			ToolEvents.publish(new ToolEvents.ToolCalled(name));
+			// A destructive call only parks a pending action, which audits itself (ai.action.parked);
+			// recording it as executed would put a false entry in the trail.
+			if (!(this.delegate instanceof ConfirmingToolCallback)) {
+				this.audit.record("ai.tool.executed", "ai_tool", name, Map.of("arguments", toolInput, "durationMs",
+						Duration.between(started, this.clock.instant()).toMillis()));
+				ToolEvents.publish(new ToolEvents.ToolCalled(name));
+			}
 			return result;
 		}
 		catch (RuntimeException ex) {

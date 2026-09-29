@@ -74,6 +74,9 @@ public class RoleService {
 		if (role.isSystem()) {
 			throw new DomainRuleException("A role de sistema não pode ser editada");
 		}
+		// Removing permissions is as sensitive as adding them: only someone who holds everything the
+		// role grants may reshape it.
+		this.grantGuard.assertCanGrantPermissions(role.getPermissions());
 		if (this.roles.existsByNameAndIdNot(name.strip(), id)) {
 			throw new ConflictException("Já existe uma role com este nome");
 		}
@@ -90,6 +93,7 @@ public class RoleService {
 		if (role.isSystem()) {
 			throw new DomainRuleException("A role de sistema não pode ser excluída");
 		}
+		this.grantGuard.assertCanGrantPermissions(role.getPermissions());
 		if (this.users.existsByRolesContaining(role)) {
 			throw new ConflictException("Remova a role dos usuários antes de excluí-la");
 		}

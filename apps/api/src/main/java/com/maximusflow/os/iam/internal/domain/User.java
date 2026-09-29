@@ -102,6 +102,11 @@ public class User extends AuditableEntity {
 		this.roles = new HashSet<>(roles);
 	}
 
+	/** Same password, stronger hash (algorithm or parameters upgraded at login). */
+	public void upgradePasswordHash(String passwordHash) {
+		this.passwordHash = passwordHash;
+	}
+
 	/** Completes an invitation or a password reset. Unlocks the account. */
 	public void setPassword(String passwordHash) {
 		this.passwordHash = passwordHash;

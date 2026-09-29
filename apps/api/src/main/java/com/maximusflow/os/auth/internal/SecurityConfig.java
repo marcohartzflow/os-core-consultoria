@@ -26,6 +26,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.web.authentication.logout.HeaderWriterLogoutHandler;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
@@ -35,6 +36,7 @@ import org.springframework.security.web.authentication.session.RegisterSessionAu
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.session.ConcurrentSessionFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.header.writers.ClearSiteDataHeaderWriter;
 import org.springframework.security.web.header.writers.ClearSiteDataHeaderWriter.Directive;
@@ -66,7 +68,8 @@ class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository securityContextRepository,
-			SessionAuthenticationStrategy sessionAuthenticationStrategy, AuthProperties properties, Clock clock,
+			SessionAuthenticationStrategy sessionAuthenticationStrategy, SessionRegistry sessionRegistry,
+			AuthProperties properties, Clock clock,
 			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver, ObjectMapper json)
 			throws Exception {
 		var problemHandlers = new ProblemDetailSecurityHandlers(exceptionResolver);
@@ -77,6 +80,11 @@ class SecurityConfig {
 					SecurityContextHolderFilter.class)
 			.addFilterBefore(new AbsoluteSessionTimeoutFilter(properties.session().absoluteTimeout(), clock),
 					SecurityContextHolderFilter.class)
+			// The concurrency strategy only marks the oldest session as expired; this filter is what
+			// refuses it on its next request (401, same as any other lost session).
+			.addFilter(new ConcurrentSessionFilter(sessionRegistry, (event) -> problemHandlers.commence(
+					event.getRequest(), event.getResponse(),
+					new InsufficientAuthenticationException("Session ended by a newer login"))))
 			.addFilterAfter(new MfaGateFilter(json), AuthorizationFilter.class)
 			.addFilterAfter(new PasswordChangeGateFilter(json), MfaGateFilter.class)
 			.csrf((csrf) -> csrf.spa())
@@ -150,6 +158,7 @@ class SecurityConfig {
 			PasswordEncoder passwordEncoder, ApplicationEventPublisher eventPublisher) {
 		var provider = new DaoAuthenticationProvider(userDetailsService);
 		provider.setPasswordEncoder(passwordEncoder);
+		provider.setUserDetailsPasswordService(userDetailsService);
 		var manager = new ProviderManager(provider);
 		manager.setAuthenticationEventPublisher(new DefaultAuthenticationEventPublisher(eventPublisher));
 		return manager;
@@ -158,7 +167,7 @@ class SecurityConfig {
 	/**
 	 * Argon2id with parameters at or above the OWASP minimum (19 MiB, 2 iterations, parallelism 1).
 	 * bcrypt stays registered so hashes imported from a legacy system can still be verified; they are
-	 * replaced by Argon2id when the person next sets a password.
+	 * replaced by Argon2id at the next successful login ({@link OsUserDetailsService#updatePassword}).
 	 */
 	@Bean
 	PasswordEncoder passwordEncoder() {

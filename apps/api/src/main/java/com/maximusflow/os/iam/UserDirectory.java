@@ -22,6 +22,12 @@ public interface UserDirectory {
 	 */
 	void changePassword(UUID userId, String currentPassword, String newPassword);
 
+	/**
+	 * Replaces a stored hash that uses an outdated algorithm or parameters with one produced by the
+	 * current encoder, after a successful login. Nothing else about the account changes.
+	 */
+	void upgradePasswordHash(UUID userId, String encodedHash);
+
 	MfaStatus mfaStatus(UUID userId);
 
 	/** Checks a TOTP or recovery code for the login flow. False for accounts without a second factor. */

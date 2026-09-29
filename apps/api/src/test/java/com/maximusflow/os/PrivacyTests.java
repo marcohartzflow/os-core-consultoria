@@ -1,5 +1,6 @@
 package com.maximusflow.os;
 
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -31,6 +33,9 @@ class PrivacyTests {
 
 	@Autowired
 	MockMvc mvc;
+
+	@Autowired
+	JdbcTemplate jdbc;
 
 	@Test
 	void personExportsEverythingThePortalHoldsAboutThem() throws Exception {
@@ -60,6 +65,18 @@ class PrivacyTests {
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/anonymize"), admin)).andExpect(status().is(422));
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/disable"), admin)).andExpect(status().isOk());
 
+		// Personal data held elsewhere: a second factor, recovery codes, a conversation with memory.
+		UUID userId = UUID.fromString(id);
+		UUID conversation = UUID.randomUUID();
+		this.jdbc.update("INSERT INTO user_mfa (user_id, secret, created_at, updated_at) VALUES (?, 'x', now(), now())",
+				userId);
+		this.jdbc.update("INSERT INTO user_mfa_recovery_code (id, user_id, code_hash, created_at) VALUES (?, ?, ?, now())",
+				UUID.randomUUID(), userId, "h-" + id.substring(0, 20));
+		this.jdbc.update("INSERT INTO ai_conversation (id, user_id, title, created_at, updated_at) VALUES (?, ?, 'x', now(), now())",
+				conversation, userId);
+		this.jdbc.update("INSERT INTO SPRING_AI_CHAT_MEMORY (conversation_id, content, type, \"timestamp\", sequence_id)"
+				+ " VALUES (?, 'meu CPF', 'USER', now(), 1)", conversation.toString());
+
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/anonymize"), admin))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.email").value("anonymized-" + id + "@invalid"))
@@ -69,6 +86,16 @@ class PrivacyTests {
 
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/anonymize"), admin)).andExpect(status().is(422));
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/enable"), admin)).andExpect(status().is(422));
+
+		// Nothing personal is left behind: credentials, tokens, second factor, conversations, memory.
+		for (String table : new String[] { "account_tokens", "user_mfa", "user_mfa_recovery_code", "ai_conversation" }) {
+			assertThat(this.jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE user_id = ?", Integer.class,
+					userId)).as(table).isZero();
+		}
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM SPRING_AI_CHAT_MEMORY WHERE conversation_id = ?",
+				Integer.class, conversation.toString())).isZero();
+		assertThat(this.jdbc.queryForObject("SELECT password_hash FROM users WHERE id = ?", String.class, userId))
+			.isNull();
 
 		// The audit row names only the id, never the person.
 		this.mvc.perform(get("/api/audit/events").cookie(admin.cookie()).param("action", "iam.user.anonymized"))

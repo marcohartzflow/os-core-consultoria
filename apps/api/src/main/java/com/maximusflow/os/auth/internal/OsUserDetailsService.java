@@ -7,14 +7,20 @@ import com.maximusflow.os.iam.AccountSnapshot;
 import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.UserDirectory;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsPasswordService;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-/** Adapts the IAM module's accounts to Spring Security. */
+/**
+ * Adapts the IAM module's accounts to Spring Security. Also upgrades stored hashes: after a
+ * successful login with a hash made by an older algorithm (bcrypt imported from a legacy system) or
+ * weaker Argon2 parameters, {@code DaoAuthenticationProvider} hands the freshly encoded password here.
+ */
 @Service
-class OsUserDetailsService implements UserDetailsService {
+class OsUserDetailsService implements UserDetailsService, UserDetailsPasswordService {
 
 	private final UserDirectory userDirectory;
 
@@ -30,6 +36,15 @@ class OsUserDetailsService implements UserDetailsService {
 		AccountSnapshot account = this.userDirectory.findByEmail(email)
 			.orElseThrow(() -> new UsernameNotFoundException("Unknown account"));
 		return principalOf(account);
+	}
+
+	@Override
+	public UserDetails updatePassword(UserDetails user, @Nullable String newPassword) {
+		OsPrincipal principal = (OsPrincipal) user;
+		if (newPassword != null) {
+			this.userDirectory.upgradePasswordHash(principal.getId(), newPassword);
+		}
+		return this.userDirectory.findById(principal.getId()).<UserDetails>map(this::principalOf).orElse(user);
 	}
 
 	OsPrincipal principalOf(AccountSnapshot account) {

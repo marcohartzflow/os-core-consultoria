@@ -1,6 +1,7 @@
 package com.maximusflow.os.ai.internal.tools;
 
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.maximusflow.os.common.audit.AuditContext;
 import com.maximusflow.os.common.audit.AuditOrigin;
@@ -16,15 +17,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * In streaming mode Spring AI executes tool calls on Reactor threads, where the thread-bound
- * security context, audit scope and event listener of the turn are absent. This wrapper captures
- * them when the turn starts and re-establishes them around every call, whatever thread runs it, so
- * {@code @RequiresPermission}, audit origin and SSE events keep working exactly as in blocking mode.
+ * security context, audit scope and event listener of the turn are absent. This wrapper
+ * re-establishes them around every call, whatever thread runs it, so {@code @RequiresPermission},
+ * audit origin and SSE events keep working exactly as in blocking mode. The security context is
+ * obtained afresh for each call: a permission revoked or an account disabled while the turn runs
+ * applies to the very next tool call.
  */
 public final class ContextPropagatingToolCallback implements ToolCallback {
 
 	private final ToolCallback delegate;
 
-	private final SecurityContext securityContext;
+	private final Supplier<SecurityContext> securityContext;
 
 	private final String conversationId;
 
@@ -32,7 +35,7 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 
 	private final @Nullable Consumer<UiAction> uiListener;
 
-	public ContextPropagatingToolCallback(ToolCallback delegate, SecurityContext securityContext,
+	public ContextPropagatingToolCallback(ToolCallback delegate, Supplier<SecurityContext> securityContext,
 			String conversationId, @Nullable Consumer<ToolEvents.Event> listener,
 			@Nullable Consumer<UiAction> uiListener) {
 		this.delegate = delegate;
@@ -55,7 +58,7 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 	@Override
 	public String call(String toolInput, @Nullable ToolContext toolContext) {
 		SecurityContext previous = SecurityContextHolder.getContext();
-		SecurityContextHolder.setContext(this.securityContext);
+		SecurityContextHolder.setContext(this.securityContext.get());
 		try {
 			return AuditContext.with(AuditOrigin.AI_TOOL, this.conversationId, () -> ToolEvents.listen(this.listener,
 					() -> UiActions.listen(this.uiListener, () -> this.delegate.call(toolInput, toolContext))));

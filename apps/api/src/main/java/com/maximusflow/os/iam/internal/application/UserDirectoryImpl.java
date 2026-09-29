@@ -77,6 +77,14 @@ class UserDirectoryImpl implements UserDirectory {
 	}
 
 	@Override
+	public void upgradePasswordHash(UUID userId, String encodedHash) {
+		this.users.findById(userId).ifPresent((user) -> {
+			user.upgradePasswordHash(encodedHash);
+			this.audit.recordFor(userId, user.getEmail(), "iam.password.rehashed", "user", userId.toString(), null);
+		});
+	}
+
+	@Override
 	public void changePassword(UUID userId, String currentPassword, String newPassword) {
 		User user = this.users.findById(userId).orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
 		String hash = user.getPasswordHash();

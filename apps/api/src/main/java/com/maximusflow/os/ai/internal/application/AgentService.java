@@ -22,11 +22,14 @@ import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.common.security.RequiresPermission;
 import com.maximusflow.os.common.ui.UiAction;
+import com.maximusflow.os.iam.AccountStatus;
+import com.maximusflow.os.iam.UserDirectory;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -63,12 +66,15 @@ public class AgentService {
 
 	private final AiProperties properties;
 
+	private final UserDirectory userDirectory;
+
 	private final Clock clock;
 
 	AgentService(ChatClient osChatClient, ToolRegistry registry, ConversationService conversations,
 			PendingActionService pendingActions, CurrentUser currentUser, AuditRecorder audit, AiProperties properties,
-			Clock clock) {
+			UserDirectory userDirectory, Clock clock) {
 		this.chatClient = osChatClient;
+		this.userDirectory = userDirectory;
 		this.registry = registry;
 		this.conversations = conversations;
 		this.pendingActions = pendingActions;
@@ -101,11 +107,10 @@ public class AgentService {
 		OsPrincipal actor = this.currentUser.require();
 		this.conversations.touch(conversationId, userMessage);
 		String id = conversationId.toString();
-		SecurityContext securityContext = SecurityContextHolder.getContext();
 
 		List<ToolCallback> callbacks = toolsFor(actor).stream()
-			.map((tool) -> new ContextPropagatingToolCallback(wrap(tool, conversationId), securityContext, id, listener,
-					uiListener))
+			.map((tool) -> new ContextPropagatingToolCallback(wrap(tool, conversationId),
+					() -> currentContext(actor.getId()), id, listener, uiListener))
 			.map(ToolCallback.class::cast)
 			.toList();
 		this.audit.record("ai.turn.started", "ai_conversation", id, Map.of("tools", callbacks.size()));
@@ -115,7 +120,7 @@ public class AgentService {
 		// timeout, error) the model call and any further tool calls stop with it.
 		try (Stream<String> tokens = this.chatClient.prompt()
 			.user(userMessage)
-			.tools(callbacks.toArray(ToolCallback[]::new))
+			.toolCallbacks(callbacks)
 			.toolContext(Map.of("conversationId", id))
 			.advisors((a) -> a.param(ChatMemory.CONVERSATION_ID, id))
 			.stream()
@@ -129,6 +134,23 @@ public class AgentService {
 			});
 		}
 		return new Reply(full.toString());
+	}
+
+	/**
+	 * The actor as the directory knows them now, not as they were when the turn started. A disabled
+	 * account yields an empty context, so the tool's own authorization refuses the call.
+	 */
+	private SecurityContext currentContext(UUID actorId) {
+		SecurityContext context = SecurityContextHolder.createEmptyContext();
+		this.userDirectory.findById(actorId)
+			.filter((account) -> account.status() == AccountStatus.ACTIVE)
+			.ifPresent((account) -> {
+				OsPrincipal principal = new OsPrincipal(account.id(), account.email(), account.name(), null, true, true,
+						account.permissions());
+				context.setAuthentication(
+						UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
+			});
+		return context;
 	}
 
 	private List<RegisteredTool> toolsFor(OsPrincipal actor) {
