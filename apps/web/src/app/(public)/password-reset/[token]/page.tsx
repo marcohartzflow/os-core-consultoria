@@ -11,7 +11,8 @@ export default function PasswordResetConfirmPage({ params }: { params: Promise<{
     <SetPasswordForm
       endpoint="/api/iam/password-reset/confirm"
       token={token}
-      title="Escolha uma nova senha"
+      title="Nova senha"
+      description="Escolha uma nova senha para sua conta."
       submitLabel="Redefinir senha"
       onDone={() => router.replace("/login")}
     />

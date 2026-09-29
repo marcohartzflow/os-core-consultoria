@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { Copy, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Copy, Search, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/core/api/client";
 import type { AdministratorStatus, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
 import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
-import { formatDateTime } from "@/core/ui/format";
+import { formatDateTime, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -23,13 +25,46 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+type StatusFilter = "all" | "active" | "invited" | "disabled" | "locked" | "anonymized";
+
+const STATUS_FILTERS: [StatusFilter, string][] = [
+  ["all", "Todos"],
+  ["active", "Ativos"],
+  ["invited", "Convidados"],
+  ["disabled", "Desativados"],
+  ["locked", "Bloqueados"],
+  ["anonymized", "Anonimizados"],
+];
+
+/** Same precedence as StatusBadge, so the filter matches the badge a row shows. */
+function statusOf(user: UserSummary): Exclude<StatusFilter, "all"> {
+  if (user.anonymizedAt) return "anonymized";
+  if (user.locked) return "locked";
+  return user.status === "ACTIVE" ? "active" : user.status === "INVITED" ? "invited" : "disabled";
+}
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserSummary[] | null>(null);
   const [administrators, setAdministrators] = useState<AdministratorStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+
+  const visible = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase("pt-BR");
+    return (users ?? []).filter(
+      (user) =>
+        (status === "all" || statusOf(user) === status) &&
+        (!needle ||
+          user.name.toLocaleLowerCase("pt-BR").includes(needle) ||
+          user.email.toLocaleLowerCase("pt-BR").includes(needle)),
+    );
+  }, [users, search, status]);
 
   const load = useCallback(
     () =>
@@ -67,7 +102,7 @@ export default function UsersPage() {
         </Alert>
       )}
       {administrators?.belowMinimum && (
-        <Alert className="mb-4">
+        <Alert>
           <AlertTitle>
             {administrators.active} de {administrators.minimum} administradores ativos
           </AlertTitle>
@@ -77,45 +112,94 @@ export default function UsersPage() {
           </AlertDescription>
         </Alert>
       )}
-      {!users ? (
-        <Skeleton className="h-48 w-full" />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Roles</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Último acesso</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <Link href={`/settings/users/${user.id}`} className="font-medium hover:underline">
-                    {user.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                <TableCell>{user.roles.map((r) => r.name).join(", ") || "—"}</TableCell>
-                <TableCell>
-                  <StatusBadge user={user} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">{formatDateTime(user.lastLoginAt)}</TableCell>
-              </TableRow>
-            ))}
-            {users.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  Nenhum usuário.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      )}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-xl leading-none">Contas</CardTitle>
+          <CardDescription>Clique em um nome para editar dados, roles e acesso.</CardDescription>
+          <CardAction className="flex flex-wrap gap-2">
+            <InputGroup className="w-full sm:w-64">
+              <InputGroupAddon align="inline-start">
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-label="Buscar por nome ou e-mail"
+                placeholder="Buscar por nome ou e-mail…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </InputGroup>
+            <Select value={status} onValueChange={(value) => setStatus(value as StatusFilter)}>
+              <SelectTrigger aria-label="Filtrar por status">
+                <span className="text-muted-foreground">Status:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" align="end">
+                <SelectGroup>
+                  {STATUS_FILTERS.map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="px-0">
+          {!users ? (
+            <Skeleton className="mx-(--card-spacing) h-48" />
+          ) : (
+            <Table className="**:data-[slot=table-cell]:px-(--card-spacing) **:data-[slot=table-head]:px-(--card-spacing)">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pessoa</TableHead>
+                  <TableHead>Roles</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Último acesso</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="size-9">
+                          <AvatarFallback>{initials(user.name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="grid min-w-0 leading-tight">
+                          <Link href={`/settings/users/${user.id}`} className="truncate font-medium hover:underline">
+                            {user.name}
+                          </Link>
+                          <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{user.roles.map((r) => r.name).join(", ") || "—"}</TableCell>
+                    <TableCell>
+                      <StatusBadge user={user} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {formatDateTime(user.lastLoginAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {visible.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                      {users.length === 0 ? "Nenhum usuário." : "Nenhum usuário com esses filtros."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+        {users && (
+          <CardFooter className="border-t text-sm text-muted-foreground tabular-nums">
+            {visible.length} de {users.length} usuários
+          </CardFooter>
+        )}
+      </Card>
     </>
   );
 }

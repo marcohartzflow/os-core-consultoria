@@ -101,12 +101,12 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         }
       />
       {message && (
-        <Alert variant={message.kind === "error" ? "destructive" : "default"} className="mb-4">
+        <Alert variant={message.kind === "error" ? "destructive" : "default"}>
           <AlertDescription>{message.text}</AlertDescription>
         </Alert>
       )}
       {invitation && (
-        <Alert className="mb-4">
+        <Alert>
           <AlertTitle>Novo convite gerado</AlertTitle>
           <AlertDescription>
             {invitation.invitationLink ? (

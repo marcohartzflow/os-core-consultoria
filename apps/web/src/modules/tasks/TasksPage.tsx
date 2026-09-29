@@ -9,6 +9,7 @@ import { PageHeader } from "@/core/ui/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -75,24 +76,12 @@ export function TasksPage() {
         title="Tarefas"
         description="Módulo de exemplo: o mesmo caso de uso atende a tela e o assistente."
         actions={
-          <div className="flex items-center gap-2">
-            <Select value={filter} onValueChange={(value) => setFilter(value as TaskStatus | "ALL")}>
-              <SelectTrigger className="w-36" aria-label="Filtro de status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="OPEN">Abertas</SelectItem>
-                <SelectItem value="DONE">Concluídas</SelectItem>
-                <SelectItem value="ALL">Todas</SelectItem>
-              </SelectContent>
-            </Select>
-            <RequirePermission permission="tasks.task.create">
-              <Button onClick={() => setEditing("new")}>
-                <Plus />
-                Nova tarefa
-              </Button>
-            </RequirePermission>
-          </div>
+          <RequirePermission permission="tasks.task.create">
+            <Button onClick={() => setEditing("new")}>
+              <Plus />
+              Nova tarefa
+            </Button>
+          </RequirePermission>
         }
       />
       {error && (
@@ -100,63 +89,84 @@ export function TasksPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {!tasks ? (
-        <Skeleton className="h-48 w-full" />
-      ) : tasks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma tarefa neste filtro.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Título</TableHead>
-              <TableHead>Responsável</TableHead>
-              <TableHead>Prazo</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tasks.map((task) => (
-              <TableRow key={task.id}>
-                <TableCell>
-                  <button
-                    type="button"
-                    className="text-left font-medium hover:underline"
-                    onClick={() => setEditing(task)}
-                  >
-                    {task.title}
-                  </button>
-                  {task.description && (
-                    <span className="block max-w-md truncate text-xs text-muted-foreground">{task.description}</span>
-                  )}
-                </TableCell>
-                <TableCell>{task.assignee?.name ?? "—"}</TableCell>
-                <TableCell>{formatDate(task.dueDate)}</TableCell>
-                <TableCell>
-                  <Badge variant={task.status === "DONE" ? "secondary" : "outline"}>
-                    {task.status === "DONE" ? "Concluída" : "Aberta"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <RequirePermission permission="tasks.task.update">
-                    {task.status === "OPEN" ? (
-                      <Button variant="ghost" size="sm" onClick={() => void transition(task, "complete")}>
-                        <Check />
-                        Concluir
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" onClick={() => void transition(task, "reopen")}>
-                        <RotateCcw />
-                        Reabrir
-                      </Button>
-                    )}
-                  </RequirePermission>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-xl leading-none">Lista</CardTitle>
+          <CardDescription>Clique no título para ver ou editar.</CardDescription>
+          <CardAction>
+            <Select value={filter} onValueChange={(value) => setFilter(value as TaskStatus | "ALL")}>
+              <SelectTrigger aria-label="Filtro de status">
+                <span className="text-muted-foreground">Status:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" align="end">
+                <SelectItem value="OPEN">Abertas</SelectItem>
+                <SelectItem value="DONE">Concluídas</SelectItem>
+                <SelectItem value="ALL">Todas</SelectItem>
+              </SelectContent>
+            </Select>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="px-0">
+          {!tasks ? (
+            <Skeleton className="mx-(--card-spacing) h-48" />
+          ) : tasks.length === 0 ? (
+            <p className="px-(--card-spacing) py-8 text-center text-sm text-muted-foreground">Nenhuma tarefa neste filtro.</p>
+          ) : (
+            <Table className="**:data-[slot=table-cell]:px-(--card-spacing) **:data-[slot=table-head]:px-(--card-spacing)">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Título</TableHead>
+                  <TableHead>Responsável</TableHead>
+                  <TableHead>Prazo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tasks.map((task) => (
+                  <TableRow key={task.id}>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="text-left font-medium hover:underline"
+                        onClick={() => setEditing(task)}
+                      >
+                        {task.title}
+                      </button>
+                      {task.description && (
+                        <span className="block max-w-md truncate text-xs text-muted-foreground">{task.description}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{task.assignee?.name ?? "—"}</TableCell>
+                    <TableCell>{formatDate(task.dueDate)}</TableCell>
+                    <TableCell>
+                      <Badge variant={task.status === "DONE" ? "secondary" : "outline"}>
+                        {task.status === "DONE" ? "Concluída" : "Aberta"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <RequirePermission permission="tasks.task.update">
+                        {task.status === "OPEN" ? (
+                          <Button variant="ghost" size="sm" onClick={() => void transition(task, "complete")}>
+                            <Check />
+                            Concluir
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="sm" onClick={() => void transition(task, "reopen")}>
+                            <RotateCcw />
+                            Reabrir
+                          </Button>
+                        )}
+                      </RequirePermission>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
       {editing && (
         <TaskDialog
           task={editing === "new" ? null : editing}

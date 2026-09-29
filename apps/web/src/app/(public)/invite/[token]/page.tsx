@@ -11,7 +11,8 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     <SetPasswordForm
       endpoint="/api/iam/invitations/accept"
       token={token}
-      title="Bem-vindo. Defina sua senha para ativar a conta."
+      title="Bem-vindo"
+      description="Defina sua senha para ativar a conta."
       submitLabel="Ativar conta"
       onDone={() => router.replace("/login")}
     />

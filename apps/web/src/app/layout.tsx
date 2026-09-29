@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
+import { headers } from "next/headers";
+import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -22,11 +24,20 @@ export const metadata: Metadata = {
 // The portal sits behind a login; static prerendering would buy nothing here.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // next-themes sets the theme class before the first paint with an inline script; the CSP only
+  // runs it with the request nonce.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="pt-BR" className={cn("h-full", "antialiased", fontMono.variable, "font-sans", inter.variable)}>
+    <html
+      lang="pt-BR"
+      suppressHydrationWarning
+      className={cn("h-full", "antialiased", fontMono.variable, "font-sans", inter.variable)}
+    >
       <body className="flex min-h-full flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

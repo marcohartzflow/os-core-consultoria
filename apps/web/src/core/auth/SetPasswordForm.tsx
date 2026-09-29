@@ -6,18 +6,21 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { AuthHeading } from "./AuthHeading";
 
 /** Shared by invitation acceptance and password reset confirmation. */
 export function SetPasswordForm({
   endpoint,
   token,
   title,
+  description,
   submitLabel,
   onDone,
 }: {
   endpoint: string;
   token: string;
   title: string;
+  description: string;
   submitLabel: string;
   onDone: () => void;
 }) {
@@ -46,7 +49,7 @@ export function SetPasswordForm({
   return (
     <form onSubmit={submit}>
       <FieldGroup>
-        <h1 className="text-base font-semibold">{title}</h1>
+        <AuthHeading title={title} description={description} />
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

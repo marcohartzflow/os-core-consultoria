@@ -2,19 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown, LogOut, UserRound } from "lucide-react";
+import { Command } from "lucide-react";
 import { AiPanelTrigger } from "@/core/ai/AiPanel";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { navigationFor } from "./navigation";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { NavUser } from "./NavUser";
+import { SearchDialog } from "./SearchDialog";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -32,17 +26,21 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
+function Brand() {
+  return (
+    <>
+      <Command />
+      <span className="text-base font-semibold">OS</span>
+    </>
+  );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { me, hasPermission, logout } = useAuth();
+function isActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+}
+
+export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; children: React.ReactNode }) {
+  const { me, hasPermission } = useAuth();
   const pathname = usePathname();
   const sections = navigationFor(hasPermission);
 
@@ -50,8 +48,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (me.mfa.enabled && !me.mfa.verified) {
     return (
       <div className="flex min-h-svh flex-col">
-        <header className="flex h-12 items-center gap-2 border-b px-4">
-          <span className="text-sm font-semibold">OS</span>
+        <header className="flex h-12 items-center gap-2 border-b px-4 lg:px-6 [&_svg]:size-4">
+          <Brand />
           <span className="ml-auto text-xs text-muted-foreground">{me.email}</span>
         </header>
         <div className="flex flex-1 items-center justify-center p-6">{children}</div>
@@ -60,10 +58,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <Sidebar>
+    <SidebarProvider defaultOpen={sidebarOpen} style={{ "--sidebar-width": "calc(var(--spacing) * 68)" } as React.CSSProperties}>
+      <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
-          <div className="px-2 py-1 text-lg font-semibold">OS</div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Início">
+                <Link href="/">
+                  <Brand />
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
           {sections.map((section) => (
@@ -71,71 +77,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {section.items.map((item) => {
-                    const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-                    return (
-                      <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton asChild isActive={active}>
-                          <Link href={item.href}>
-                            <item.icon />
-                            <span>{item.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
+                  {section.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild tooltip={item.label} isActive={isActive(pathname, item.href)}>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           ))}
         </SidebarContent>
         <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton size="lg">
-                    <Avatar className="size-8">
-                      <AvatarFallback>{initials(me.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-medium">{me.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{me.email}</span>
-                    </div>
-                    <ChevronsUpDown className="ml-auto size-4" />
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width)">
-                  <DropdownMenuLabel className="font-normal text-muted-foreground">
-                    {me.roles.length ? me.roles.join(", ") : "Sem roles"}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/account">
-                      <UserRound />
-                      Minha conta
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void logout()}>
-                    <LogOut />
-                    Sair
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          <NavUser />
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
-        <header className="flex h-12 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm text-muted-foreground">Portal</span>
-          <div className="ml-auto">
-            <AiPanelTrigger />
+      <SidebarInset className="min-w-0 overflow-x-clip peer-data-[variant=inset]:border">
+        <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-t-[inherit] border-b bg-background/50 backdrop-blur-md">
+          <div className="flex w-full items-center justify-between px-4 lg:px-6">
+            <div className="flex items-center gap-1 lg:gap-2">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center" />
+              <SearchDialog />
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeSwitcher />
+              <AiPanelTrigger />
+            </div>
           </div>
         </header>
-        <div className="flex-1 p-6">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 p-4 md:p-6">
+          <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 md:gap-6">{children}</div>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

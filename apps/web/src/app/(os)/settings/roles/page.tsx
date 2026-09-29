@@ -9,6 +9,7 @@ import { PageHeader } from "@/core/ui/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -70,36 +71,54 @@ export default function RolesPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {!roles ? (
-        <Skeleton className="h-48 w-full" />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead>Permissões</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {roles.map((role) => (
-              <TableRow key={role.id}>
-                <TableCell className="font-medium">
-                  {role.name} {role.system && <Badge variant="outline">sistema</Badge>}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{role.description ?? "—"}</TableCell>
-                <TableCell>{role.permissions.length}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(role)}>
-                    {role.system || !hasPermission("iam.role.update") ? "Ver" : "Editar"}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-xl leading-none">Roles</CardTitle>
+          <CardDescription>
+            A role de sistema tem acesso total e não pode ser alterada. Só ela concede as permissões reservadas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          {!roles ? (
+            <Skeleton className="mx-(--card-spacing) h-48" />
+          ) : (
+            <Table className="**:data-[slot=table-cell]:px-(--card-spacing) **:data-[slot=table-head]:px-(--card-spacing)">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Permissões</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {roles.map((role) => (
+                  <TableRow key={role.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {role.name}
+                        {role.system && <Badge variant="outline">sistema</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{role.description ?? "—"}</TableCell>
+                    <TableCell className="tabular-nums">{role.permissions.length}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setEditing(role)}>
+                        {role.system || !hasPermission("iam.role.update") ? "Ver" : "Editar"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+        {roles && (
+          <CardFooter className="border-t text-sm text-muted-foreground tabular-nums">
+            {roles.length} {roles.length === 1 ? "role" : "roles"}
+          </CardFooter>
+        )}
+      </Card>
       {editing && (
         <RoleDialog
           role={editing === "new" ? null : editing}

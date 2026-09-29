@@ -5,8 +5,9 @@ import { useState } from "react";
 import { api, errorMessage } from "@/core/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { AuthHeading } from "@/core/auth/AuthHeading";
 
 export default function PasswordResetRequestPage() {
   const [email, setEmail] = useState("");
@@ -46,7 +47,7 @@ export default function PasswordResetRequestPage() {
   return (
     <form onSubmit={submit}>
       <FieldGroup>
-        <h1 className="text-base font-semibold">Redefinir senha</h1>
+        <AuthHeading title="Redefinir senha" description="Enviaremos um link para o e-mail cadastrado." />
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -54,8 +55,15 @@ export default function PasswordResetRequestPage() {
         )}
         <Field>
           <FieldLabel htmlFor="email">E-mail</FieldLabel>
-          <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <FieldDescription>Enviaremos um link para o e-mail cadastrado.</FieldDescription>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="username"
+            placeholder="voce@empresa.com"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </Field>
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? "Enviando…" : "Enviar link"}

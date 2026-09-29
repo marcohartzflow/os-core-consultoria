@@ -18,6 +18,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Tipos TypeScript gerados do OpenAPI (`packages/contracts`), verificados no CI.
 - Ações de UI emitidas por tools (`navigate`), mostradas e executadas no painel do assistente.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
+- Layout do portal no estilo do template next-shadcn-admin-dashboard: sidebar recolhível em ícones, busca de telas (⌘J), tema claro/escuro/sistema, painel com indicadores e atividade recente, listas em cards com busca e filtro, login em duas colunas, página 404.
 
 ### Alterado
 

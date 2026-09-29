@@ -23,7 +23,7 @@ export default function AccountPage() {
     <>
       <PageHeader title="Minha conta" description={me.email} />
       {me.passwordChangeRequired && (
-        <Alert className="mb-4">
+        <Alert>
           <AlertTitle>Defina uma nova senha para continuar</AlertTitle>
           <AlertDescription>
             A senha atual foi definida por outra pessoa. O restante do portal fica bloqueado até você escolher a sua.

@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { AuthHeading } from "@/core/auth/AuthHeading";
 
 /** Only same-origin paths: rejects protocol-relative (`//evil`) and backslash tricks (open redirect). */
 function safeInternalPath(candidate: string | null): string {
@@ -43,6 +44,7 @@ function LoginForm() {
   return (
     <form onSubmit={submit}>
       <FieldGroup>
+        <AuthHeading title="Entrar na sua conta" description="Informe seu e-mail e sua senha." />
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -54,6 +56,7 @@ function LoginForm() {
             id="email"
             type="email"
             autoComplete="username"
+            placeholder="voce@empresa.com"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
