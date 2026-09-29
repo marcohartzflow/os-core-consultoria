@@ -23,11 +23,6 @@ os:
     mfa:
       # openssl rand -base64 32 (só para desenvolvimento local)
       encryption-key: ZGV2LW9ubHktZGV2LW9ubHktZGV2LW9ubHktZGV2MDE=
-  auth:
-    session:
-      # http://localhost sem TLS
-      cookie-secure: false
-  iam:
     password:
       # Evita chamar o Have I Been Pwned em desenvolvimento.
       check-compromised: false
@@ -35,3 +30,7 @@ os:
       admin-email: admin@example.com
       admin-password: troque-esta-senha-local
       admin-name: Admin Local
+  auth:
+    session:
+      # http://localhost sem TLS
+      cookie-secure: false
