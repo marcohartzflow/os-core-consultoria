@@ -1,12 +1,22 @@
 package com.maximusflow.os.common.error;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -47,6 +57,32 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler(RateLimitedException.class)
 	ProblemDetail rateLimited(RateLimitedException ex) {
 		return problem(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas", ex.getMessage());
+	}
+
+	/**
+	 * Invalid request body: one message per field, so the form can point at the field. Only the
+	 * field name and the constraint message leave the server, never the rejected value.
+	 */
+	@Override
+	protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
+			HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+		Map<String, String> errors = new LinkedHashMap<>();
+		ex.getBindingResult()
+			.getFieldErrors()
+			.forEach((error) -> errors.putIfAbsent(error.getField(),
+					error.getDefaultMessage() != null ? error.getDefaultMessage() : "valor inválido"));
+		ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Dados inválidos", "Confira os campos destacados");
+		problem.setProperty("errors", errors);
+		return handleExceptionInternal(ex, problem, headers, status, request);
+	}
+
+	/** Invalid query or path parameters (for example a page number out of range). */
+	@Override
+	protected @Nullable ResponseEntity<Object> handleHandlerMethodValidationException(
+			HandlerMethodValidationException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+		ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Parâmetros inválidos",
+				"A requisição tem parâmetros fora do permitido");
+		return handleExceptionInternal(ex, problem, headers, status, request);
 	}
 
 	@ExceptionHandler(Exception.class)

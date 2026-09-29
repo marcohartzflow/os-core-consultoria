@@ -65,8 +65,74 @@ class AuditTrailTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.content[0].action").value("audit.exported"));
 
+		// Wildcards typed in a search box are plain characters, not a way to match everything.
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("action", "%"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.page.totalElements").value(0));
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("actorEmail", "_"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.page.totalElements").value(0));
+
 		this.mvc.perform(get("/api/audit/events").cookie(session).param("page", "-1")).andExpect(status().isBadRequest());
 		this.mvc.perform(get("/api/audit/events")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void eventsFilterByOriginAndCorrelationId() throws Exception {
+		Cookie session = loginAsAdmin();
+
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("origin", "SYSTEM"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[*].origin").value(org.hamcrest.Matchers.everyItem(
+					org.hamcrest.Matchers.is("SYSTEM"))))
+			.andExpect(jsonPath("$.content[?(@.action == 'iam.user.bootstrapped')]").isNotEmpty());
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("origin", "REST").param("origin", "AI_TOOL"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[*].origin").value(org.hamcrest.Matchers.everyItem(
+					org.hamcrest.Matchers.oneOf("REST", "AI_TOOL"))))
+			.andExpect(jsonPath("$.content[?(@.action == 'auth.login.success')]").isNotEmpty());
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("origin", "NOPE"))
+			.andExpect(status().isBadRequest());
+
+		MvcResult csv = this.mvc.perform(get("/api/audit/events.csv").cookie(session).param("origin", "SYSTEM"))
+			.andExpect(status().isOk())
+			.andReturn();
+		assertThat(csv.getResponse().getContentAsString()).contains("\"SYSTEM\"").doesNotContain("\"REST\"");
+
+		this.mvc.perform(get("/api/audit/events").cookie(session).param("correlationId", "no-such-correlation"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content").isEmpty());
+	}
+
+	@Test
+	void dailyActivityCountsEveryDayInTheViewersTimeZone() throws Exception {
+		Cookie session = loginAsAdmin();
+
+		this.mvc.perform(get("/api/audit/activity").cookie(session).param("days", "7").param("zone", "America/Sao_Paulo"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(7))
+			.andExpect(jsonPath("$[6].loginSuccess").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+			.andExpect(jsonPath("$[6].rest").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+			.andExpect(jsonPath("$[0].day").exists());
+
+		this.mvc.perform(get("/api/audit/activity").cookie(session).param("zone", "Mars/Olympus"))
+			.andExpect(status().is(422));
+		this.mvc.perform(get("/api/audit/activity").cookie(session).param("days", "91")).andExpect(status().isBadRequest());
+		this.mvc.perform(get("/api/audit/activity").cookie(session).param("days", "0")).andExpect(status().isBadRequest());
+		this.mvc.perform(get("/api/audit/activity")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void listingsCarryTheSecondFactorAndTheMembersOfEachRole() throws Exception {
+		Cookie session = loginAsAdmin();
+
+		this.mvc.perform(get("/api/iam/users").cookie(session))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.email == 'admin@example.com')].mfaEnabled").value(false));
+		this.mvc.perform(get("/api/iam/roles").cookie(session))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.system == true)].userCount").value(org.hamcrest.Matchers.everyItem(
+					org.hamcrest.Matchers.greaterThanOrEqualTo(1))));
 	}
 
 	private Cookie loginAsAdmin() throws Exception {

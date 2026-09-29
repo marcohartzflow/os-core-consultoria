@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import jakarta.persistence.criteria.Predicate;
 
@@ -11,25 +12,35 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
-/** Optional criteria for searching the audit trail. Every field is ANDed; null means "any". */
+/**
+ * Optional criteria for searching the audit trail. Every field is ANDed; null (or an empty set of
+ * origins) means "any". Several origins match any of them.
+ */
 public record AuditFilter(@Nullable String actorEmail, @Nullable String action, @Nullable String entityType,
-		@Nullable String entityId, @Nullable Instant from, @Nullable Instant to) {
+		@Nullable String entityId, @Nullable Instant from, @Nullable Instant to, @Nullable Set<AuditOrigin> origins,
+		@Nullable String correlationId) {
 
 	Specification<AuditEvent> toSpecification() {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
 			if (StringUtils.hasText(this.actorEmail)) {
 				predicates.add(cb.like(cb.lower(root.get("actorEmail")),
-						"%" + this.actorEmail.strip().toLowerCase(Locale.ROOT) + "%"));
+						"%" + literal(this.actorEmail.strip().toLowerCase(Locale.ROOT)) + "%", ESCAPE));
 			}
 			if (StringUtils.hasText(this.action)) {
-				predicates.add(cb.like(root.get("action"), this.action.strip() + "%"));
+				predicates.add(cb.like(root.get("action"), literal(this.action.strip()) + "%", ESCAPE));
 			}
 			if (StringUtils.hasText(this.entityType)) {
 				predicates.add(cb.equal(root.get("entityType"), this.entityType.strip()));
 			}
 			if (StringUtils.hasText(this.entityId)) {
 				predicates.add(cb.equal(root.get("entityId"), this.entityId.strip()));
+			}
+			if (this.origins != null && !this.origins.isEmpty()) {
+				predicates.add(root.get("origin").in(this.origins));
+			}
+			if (StringUtils.hasText(this.correlationId)) {
+				predicates.add(cb.equal(root.get("correlationId"), this.correlationId.strip()));
 			}
 			if (this.from != null) {
 				predicates.add(cb.greaterThanOrEqualTo(root.get("occurredAt"), this.from));
@@ -39,6 +50,14 @@ public record AuditFilter(@Nullable String actorEmail, @Nullable String action, 
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};
+	}
+
+
+	private static final char ESCAPE = '\\';
+
+	/** The typed text is matched as is: % and _ are not wildcards for the person searching. */
+	static String literal(String text) {
+		return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
 }

@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit/events": {
         parameters: {
             query?: never;
@@ -680,6 +696,20 @@ export interface components {
             id: string;
             name: string;
         };
+        AuditActivityDay: {
+            /** Format: int64 */
+            aiTool: number;
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            loginFailure: number;
+            /** Format: int64 */
+            loginSuccess: number;
+            /** Format: int64 */
+            rest: number;
+            /** Format: int64 */
+            system: number;
+        };
         AuditEventView: {
             action: string;
             actorEmail: string | null;
@@ -835,6 +865,8 @@ export interface components {
             name: string;
             permissions: string[];
             system: boolean;
+            /** Format: int64 */
+            userCount: number;
         };
         SessionInfo: {
             /** Format: date-time */
@@ -897,6 +929,7 @@ export interface components {
             /** Format: date-time */
             lastLoginAt: string | null;
             locked: boolean;
+            mfaEnabled: boolean;
             name: string;
             roles: components["schemas"]["RoleRef"][];
             /** @enum {string} */
@@ -912,6 +945,7 @@ export interface components {
 export type AdministratorStatus = components['schemas']['AdministratorStatus'];
 export type AssignRolesRequest = components['schemas']['AssignRolesRequest'];
 export type Assignee = components['schemas']['Assignee'];
+export type AuditActivityDay = components['schemas']['AuditActivityDay'];
 export type AuditEventView = components['schemas']['AuditEventView'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type ChatMessage = components['schemas']['ChatMessage'];
@@ -1146,6 +1180,29 @@ export interface operations {
             };
         };
     };
+    activity: {
+        parameters: {
+            query?: {
+                days?: number;
+                zone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AuditActivityDay"][];
+                };
+            };
+        };
+    };
     search: {
         parameters: {
             query?: {
@@ -1155,6 +1212,8 @@ export interface operations {
                 entityId?: string;
                 from?: string;
                 to?: string;
+                origin?: ("REST" | "AI_TOOL" | "SYSTEM")[];
+                correlationId?: string;
                 page?: number;
             };
             header?: never;
@@ -1183,6 +1242,8 @@ export interface operations {
                 entityId?: string;
                 from?: string;
                 to?: string;
+                origin?: ("REST" | "AI_TOOL" | "SYSTEM")[];
+                correlationId?: string;
             };
             header?: never;
             path?: never;

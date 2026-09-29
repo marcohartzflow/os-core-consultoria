@@ -174,6 +174,20 @@ class AccountLifecycleTests {
 		assertThat(Mailbox.ADMIN_NOTICES.poll(500, TimeUnit.MILLISECONDS)).isNull();
 	}
 
+	@Test
+	void anInvalidFormNamesEachFieldWithoutEchoingTheValue() throws Exception {
+		Session admin = login("admin@example.com", "Admin-Password-2026");
+		MvcResult result = this.mvc
+			.perform(withCsrf(post("/api/iam/users"), admin).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"not-an-address-xyz\",\"name\":\"\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.title").value("Dados inválidos"))
+			.andExpect(jsonPath("$.errors.email").isString())
+			.andExpect(jsonPath("$.errors.name").isString())
+			.andReturn();
+		assertThat(result.getResponse().getContentAsString()).doesNotContain("not-an-address-xyz");
+	}
+
 	// helpers
 
 	record Session(Cookie cookie, Cookie xsrf) {

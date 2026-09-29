@@ -50,6 +50,36 @@
         "required" : [ "id", "name" ],
         "type" : "object"
       },
+      "AuditActivityDay" : {
+        "properties" : {
+          "aiTool" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "day" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "loginFailure" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "loginSuccess" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "rest" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "system" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "aiTool", "day", "loginFailure", "loginSuccess", "rest", "system" ],
+        "type" : "object"
+      },
       "AuditEventView" : {
         "properties" : {
           "action" : {
@@ -524,9 +554,13 @@
           },
           "system" : {
             "type" : "boolean"
+          },
+          "userCount" : {
+            "format" : "int64",
+            "type" : "integer"
           }
         },
-        "required" : [ "description", "id", "name", "permissions", "system" ],
+        "required" : [ "description", "id", "name", "permissions", "system", "userCount" ],
         "type" : "object"
       },
       "SessionInfo" : {
@@ -692,6 +726,9 @@
           "locked" : {
             "type" : "boolean"
           },
+          "mfaEnabled" : {
+            "type" : "boolean"
+          },
           "name" : {
             "type" : "string"
           },
@@ -707,7 +744,7 @@
             "type" : "string"
           }
         },
-        "required" : [ "anonymizedAt", "createdAt", "email", "id", "lastLoginAt", "locked", "name", "roles", "status" ],
+        "required" : [ "anonymizedAt", "createdAt", "email", "id", "lastLoginAt", "locked", "mfaEnabled", "name", "roles", "status" ],
         "type" : "object"
       }
     }
@@ -954,6 +991,49 @@
         "tags" : [ "ai-controller" ]
       }
     },
+    "/api/audit/activity" : {
+      "get" : {
+        "operationId" : "activity",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "days",
+          "required" : false,
+          "schema" : {
+            "default" : 30,
+            "format" : "int32",
+            "maximum" : 90,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "zone",
+          "required" : false,
+          "schema" : {
+            "default" : "UTC",
+            "maxLength" : 64,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AuditActivityDay"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "audit-controller" ]
+      }
+    },
     "/api/audit/events" : {
       "get" : {
         "operationId" : "search",
@@ -1007,6 +1087,29 @@
           "required" : false,
           "schema" : {
             "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "origin",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "REST", "AI_TOOL", "SYSTEM" ],
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "correlationId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
             "type" : "string"
           }
         }, {
@@ -1089,6 +1192,29 @@
           "required" : false,
           "schema" : {
             "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "origin",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "REST", "AI_TOOL", "SYSTEM" ],
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "correlationId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
             "type" : "string"
           }
         } ],

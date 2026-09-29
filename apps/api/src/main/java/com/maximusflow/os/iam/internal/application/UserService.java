@@ -25,6 +25,7 @@ import com.maximusflow.os.iam.internal.domain.Role;
 import com.maximusflow.os.iam.internal.domain.TokenType;
 import com.maximusflow.os.iam.internal.domain.User;
 import com.maximusflow.os.iam.internal.persistence.RoleRepository;
+import com.maximusflow.os.iam.internal.persistence.UserMfaRepository;
 import com.maximusflow.os.iam.internal.persistence.UserRepository;
 
 import org.jspecify.annotations.Nullable;
@@ -76,11 +77,14 @@ public class UserService {
 
 	private final Clock clock;
 
+	private final UserMfaRepository mfa;
+
 	UserService(UserRepository users, RoleRepository roles, AccountTokens tokens, AccountNotifier notifier,
 			AppLinks links, IamProperties properties, AuditRecorder audit, CurrentUser currentUser,
 			GrantGuard grantGuard, ApplicationEventPublisher events, PersonalDataService personalData,
-			AdministratorPolicy administrators, Clock clock) {
+			AdministratorPolicy administrators, Clock clock, UserMfaRepository mfa) {
 		this.administrators = administrators;
+		this.mfa = mfa;
 		this.users = users;
 		this.roles = roles;
 		this.tokens = tokens;
@@ -96,12 +100,13 @@ public class UserService {
 	}
 
 	@Tool(name = "iam_list_users",
-			description = "Lista os usuários do portal (até " + MAX_LIST + "): id, nome, e-mail, status (INVITED, ACTIVE, DISABLED), se está bloqueado, roles e último acesso.")
+			description = "Lista os usuários do portal (até " + MAX_LIST + "): id, nome, e-mail, status (INVITED, ACTIVE, DISABLED), se está bloqueado, roles, último acesso e se tem verificação em duas etapas.")
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
 	@Transactional(readOnly = true)
 	public List<UserSummary> list() {
+		Set<UUID> withMfa = this.mfa.findUserIdsWithMfaEnabled();
 		return this.users.findAllByOrderByNameAsc(Limit.of(MAX_LIST)).stream()
-			.map((u) -> UserSummary.of(u, this.clock.instant()))
+			.map((u) -> UserSummary.of(u, this.clock.instant(), withMfa.contains(u.getId())))
 			.toList();
 	}
 
@@ -111,7 +116,7 @@ public class UserService {
 	public UserSummary get(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
 		User user = load(id);
 		UiActions.publish(new UiAction.Navigate("/settings/users/" + user.getId(), "Abrir " + user.getName()));
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	/**
@@ -138,7 +143,7 @@ public class UserService {
 		String link = issueInvitation(user);
 		this.audit.record("iam.user.invited", "user", user.getId().toString(),
 				Map.of("email", user.getEmail(), "roles", roleNames(user)));
-		return new InvitationIssued(UserSummary.of(user, this.clock.instant()), link);
+		return new InvitationIssued(summary(user), link);
 	}
 
 	@RequiresPermission(value = "iam.user.create", description = "Convidar usuários")
@@ -150,7 +155,7 @@ public class UserService {
 		}
 		String link = issueInvitation(user);
 		this.audit.record("iam.user.invitation_resent", "user", user.getId().toString(), null);
-		return new InvitationIssued(UserSummary.of(user, this.clock.instant()), link);
+		return new InvitationIssued(summary(user), link);
 	}
 
 	@RequiresPermission(value = "iam.user.update", description = "Editar o nome de usuários")
@@ -161,7 +166,7 @@ public class UserService {
 		user.rename(name);
 		this.audit.record("iam.user.renamed", "user", user.getId().toString(),
 				Map.of("nameBefore", before, "nameAfter", user.getName()));
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	/**
@@ -186,7 +191,7 @@ public class UserService {
 		if (added.stream().anyMatch(Role::isSystem)) {
 			this.administrators.granted(user);
 		}
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
@@ -209,7 +214,7 @@ public class UserService {
 		user.disable();
 		this.events.publishEvent(new UserDisabled(user.getId()));
 		this.audit.record("iam.user.disabled", "user", user.getId().toString(), null);
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	@RequiresPermission(value = "iam.user.disable", description = "Desativar e reativar usuários")
@@ -221,7 +226,7 @@ public class UserService {
 		}
 		user.enable();
 		this.audit.record("iam.user.enabled", "user", user.getId().toString(), null);
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	/** Irreversible erasure (LGPD). Reserved, and never an AI tool: only a person in the portal does it. */
@@ -241,7 +246,7 @@ public class UserService {
 		}
 		this.personalData.erase(user.getId(), user.getEmail());
 		this.audit.record("iam.user.anonymized", "user", user.getId().toString(), null);
-		return UserSummary.of(user, this.clock.instant());
+		return summary(user);
 	}
 
 	private void assertMayAssignRoles() {
@@ -257,6 +262,10 @@ public class UserService {
 		String link = this.links.invitation(raw);
 		this.notifier.sendInvitation(user.getEmail(), user.getName(), link);
 		return this.notifier.handsLinksToAdministrator() ? link : null;
+	}
+
+	private UserSummary summary(User user) {
+		return UserSummary.of(user, this.clock.instant(), this.mfa.existsByUserIdAndEnabledAtIsNotNull(user.getId()));
 	}
 
 	private User load(UUID id) {

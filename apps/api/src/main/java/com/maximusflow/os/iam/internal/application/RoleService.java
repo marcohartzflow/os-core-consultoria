@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.ConflictException;
@@ -48,13 +49,17 @@ public class RoleService {
 	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
 	@Transactional(readOnly = true)
 	public List<RoleSummary> list() {
-		return this.roles.findAllByOrderByNameAsc().stream().map(RoleSummary::of).toList();
+		Map<UUID, Long> members = this.roles.countMembers().stream()
+			.collect(Collectors.toMap(RoleRepository.RoleMembership::getRoleId, RoleRepository.RoleMembership::getUsers));
+		return this.roles.findAllByOrderByNameAsc().stream()
+			.map((role) -> RoleSummary.of(role, members.getOrDefault(role.getId(), 0L)))
+			.toList();
 	}
 
 	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
 	@Transactional(readOnly = true)
 	public RoleSummary get(UUID id) {
-		return RoleSummary.of(load(id));
+		return summary(load(id));
 	}
 
 	@RequiresPermission(value = "iam.role.create", description = "Criar roles", reserved = true)
@@ -65,7 +70,7 @@ public class RoleService {
 		Role role = this.roles.save(Role.create(name, description, validated(permissions)));
 		this.audit.record("iam.role.created", "role", role.getId().toString(),
 				Map.of("name", role.getName(), "permissions", new TreeSet<>(role.getPermissions())));
-		return RoleSummary.of(role);
+		return summary(role);
 	}
 
 	@RequiresPermission(value = "iam.role.update", description = "Editar roles e suas permissões", reserved = true)
@@ -84,7 +89,7 @@ public class RoleService {
 		role.update(name, description, validated(permissions));
 		this.audit.record("iam.role.updated", "role", role.getId().toString(),
 				Map.of("permissionsBefore", before, "permissionsAfter", new TreeSet<>(role.getPermissions())));
-		return RoleSummary.of(role);
+		return summary(role);
 	}
 
 	@RequiresPermission(value = "iam.role.delete", description = "Excluir roles", reserved = true)
@@ -117,6 +122,14 @@ public class RoleService {
 		}
 		this.grantGuard.assertCanGrantPermissions(permissions);
 		return permissions;
+	}
+
+
+	private RoleSummary summary(Role role) {
+		return RoleSummary.of(role, this.roles.countMembers().stream()
+			.filter((m) -> m.getRoleId().equals(role.getId()))
+			.mapToLong(RoleRepository.RoleMembership::getUsers)
+			.sum());
 	}
 
 }

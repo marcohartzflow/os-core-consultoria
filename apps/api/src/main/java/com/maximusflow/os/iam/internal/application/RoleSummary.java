@@ -8,11 +8,12 @@ import com.maximusflow.os.iam.internal.domain.Role;
 
 import org.jspecify.annotations.Nullable;
 
-public record RoleSummary(UUID id, String name, @Nullable String description, boolean system, Set<String> permissions) {
+public record RoleSummary(UUID id, String name, @Nullable String description, boolean system, Set<String> permissions,
+		long userCount) {
 
-	static RoleSummary of(Role role) {
+	static RoleSummary of(Role role, long userCount) {
 		return new RoleSummary(role.getId(), role.getName(), role.getDescription(), role.isSystem(),
-				new TreeSet<>(role.getPermissions()));
+				new TreeSet<>(role.getPermissions()), userCount);
 	}
 
 }
