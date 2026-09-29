@@ -46,12 +46,12 @@ export function SearchDialog() {
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="w-9 justify-start px-0 font-normal text-muted-foreground sm:w-48 sm:px-3"
+        className="w-9 justify-start px-0 font-normal text-muted-foreground @xl/page:w-48 @xl/page:px-3"
         aria-label="Buscar telas"
       >
-        <Search className="mx-auto sm:mx-0" />
-        <span className="hidden flex-1 text-left sm:inline">Buscar…</span>
-        <Kbd className="hidden sm:inline-flex">⌘J</Kbd>
+        <Search className="mx-auto @xl/page:mx-0" />
+        <span className="hidden flex-1 text-left @xl/page:inline">Buscar…</span>
+        <Kbd className="hidden @xl/page:inline-flex">⌘J</Kbd>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Ir para uma tela do portal">
         <Command>

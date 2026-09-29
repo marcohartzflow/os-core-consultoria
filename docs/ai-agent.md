@@ -99,6 +99,18 @@ O resultado de uma tool nunca entra no prompt de sistema: o desfecho de uma conf
 
 Um use case pode, enquanto roda como tool, publicar `UiActions.publish(new UiAction.Navigate("/tasks", "Ver tarefas"))` (pacote `common.ui`). Fora do agente (REST) não há ouvinte e a chamada não faz nada. Dentro do agente, `ContextPropagatingToolCallback` captura o ouvinte e o `AiController` envia o evento SSE `ui_action` (`{type: "navigate", path, label}`); o painel mostra um link e navega. Só caminhos internos (`/...`), validados nos dois lados; nunca HTML, nunca script. A ação nasce no nosso código, não no texto do modelo, então não pode ser forjada pela conversa. Exemplos no core: `tasks_create` leva para `/tasks`, `iam_get_user` abre a ficha do usuário. Outros tipos (`highlight`, `openForm`) entram quando um módulo precisar.
 
+## Janela do agente (web)
+
+O assistente é uma segunda janela à direita da página, com a mesma borda e os mesmos cantos (`src/core/ai/AgentWorkspace.tsx`, sobre o `resizable` do shadcn / react-resizable-panels). Abre em cerca de um terço da tela, redimensiona pela divisória (mouse ou setas do teclado), amplia até 60 % e recolhe com `⌘I`/`Ctrl+I` ou pelo botão "Assistente" do cabeçalho. A divisão fica no cookie `agent_layout`, lido pelo layout `(os)` para o primeiro quadro já sair no tamanho certo. No celular o agente abre em tela cheia.
+
+Dentro da janela (`AgentPanel.tsx`):
+
+- Funcionando de verdade: histórico com busca e grupos por data, fixar conversa (só ids, neste navegador), exportar em Markdown, excluir uma ou todas, nova conversa, resposta em streaming com botão de parar (Esc), Markdown seguro (sem HTML e sem imagens), copiar, ler em voz alta (síntese do próprio navegador), editar e reenviar, perguntar de novo, confirmações de ações destrutivas, lista de ferramentas vinda de `GET /api/ai/tools`, preferências de envio com Enter, tamanho do texto, mostrar ferramentas e abrir telas automaticamente.
+- Prévia, marcada na tela: seletor de modelo, tom, instruções personalizadas, memória, avaliação de respostas, renomear (vale só na aba), anexos. Nada disso é enviado ao servidor ainda.
+- Ditado por voz fica desligado de propósito: o reconhecimento do navegador envia o áudio a terceiros, o que não cabe com dados confidenciais.
+
+Parar a resposta fecha o stream na tela; o servidor pode terminar o turno em segundo plano, respeitando o tempo limite de cada turno.
+
 ## O que um módulo novo precisa fazer
 
 Nada além de anotar seus use cases com `@Tool` + `@RequiresPermission` (+ `@Destructive` quando couber) e escrever boas descrições. O módulo `ai` descobre tudo pelo contexto do Spring e não importa nenhum módulo de negócio.

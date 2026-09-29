@@ -21,6 +21,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Portal redesenhado no estilo do template next-shadcn-admin-dashboard e do bloco dashboard-01 do shadcn: painel com indicadores, gráfico de atividade e cards de segurança; listas com busca, filtros facetados, colunas, paginação e ações por linha com confirmação; detalhe do usuário e Minha conta em abas; menu "Criar", breadcrumb, busca `⌘J`, tema claro/escuro; login em duas colunas.
 - Tratamento de erros padronizado: toasts nas ações, erro por campo nos formulários, telas de erro com "Tentar novamente", página 404 e limite de erro do portal.
 - API: `GET /api/audit/activity` (eventos por dia no fuso de quem vê), `mfaEnabled` no usuário, `userCount` na role, filtros `origin` e `correlationId` na auditoria, erros de validação com o campo (`errors`) e em português.
+- Assistente como janela lateral redimensionável e recolhível (`⌘I`), ao lado da página: histórico, busca, exportação, parar resposta, Markdown, ações por mensagem e configurações em abas; itens ainda sem servidor aparecem como "Prévia".
 - `pnpm demo:data`: popula um ambiente local com dados de demonstração pela API (recusa hosts que não sejam locais).
 - Módulos registram entradas no menu "Criar" (`moduleQuickCreate`) e no painel (`src/modules/dashboard.ts`).
 

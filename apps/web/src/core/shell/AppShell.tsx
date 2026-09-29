@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 import { ChevronDown, CirclePlus, Command } from "lucide-react";
-import { AiPanelTrigger } from "@/core/ai/AiPanel";
+import { AgentToggle } from "@/core/ai/AgentToggle";
+import { AgentWorkspace } from "@/core/ai/AgentWorkspace";
+import type { Layout } from "react-resizable-panels";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { breadcrumbFor, navigationFor, quickCreateFor } from "./navigation";
 import { NavUser } from "./NavUser";
@@ -93,8 +95,8 @@ function QuickCreate({ hasPermission }: { hasPermission: (permission: string) =>
 function Trail({ pathname, hasPermission }: { pathname: string; hasPermission: (permission: string) => boolean }) {
   const trail = breadcrumbFor(pathname, hasPermission);
   return (
-    <Breadcrumb className="hidden md:block">
-      <BreadcrumbList>
+    <Breadcrumb className="hidden min-w-0 @2xl/page:block">
+      <BreadcrumbList className="flex-nowrap whitespace-nowrap">
         {trail.map((crumb, index) => (
           <Fragment key={crumb.label}>
             {index > 0 && <BreadcrumbSeparator />}
@@ -120,7 +122,15 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 }
 
-export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; children: React.ReactNode }) {
+export function AppShell({
+  sidebarOpen,
+  agentLayout,
+  children,
+}: {
+  sidebarOpen: boolean;
+  agentLayout?: Layout;
+  children: React.ReactNode;
+}) {
   const { me, hasPermission } = useAuth();
   const pathname = usePathname();
   const sections = navigationFor(hasPermission);
@@ -178,7 +188,12 @@ export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; chil
           <NavUser />
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset className="min-w-0 overflow-x-clip peer-data-[variant=inset]:border">
+      <AgentWorkspace
+        defaultLayout={agentLayout}
+        page={
+      // On desktop the page is a window inside the resizable area (see AgentWorkspace) and scrolls
+      // on its own; the sticky header stays at the top of that window.
+      <SidebarInset className="@container/page min-w-0 overflow-x-clip md:h-full md:overflow-y-auto md:rounded-2xl md:shadow-sm md:ring-1 md:ring-border">
         <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-t-[inherit] border-b bg-background/50 backdrop-blur-md">
           <div className="flex w-full items-center justify-between px-4 lg:px-6">
             <div className="flex min-w-0 items-center gap-1 lg:gap-2">
@@ -189,7 +204,7 @@ export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; chil
             <div className="flex items-center gap-2">
               <SearchDialog />
               <ThemeSwitcher />
-              <AiPanelTrigger />
+              <AgentToggle />
             </div>
           </div>
         </header>
@@ -197,6 +212,8 @@ export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; chil
           <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 md:gap-6">{children}</div>
         </div>
       </SidebarInset>
+        }
+      />
     </SidebarProvider>
   );
 }
