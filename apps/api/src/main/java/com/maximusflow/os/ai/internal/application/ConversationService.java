@@ -67,6 +67,7 @@ public class ConversationService {
 		requireOwned(conversationId);
 		return this.chatMemory.get(conversationId.toString()).stream()
 			.filter((m) -> m.getMessageType() == MessageType.USER || m.getMessageType() == MessageType.ASSISTANT)
+			.filter((m) -> !isPortalNote(m))
 			.map((m) -> new ChatMessage(m.getMessageType().getValue(), textOf(m)))
 			.filter((m) -> !m.text().isBlank())
 			.toList();
@@ -92,6 +93,18 @@ public class ConversationService {
 			String title = firstUserMessage.strip();
 			conversation.retitle(title.length() > 80 ? title.substring(0, 77) + "…" : title);
 		}
+	}
+
+	/**
+	 * Prefix of the notes the portal itself adds to a conversation (confirmation outcomes). They are
+	 * plain user-role messages, never system messages, so data can never gain system-prompt
+	 * authority; the prefix keeps them out of what people see and export.
+	 */
+	public static final String PORTAL_NOTE = "[portal] ";
+
+	public static boolean isPortalNote(Message message) {
+		String text = message.getText();
+		return message.getMessageType() == MessageType.USER && text != null && text.startsWith(PORTAL_NOTE);
 	}
 
 	private static String textOf(Message message) {

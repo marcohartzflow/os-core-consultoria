@@ -22,7 +22,7 @@ import com.maximusflow.os.common.security.RequiresPermission;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.stereotype.Service;
@@ -127,8 +127,8 @@ public class PendingActionService {
 			this.tx.executeWithoutResult((status) -> {
 				PendingAction failed = this.actions.findById(actionId).orElseThrow();
 				failed.resolve(PendingAction.Status.FAILED, cause.getClass().getSimpleName(), this.clock.instant());
-				this.chatMemory.add(conversationId, new SystemMessage("A pessoa confirmou a ação " + tool.name()
-						+ " mas a execução falhou: " + cause.getClass().getSimpleName()));
+				this.chatMemory.add(conversationId, note("A pessoa confirmou a ação " + tool.name()
+						+ " no portal, mas a execução falhou (" + cause.getClass().getSimpleName() + ")."));
 				this.audit.record("ai.action.failed", "ai_action", actionId.toString(),
 						Map.of("tool", tool.name(), "reason", cause.getClass().getSimpleName()));
 			});
@@ -137,8 +137,8 @@ public class PendingActionService {
 		return this.tx.execute((status) -> {
 			PendingAction done = this.actions.findById(actionId).orElseThrow();
 			done.resolve(PendingAction.Status.CONFIRMED, result, this.clock.instant());
-			this.chatMemory.add(conversationId, new SystemMessage(
-					"A pessoa confirmou a ação " + tool.name() + " e ela foi executada. Resultado: " + result));
+			this.chatMemory.add(conversationId, note("A pessoa confirmou a ação " + tool.name()
+					+ " no portal e ela foi executada com sucesso. Consulte as ferramentas se precisar do estado atual."));
 			this.audit.record("ai.action.confirmed", "ai_action", actionId.toString(), Map.of("tool", tool.name()));
 			return PendingActionView.of(done);
 		});
@@ -150,10 +150,19 @@ public class PendingActionService {
 		claim(actionId, PendingAction.Status.REJECTED);
 		PendingAction action = this.actions.findById(actionId).orElseThrow();
 		action.resolve(PendingAction.Status.REJECTED, null, this.clock.instant());
-		this.chatMemory.add(action.getConversationId().toString(),
-				new SystemMessage("A pessoa recusou a ação " + action.getToolName() + ". Não a execute."));
+		this.chatMemory.add(action.getConversationId().toString(), note("A pessoa recusou a ação "
+				+ action.getToolName() + " no portal. Não a execute nem a proponha de novo."));
 		this.audit.record("ai.action.rejected", "ai_action", actionId.toString(), Map.of("tool", action.getToolName()));
 		return PendingActionView.of(action);
+	}
+
+	/**
+	 * What the model learns about the outcome: a fixed sentence in the user role, never the tool's
+	 * result. Tool output is data written by portal users and must not reach the system prompt
+	 * (Anthropic joins every system message into the system block).
+	 */
+	private static UserMessage note(String text) {
+		return new UserMessage(ConversationService.PORTAL_NOTE + text);
 	}
 
 	/** Loads the open action and moves it to {@code to} atomically; exactly one caller wins. */

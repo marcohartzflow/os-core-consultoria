@@ -24,6 +24,8 @@ import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -71,6 +73,9 @@ class AiToolsTests {
 
 	@Autowired
 	TaskService tasks;
+
+	@Autowired
+	ChatMemory chatMemory;
 
 	@AfterEach
 	void clearContext() {
@@ -160,6 +165,13 @@ class AiToolsTests {
 		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(actionId))
 			.isInstanceOf(com.maximusflow.os.common.error.DomainRuleException.class);
 		assertThat(this.pendingActions.open(conversationId)).isEmpty();
+
+		// Outcomes reach the model as fixed user-role notes: no system message, no raw tool result,
+		// and nothing of it in what the person sees or exports.
+		var memory = this.chatMemory.get(conversationId.toString());
+		assertThat(memory).isNotEmpty().allSatisfy((m) -> assertThat(m.getMessageType()).isEqualTo(MessageType.USER));
+		assertThat(memory).allSatisfy((m) -> assertThat(m.getText()).startsWith("[portal] ").doesNotContain("Excluir uma vez"));
+		assertThat(this.conversations.messages(conversationId)).isEmpty();
 	}
 
 	private java.util.function.Function<String, UUID> stub2(RegisteredTool tool, UUID conversationId) {

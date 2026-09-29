@@ -52,6 +52,7 @@ class ConversationsDataContributor implements PersonalDataContributor {
 		List<ConversationService.ChatMessage> messages = this.chatMemory.get(conversation.getId().toString())
 			.stream()
 			.filter((m) -> m.getMessageType() == MessageType.USER || m.getMessageType() == MessageType.ASSISTANT)
+			.filter((m) -> !ConversationService.isPortalNote(m))
 			.map((m) -> new ConversationService.ChatMessage(m.getMessageType().getValue(), textOf(m)))
 			.toList();
 		return new ConversationExport(conversation.getId(), conversation.getTitle(), conversation.getCreatedAt(),
