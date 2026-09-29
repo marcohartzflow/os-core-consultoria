@@ -61,6 +61,8 @@ function AiPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // A conversation created by send() has no history yet; loading it would wipe the message being sent.
+  const createdBySend = useRef<string | null>(null);
 
   const loadConversations = useCallback(
     () =>
@@ -79,17 +81,23 @@ function AiPanel() {
   }, [loadConversations]);
 
   useEffect(() => {
-    if (!activeId) return;
+    if (!activeId || activeId === createdBySend.current) return;
+    let current = true;
     Promise.all([
       api<ChatMessage[]>(`/api/ai/conversations/${activeId}/messages`),
       api<PendingActionView[]>(`/api/ai/conversations/${activeId}/actions`),
     ]).then(
       ([messages, actions]) => {
+        // The person may have switched conversations while this was loading.
+        if (!current) return;
         setLines(messages.map((m) => ({ kind: m.role === "user" ? "user" : "assistant", text: m.text })));
         setPending(actions);
       },
-      (e: unknown) => setError(errorMessage(e)),
+      (e: unknown) => current && setError(errorMessage(e)),
     );
+    return () => {
+      current = false;
+    };
   }, [activeId]);
 
   useEffect(() => {
@@ -118,6 +126,7 @@ function AiPanel() {
       let conversationId = activeId;
       if (!conversationId) {
         const created = await api<ConversationSummary>("/api/ai/conversations", { method: "POST", body: {} });
+        createdBySend.current = created.id;
         setConversations((list) => [created, ...list]);
         setActiveId(created.id);
         conversationId = created.id;
