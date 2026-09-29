@@ -10,6 +10,10 @@ public interface AccountNotifier {
 
 	void sendPasswordReset(String email, String name, String link);
 
+	/** Tells an administrator that someone else just became an administrator. No link, no secret. */
+	void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
+			String grantedByName);
+
 	/**
 	 * True when this notifier cannot reach the person, so the use case hands the link to the
 	 * administrator instead. Once e-mail delivery is configured the link never leaves the server:

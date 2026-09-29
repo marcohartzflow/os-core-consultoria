@@ -47,6 +47,8 @@ class AccountLifecycleTests {
 
 		static final BlockingQueue<String> LINKS = new LinkedBlockingQueue<>();
 
+		static final BlockingQueue<String> ADMIN_NOTICES = new LinkedBlockingQueue<>();
+
 		@Bean
 		AccountNotifier recordingNotifier() {
 			return new AccountNotifier() {
@@ -58,6 +60,12 @@ class AccountLifecycleTests {
 				@Override
 				public void sendPasswordReset(String email, String name, String link) {
 					LINKS.add(link);
+				}
+
+				@Override
+				public void sendAdministratorGranted(String email, String name, String granteeName,
+						String granteeEmail, String grantedByName) {
+					ADMIN_NOTICES.add(email + " <- " + granteeEmail + " by " + grantedByName);
 				}
 			};
 		}
@@ -146,6 +154,24 @@ class AccountLifecycleTests {
 				String.class);
 		assertThat(hash).startsWith("{argon2}");
 		login("iris@example.com", "Legacy-Password-2020");
+	}
+
+	@Test
+	void everyOtherAdministratorIsToldWhenSomeoneBecomesOne() throws Exception {
+		invite("julia@example.com", "Julia", "Julia-Password-2026");
+		Session admin = login("admin@example.com", "Admin-Password-2026");
+		String julia = this.jdbc.queryForObject("SELECT id FROM users WHERE email = 'julia@example.com'", String.class);
+		String adminRole = this.jdbc.queryForObject("SELECT id FROM roles WHERE is_system", String.class);
+		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+			.put("/api/iam/users/" + julia + "/roles"), admin)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"roleIds\":[\"" + adminRole + "\"],\"currentPassword\":\"Admin-Password-2026\"}"))
+			.andExpect(status().isOk());
+
+		String notice = Mailbox.ADMIN_NOTICES.poll(10, TimeUnit.SECONDS);
+		assertThat(notice).isEqualTo("admin@example.com <- julia@example.com by Admin");
+		// Julia herself is not in the list; nobody else is an administrator yet.
+		assertThat(Mailbox.ADMIN_NOTICES.poll(500, TimeUnit.MILLISECONDS)).isNull();
 	}
 
 	// helpers

@@ -120,7 +120,7 @@ public class AgentService {
 		// timeout, error) the model call and any further tool calls stop with it.
 		try (Stream<String> tokens = this.chatClient.prompt()
 			.user(userMessage)
-			.toolCallbacks(callbacks)
+			.tools((Object[]) callbacks.toArray(ToolCallback[]::new))
 			.toolContext(Map.of("conversationId", id))
 			.advisors((a) -> a.param(ChatMemory.CONVERSATION_ID, id))
 			.stream()

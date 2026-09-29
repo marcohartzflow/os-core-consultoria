@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Copy, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/core/api/client";
-import type { InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
-import { RequirePermission } from "@/core/auth/AuthProvider";
-import { RolePicker } from "@/core/iam/RolePicker";
+import type { AdministratorStatus, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
+import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
+import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
 import { formatDateTime } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
@@ -28,10 +28,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserSummary[] | null>(null);
+  const [administrators, setAdministrators] = useState<AdministratorStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
-    () => api<UserSummary[]>("/api/iam/users").then(setUsers, (e: unknown) => setError(errorMessage(e))),
+    () =>
+      Promise.all([
+        api<UserSummary[]>("/api/iam/users"),
+        api<AdministratorStatus>("/api/iam/users/administrators"),
+      ]).then(
+        ([u, a]) => {
+          setUsers(u);
+          setAdministrators(a);
+        },
+        (e: unknown) => setError(errorMessage(e)),
+      ),
     [],
   );
 
@@ -53,6 +64,17 @@ export default function UsersPage() {
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {administrators?.belowMinimum && (
+        <Alert className="mb-4">
+          <AlertTitle>
+            {administrators.active} de {administrators.minimum} administradores ativos
+          </AlertTitle>
+          <AlertDescription>
+            Promova mais uma pessoa de confiança a administrador. Com um só, perder essa conta deixa ninguém capaz de
+            gerenciar acessos.
+          </AlertDescription>
         </Alert>
       )}
       {!users ? (
@@ -99,6 +121,10 @@ export default function UsersPage() {
 }
 
 function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
+  const { hasPermission } = useAuth();
+  // Inviting is delegable; giving the new account access (roles) is reserved to administrators.
+  const mayAssignRoles = hasPermission("iam.user.roles.assign");
+  const [password, setPassword] = useState("");
   const [open, setOpen] = useState(false);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [email, setEmail] = useState("");
@@ -109,14 +135,17 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mayAssignRoles) return;
     api<RoleSummary[]>("/api/iam/roles").then(setRoles).catch(() => setRoles([]));
-  }, [open]);
+  }, [open, mayAssignRoles]);
+
+  const confirmGrant = grantsAdministrator(roles, new Set(), selected);
 
   function reset() {
     setEmail("");
     setName("");
     setSelected(new Set());
+    setPassword("");
     setResult(null);
     setError(null);
   }
@@ -128,7 +157,12 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
     try {
       const issued = await api<InvitationIssued>("/api/iam/users", {
         method: "POST",
-        body: { email, name, roleIds: [...selected] },
+        body: {
+          email,
+          name,
+          roleIds: mayAssignRoles ? [...selected] : [],
+          currentPassword: confirmGrant ? password : null,
+        },
       });
       setResult(issued);
       await onInvited();
@@ -210,10 +244,21 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </Field>
-              <Field>
-                <FieldLabel>Roles</FieldLabel>
-                <RolePicker roles={roles} selected={selected} onChange={setSelected} />
-              </Field>
+              {mayAssignRoles ? (
+                <>
+                  <Field>
+                    <FieldLabel>Roles</FieldLabel>
+                    <RolePicker roles={roles} selected={selected} onChange={setSelected} />
+                  </Field>
+                  {confirmGrant && <AdministratorGrantConfirmation value={password} onChange={setPassword} />}
+                </>
+              ) : (
+                <Alert>
+                  <AlertDescription>
+                    A pessoa entra sem acesso a nenhuma área. Um administrador atribui as roles depois.
+                  </AlertDescription>
+                </Alert>
+              )}
               <DialogFooter>
                 <Button type="submit" disabled={busy}>
                   {busy ? "Enviando…" : "Enviar convite"}

@@ -30,6 +30,14 @@ class LoggingAccountNotifier implements AccountNotifier {
 	}
 
 	@Override
+	public void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
+			String grantedByName) {
+		log.info("Administrator notice for {}: {} <{}> is now an administrator (granted by {})",
+				Sanitize.forLog(email), Sanitize.forLog(granteeName), Sanitize.forLog(granteeEmail),
+				Sanitize.forLog(grantedByName));
+	}
+
+	@Override
 	public boolean handsLinksToAdministrator() {
 		return true;
 	}

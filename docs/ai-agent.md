@@ -69,6 +69,8 @@ Tool marcada com `@Destructive` não executa na primeira passada:
 
 Toda tool com `delete`, `pay`, `send`, `cancel` ou mudança em massa é destrutiva. Na dúvida, é destrutiva.
 
+Gestão de acesso nunca é tool: um use case com permissão reservada (`@RequiresPermission(reserved = true)`, como atribuir roles, redefinir segundo fator ou anonimizar) não pode ter `@Tool`, e o boot falha se tiver. Assim, uma injeção de prompt vinda de dados nunca alcança quem acessa o quê, nem na conversa de um administrador.
+
 ## Validação de entrada
 
 O Spring AI não valida o JSON do modelo contra o schema antes de invocar. Cada use case valida os próprios argumentos (como `TaskService.validate`), pois o mesmo método atende REST e tool; entrada inválida vira `DomainRuleException`, que volta ao modelo como erro sem tocar o banco. Listagens têm teto (200) para o prompt não receber uma tabela inteira.

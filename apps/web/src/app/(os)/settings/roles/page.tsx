@@ -233,12 +233,18 @@ function RoleDialog({
                       >
                         <Checkbox
                           id={`perm-${permission.key}`}
-                          disabled={readOnly}
+                          // Reserved permissions belong to the system role only; the API refuses them elsewhere.
+                          disabled={readOnly || permission.reserved}
                           checked={selected.has(permission.key)}
                           onCheckedChange={(checked) => toggle(permission.key, checked === true)}
                         />
                         <span>
                           <span>{permission.description || permission.key}</span>
+                          {permission.reserved && (
+                            <Badge variant="outline" className="ml-2">
+                              Só administrador
+                            </Badge>
+                          )}
                           <span className="block font-mono text-xs text-muted-foreground">{permission.key}</span>
                         </span>
                       </FieldLabel>

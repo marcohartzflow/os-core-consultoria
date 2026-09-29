@@ -57,7 +57,7 @@ public class RoleService {
 		return RoleSummary.of(load(id));
 	}
 
-	@RequiresPermission(value = "iam.role.create", description = "Criar roles")
+	@RequiresPermission(value = "iam.role.create", description = "Criar roles", reserved = true)
 	public RoleSummary create(String name, @Nullable String description, Set<String> permissions) {
 		if (this.roles.findByName(name.strip()).isPresent()) {
 			throw new ConflictException("Já existe uma role com este nome");
@@ -68,7 +68,7 @@ public class RoleService {
 		return RoleSummary.of(role);
 	}
 
-	@RequiresPermission(value = "iam.role.update", description = "Editar roles e suas permissões")
+	@RequiresPermission(value = "iam.role.update", description = "Editar roles e suas permissões", reserved = true)
 	public RoleSummary update(UUID id, String name, @Nullable String description, Set<String> permissions) {
 		Role role = load(id);
 		if (role.isSystem()) {
@@ -87,7 +87,7 @@ public class RoleService {
 		return RoleSummary.of(role);
 	}
 
-	@RequiresPermission(value = "iam.role.delete", description = "Excluir roles")
+	@RequiresPermission(value = "iam.role.delete", description = "Excluir roles", reserved = true)
 	public void delete(UUID id) {
 		Role role = load(id);
 		if (role.isSystem()) {
@@ -109,6 +109,10 @@ public class RoleService {
 		for (String permission : permissions) {
 			if (!this.catalog.contains(permission)) {
 				throw new DomainRuleException("Permissão desconhecida: " + permission);
+			}
+			if (this.catalog.isReserved(permission)) {
+				throw new DomainRuleException(
+						"A permissão " + permission + " é reservada ao administrador do sistema e não entra em outras roles");
 			}
 		}
 		this.grantGuard.assertCanGrantPermissions(permissions);

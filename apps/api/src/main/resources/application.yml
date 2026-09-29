@@ -116,6 +116,9 @@ os:
       admin-name: ${OS_BOOTSTRAP_ADMIN_NAME:Administrador}
       # The bootstrap password was typed into a config file, so the administrator must replace it on first login.
       require-password-change: true
+    administrators:
+      # Active system administrators the portal always keeps; removing or disabling one below this is refused.
+      minimum: 2
     mfa:
       # Administrators (system role) must enrol a second factor; set require-for-all to extend it to everyone.
       require-for-system-role: true

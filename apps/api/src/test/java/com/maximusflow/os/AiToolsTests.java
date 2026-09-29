@@ -63,6 +63,9 @@ class AiToolsTests {
 	ToolRegistry registry;
 
 	@Autowired
+	com.maximusflow.os.iam.PermissionCatalog catalog;
+
+	@Autowired
 	PendingActionService pendingActions;
 
 	@Autowired
@@ -96,6 +99,9 @@ class AiToolsTests {
 		assertThat(this.registry.forPermissions(Set.of("iam.user.read"))).extracting(RegisteredTool::name)
 			.containsExactly("iam_get_user", "iam_list_users");
 		assertThat(this.registry.forPermissions(Set.of())).isEmpty();
+		// Access management is never an AI tool, not even for administrators.
+		assertThat(this.registry.all()).extracting(RegisteredTool::name).doesNotContain("iam_anonymize_user");
+		assertThat(this.registry.all()).noneSatisfy((tool) -> assertThat(this.catalog.isReserved(tool.permission())).isTrue());
 	}
 
 	@Test

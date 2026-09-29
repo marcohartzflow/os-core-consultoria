@@ -308,6 +308,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/iam/users/administrators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["administrators"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/iam/users/{id}": {
         parameters: {
             query?: never;
@@ -321,7 +337,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["update_2"];
+        patch: operations["rename"];
         trace?: never;
     };
     "/api/iam/users/{id}/anonymize": {
@@ -398,6 +414,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/iam/users/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assignRoles"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -632,6 +664,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdministratorStatus: {
+            /** Format: int64 */
+            active: number;
+            belowMinimum: boolean;
+            /** Format: int32 */
+            minimum: number;
+        };
+        AssignRolesRequest: {
+            currentPassword: string | null;
+            roleIds: string[];
+        };
         Assignee: {
             /** Format: uuid */
             id: string;
@@ -696,6 +739,7 @@ export interface components {
             user: components["schemas"]["UserSummary"];
         };
         InviteUserRequest: {
+            currentPassword: string | null;
             /** Format: email */
             email: string;
             name: string;
@@ -766,9 +810,13 @@ export interface components {
             description: string;
             key: string;
             module: string;
+            reserved: boolean;
         };
         RecoveryCodes: {
             recoveryCodes: string[];
+        };
+        RenameUserRequest: {
+            name: string;
         };
         RoleRef: {
             /** Format: uuid */
@@ -838,10 +886,6 @@ export interface components {
             destructive: boolean;
             name: string;
         };
-        UpdateUserRequest: {
-            name: string;
-            roleIds: string[];
-        };
         UserSummary: {
             /** Format: date-time */
             anonymizedAt: string | null;
@@ -865,6 +909,8 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type AdministratorStatus = components['schemas']['AdministratorStatus'];
+export type AssignRolesRequest = components['schemas']['AssignRolesRequest'];
 export type Assignee = components['schemas']['Assignee'];
 export type AuditEventView = components['schemas']['AuditEventView'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
@@ -888,6 +934,7 @@ export type PagedModelAuditEventView = components['schemas']['PagedModelAuditEve
 export type PendingActionView = components['schemas']['PendingActionView'];
 export type PermissionDefinition = components['schemas']['PermissionDefinition'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
+export type RenameUserRequest = components['schemas']['RenameUserRequest'];
 export type RoleRef = components['schemas']['RoleRef'];
 export type RoleRequest = components['schemas']['RoleRequest'];
 export type RoleSummary = components['schemas']['RoleSummary'];
@@ -898,7 +945,6 @@ export type TaskRequest = components['schemas']['TaskRequest'];
 export type TaskSummary = components['schemas']['TaskSummary'];
 export type TokenAndPassword = components['schemas']['TokenAndPassword'];
 export type ToolView = components['schemas']['ToolView'];
-export type UpdateUserRequest = components['schemas']['UpdateUserRequest'];
 export type UserSummary = components['schemas']['UserSummary'];
 export type $defs = Record<string, never>;
 export interface operations {
@@ -1461,6 +1507,26 @@ export interface operations {
             };
         };
     };
+    administrators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdministratorStatus"];
+                };
+            };
+        };
+    };
     get_2: {
         parameters: {
             query?: never;
@@ -1483,7 +1549,7 @@ export interface operations {
             };
         };
     };
-    update_2: {
+    rename: {
         parameters: {
             query?: never;
             header?: never;
@@ -1494,7 +1560,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateUserRequest"];
+                "application/json": components["schemas"]["RenameUserRequest"];
             };
         };
         responses: {
@@ -1614,6 +1680,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    assignRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignRolesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["UserSummary"];
+                };
             };
         };
     };

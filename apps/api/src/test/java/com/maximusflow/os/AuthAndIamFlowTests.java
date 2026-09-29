@@ -22,7 +22,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -192,145 +194,186 @@ class AuthAndIamFlowTests {
 
 	@Test
 	@Order(8)
-	void cannotGrantPermissionsYouDoNotHold() throws Exception {
+	void delegatedUserManagersCanInviteRenameAndDisableButNeverGiveAccess() throws Exception {
 		Session admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
-		MvcResult roles = this.mvc.perform(get("/api/iam/roles").cookie(admin.cookie())).andExpect(status().isOk())
-			.andReturn();
-		String adminRoleId = firstMatch(roles, "\"id\":\"([^\"]+)\",\"name\":\"Administrador\"");
+		String adminRoleId = adminRoleId(admin);
 
-		MvcResult manager = this.mvc
+		// Reserved permissions never enter a custom role.
+		this.mvc.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Suporte\",\"permissions\":[\"iam.user.read\",\"iam.user.mfa.reset\"]}"))
+			.andExpect(status().is(422))
+			.andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("reservada")));
+		String managerRoleId = jsonValue(this.mvc
 			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Gestor\",\"permissions\":[\"iam.user.read\",\"iam.user.update\","
-						+ "\"iam.user.create\",\"iam.user.disable\",\"iam.user.mfa.reset\"]}"))
+						+ "\"iam.user.create\",\"iam.user.disable\",\"iam.role.read\"]}"))
 			.andExpect(status().isCreated())
-			.andReturn();
-		String managerRoleId = jsonValue(manager, "id");
-
-		MvcResult invited = this.mvc
-			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"carol@example.com\",\"name\":\"Carol\",\"roleIds\":[\"" + managerRoleId + "\"]}"))
-			.andExpect(status().isCreated())
-			.andReturn();
-		String token = jsonValue(invited, "invitationLink");
-		token = token.substring(token.lastIndexOf('/') + 1);
-		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"token\":\"" + token + "\",\"password\":\"Carol-Password-2026\"}"))
-			.andExpect(status().isNoContent());
-		String carolId = jsonValue(invited, "user.id");
-
+			.andReturn(), "id");
+		String carolId = inviteAndAccept(admin, "carol@example.com", "Carol", managerRoleId, "Carol-Password-2026");
 		Session carol = login("carol@example.com", "Carol-Password-2026");
-		// Carol holds iam.user.update but not the administrator's permissions: escalation refused.
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.patch("/api/iam/users/" + carolId), carol.csrf()).cookie(carol.cookie())
+
+		// Carol invites without roles and renames; she cannot give anyone access, herself included.
+		this.mvc.perform(withCsrf(post("/api/iam/users"), carol.csrf()).cookie(carol.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Carol\",\"roleIds\":[\"" + adminRoleId + "\",\"" + managerRoleId + "\"]}"))
+			.content("{\"email\":\"nina@example.com\",\"name\":\"Nina\"}"))
+			.andExpect(status().isCreated());
+		this.mvc.perform(withCsrf(post("/api/iam/users"), carol.csrf()).cookie(carol.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"email\":\"otto@example.com\",\"name\":\"Otto\",\"roleIds\":[\"" + managerRoleId + "\"]}"))
 			.andExpect(status().isForbidden());
-		// Keeping what she already has is fine.
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.patch("/api/iam/users/" + carolId), carol.csrf()).cookie(carol.cookie())
+		this.mvc.perform(withCsrf(put("/api/iam/users/" + carolId + "/roles"), carol.csrf()).cookie(carol.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Carol S.\",\"roleIds\":[\"" + managerRoleId + "\"]}"))
+			.content("{\"roleIds\":[\"" + managerRoleId + "\",\"" + adminRoleId + "\"]}"))
+			.andExpect(status().isForbidden());
+		this.mvc.perform(withCsrf(patch("/api/iam/users/" + carolId), carol.csrf()).cookie(carol.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Carol S.\"}"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.name").value("Carol S."));
+		// Nor manage roles.
+		this.mvc.perform(withCsrf(post("/api/iam/roles"), carol.csrf()).cookie(carol.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Minha\",\"permissions\":[\"iam.user.read\"]}"))
+			.andExpect(status().isForbidden());
 
-		// Acting on someone who holds more than Carol is refused too: re-inviting (the link would let
-		// her take the account), editing, disabling and resetting the second factor.
-		MvcResult dave = this.mvc
+		// Granting the administrator role needs the granting person's password.
+		String daveBody = "{\"email\":\"dave@example.com\",\"name\":\"Dave\",\"roleIds\":[\"" + adminRoleId + "\"]";
+		this.mvc.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(daveBody + "}"))
+			.andExpect(status().is(422));
+		this.mvc.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(daveBody + ",\"currentPassword\":\"wrong-password-value\"}"))
+			.andExpect(status().is(422));
+		String daveId = jsonValue(this.mvc
 			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"dave@example.com\",\"name\":\"Dave\",\"roleIds\":[\"" + adminRoleId + "\"]}"))
+				.content(daveBody + ",\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
 			.andExpect(status().isCreated())
-			.andReturn();
-		String daveId = jsonValue(dave, "user.id");
+			.andReturn(), "user.id");
+
+		// Carol cannot act on an account that holds more than she does.
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/invitations"), carol.csrf()).cookie(carol.cookie()))
 			.andExpect(status().isForbidden());
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.patch("/api/iam/users/" + daveId), carol.csrf()).cookie(carol.cookie())
+		this.mvc.perform(withCsrf(patch("/api/iam/users/" + daveId), carol.csrf()).cookie(carol.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Dave\",\"roleIds\":[]}"))
+			.content("{\"name\":\"Dave X\"}"))
 			.andExpect(status().isForbidden());
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/disable"), carol.csrf()).cookie(carol.cookie()))
 			.andExpect(status().isForbidden());
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/mfa/reset"), carol.csrf()).cookie(carol.cookie()))
 			.andExpect(status().isForbidden());
-		// The administrator who holds everything can still re-invite.
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/invitations"), admin.csrf()).cookie(admin.cookie()))
 			.andExpect(status().isOk());
 	}
 
 	@Test
 	@Order(9)
-	void lastActiveAdministratorCannotBeRemoved() throws Exception {
+	void thePortalKeepsAtLeastTwoActiveAdministrators() throws Exception {
 		Session admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+		String adminRoleId = adminRoleId(admin);
 		MvcResult me = this.mvc.perform(get("/api/me").cookie(admin.cookie())).andExpect(status().isOk()).andReturn();
 		String adminId = jsonValue(me, "id");
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.patch("/api/iam/users/" + adminId), admin.csrf()).cookie(admin.cookie())
+		this.mvc.perform(get("/api/iam/users/administrators").cookie(admin.cookie()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.active").value(1))
+			.andExpect(jsonPath("$.minimum").value(2))
+			.andExpect(jsonPath("$.belowMinimum").value(true));
+
+		// Only one: it can lose neither the role nor its access.
+		this.mvc.perform(withCsrf(put("/api/iam/users/" + adminId + "/roles"), admin.csrf()).cookie(admin.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Admin\",\"roleIds\":[]}"))
+			.content("{\"roleIds\":[]}"))
 			.andExpect(status().is(422));
+
+		// Two administrators: still the minimum, neither can be removed.
+		String eva = inviteAndAccept(admin, "eva@example.com", "Eva", null, "Eva-Password-2026");
+		this.mvc.perform(withCsrf(put("/api/iam/users/" + eva + "/roles"), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"roleIds\":[\"" + adminRoleId + "\"],\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
+			.andExpect(status().isOk());
+		this.mvc.perform(get("/api/iam/users/administrators").cookie(admin.cookie()))
+			.andExpect(jsonPath("$.active").value(2))
+			.andExpect(jsonPath("$.belowMinimum").value(false));
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + eva + "/disable"), admin.csrf()).cookie(admin.cookie()))
+			.andExpect(status().is(422));
+
+		// A third one makes room.
+		String fabio = inviteAndAccept(admin, "fabio@example.com", "Fabio", null, "Fabio-Password-2026");
+		this.mvc.perform(withCsrf(put("/api/iam/users/" + fabio + "/roles"), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"roleIds\":[\"" + adminRoleId + "\"],\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
+			.andExpect(status().isOk());
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + eva + "/disable"), admin.csrf()).cookie(admin.cookie()))
+			.andExpect(status().isOk());
+		// Nobody disables themself.
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + adminId + "/disable"), admin.csrf()).cookie(admin.cookie()))
 			.andExpect(status().is(422));
 	}
 
 	@Test
 	@Order(10)
-	void roleManagersCanOnlyShapeRolesWithinWhatTheyHold() throws Exception {
+	void theCatalogFlagsReservedPermissionsAndTheSystemRoleHoldsThem() throws Exception {
 		Session admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
-		MvcResult roles = this.mvc.perform(get("/api/iam/roles").cookie(admin.cookie())).andExpect(status().isOk())
+		MvcResult catalog = this.mvc.perform(get("/api/iam/permissions").cookie(admin.cookie()))
+			.andExpect(status().isOk())
 			.andReturn();
-		String adminRoleId = firstMatch(roles, "\"id\":\"([^\"]+)\",\"name\":\"Administrador\"");
-		String roleManagerId = jsonValue(this.mvc
-			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\":\"Gestor de roles\",\"permissions\":[\"iam.role.read\",\"iam.role.create\","
-						+ "\"iam.role.update\",\"iam.role.delete\",\"tasks.task.read\"]}"))
-			.andExpect(status().isCreated())
-			.andReturn(), "id");
-		String auditorsId = jsonValue(this.mvc
+		String body = catalog.getResponse().getContentAsString();
+		for (String reserved : new String[] { "iam.role.create", "iam.role.update", "iam.role.delete",
+				"iam.user.roles.assign", "iam.user.mfa.reset", "iam.user.anonymize" }) {
+			assertThat(body).contains("\"key\":\"" + reserved + "\"");
+			this.mvc.perform(get("/api/iam/permissions").cookie(admin.cookie()))
+				.andExpect(jsonPath("$[?(@.key == '" + reserved + "')].reserved").value(true));
+		}
+		this.mvc.perform(get("/api/iam/permissions").cookie(admin.cookie()))
+			.andExpect(jsonPath("$[?(@.key == 'iam.user.update')].reserved").value(false))
+			.andExpect(jsonPath("$[?(@.key == 'audit.event.export')].reserved").value(false));
+		this.mvc.perform(get("/api/me").cookie(admin.cookie()))
+			.andExpect(jsonPath("$.permissions").value(org.hamcrest.Matchers.hasItem("iam.user.roles.assign")));
+
+		// Adding a reserved permission to an existing custom role is refused as well.
+		String roleId = jsonValue(this.mvc
 			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Auditoria\",\"permissions\":[\"audit.event.read\",\"audit.event.export\"]}"))
 			.andExpect(status().isCreated())
 			.andReturn(), "id");
+		this.mvc.perform(withCsrf(put("/api/iam/roles/" + roleId), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Auditoria\",\"permissions\":[\"audit.event.read\",\"iam.user.anonymize\"]}"))
+			.andExpect(status().is(422));
+		// The system role is never editable.
+		this.mvc.perform(withCsrf(put("/api/iam/roles/" + adminRoleId(admin)), admin.csrf()).cookie(admin.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Administrador\",\"permissions\":[]}"))
+			.andExpect(status().is(422));
+	}
+
+	private String adminRoleId(Session admin) throws Exception {
+		MvcResult roles = this.mvc.perform(get("/api/iam/roles").cookie(admin.cookie())).andExpect(status().isOk())
+			.andReturn();
+		return firstMatch(roles, "\"id\":\"([^\"]+)\",\"name\":\"Administrador\"");
+	}
+
+	/** Invites with at most one (non-system) role and accepts; returns the new user's id. */
+	private String inviteAndAccept(Session admin, String email, String name, String roleId, String password)
+			throws Exception {
+		String roles = (roleId != null) ? ",\"roleIds\":[\"" + roleId + "\"]" : "";
 		MvcResult invited = this.mvc
 			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"rita@example.com\",\"name\":\"Rita\",\"roleIds\":[\"" + roleManagerId + "\"]}"))
+				.content("{\"email\":\"" + email + "\",\"name\":\"" + name + "\"" + roles + "}"))
 			.andExpect(status().isCreated())
 			.andReturn();
 		String link = jsonValue(invited, "invitationLink");
 		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"token\":\"" + link.substring(link.lastIndexOf('/') + 1)
-					+ "\",\"password\":\"Rita-Password-2026\"}"))
+			.content("{\"token\":\"" + link.substring(link.lastIndexOf('/') + 1) + "\",\"password\":\"" + password
+					+ "\"}"))
 			.andExpect(status().isNoContent());
-		Session rita = login("rita@example.com", "Rita-Password-2026");
-
-		// Creating: only permissions she holds.
-		this.mvc.perform(withCsrf(post("/api/iam/roles"), rita.csrf()).cookie(rita.cookie())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Leitura\",\"permissions\":[\"tasks.task.read\"]}"))
-			.andExpect(status().isCreated());
-		this.mvc.perform(withCsrf(post("/api/iam/roles"), rita.csrf()).cookie(rita.cookie())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Escalada\",\"permissions\":[\"iam.user.disable\"]}"))
-			.andExpect(status().isForbidden());
-		// Editing or deleting a role that grants more than she holds: refused, even to remove permissions.
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.put("/api/iam/roles/" + auditorsId), rita.csrf()).cookie(rita.cookie())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Auditoria\",\"permissions\":[]}"))
-			.andExpect(status().isForbidden());
-		this.mvc.perform(withCsrf(delete("/api/iam/roles/" + auditorsId), rita.csrf()).cookie(rita.cookie()))
-			.andExpect(status().isForbidden());
-		// The system role is never editable.
-		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-			.put("/api/iam/roles/" + adminRoleId), admin.csrf()).cookie(admin.cookie())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"Administrador\",\"permissions\":[]}"))
-			.andExpect(status().is(422));
+		return jsonValue(invited, "user.id");
 	}
 
 	// helpers

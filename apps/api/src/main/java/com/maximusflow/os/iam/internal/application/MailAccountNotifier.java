@@ -70,6 +70,20 @@ class MailAccountNotifier implements AccountNotifier {
 		log.info("Password reset e-mail sent to {}", Sanitize.forLog(email));
 	}
 
+	@Override
+	public void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
+			String grantedByName) {
+		send(email, "Novo administrador no " + this.portalName, """
+				Olá, %s.
+
+				%s (%s) agora é administrador(a) do %s, com acesso total, incluindo quem acessa o quê. \
+				A mudança foi feita por %s.
+
+				Se você não reconhece essa mudança, trate como incidente de segurança: remova o acesso \
+				em Administração > Usuários e verifique a trilha de auditoria.
+				""".formatted(name, granteeName, granteeEmail, this.portalName, grantedByName));
+	}
+
 	private void send(String to, String subject, String text) {
 		SimpleMailMessage message = new SimpleMailMessage();
 		message.setFrom(this.from);

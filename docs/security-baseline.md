@@ -35,6 +35,9 @@ Referências: OWASP ASVS 5.0 (V7, V8, V16), OWASP Cheat Sheets, OWASP Top 10 for
 | Enforcement em camada confiável (8.3.1) | Sempre no backend. O front só esconde o que o usuário não pode ver | fase 1 |
 | Acesso por campo (8.2.3) | DTOs de saída específicos por caso de uso; nada de expor entidade JPA | fase 2 |
 | Deny by default | `authorizeHttpRequests` termina com `anyRequest().authenticated()`; lista de rotas públicas é explícita e curta | fase 2 |
+| Funções administrativas protegidas (8.2, NIST 800-53 AC-6) | Permissões reservadas (`@RequiresPermission(reserved = true)`): `iam.role.create`, `iam.role.update`, `iam.role.delete`, `iam.user.roles.assign`, `iam.user.mfa.reset`, `iam.user.anonymize`. Só a role de sistema as tem; nenhuma outra role as recebe (422) e nenhuma tool de IA pode exigi-las (o boot recusa). Convidar, renomear e desativar continuam delegáveis, sem dar acesso | feito |
+| Segregação de funções (NIST AC-5) | Leitura e exportação da trilha de auditoria são delegáveis a quem não é administrador (auditoria, encarregado de dados), para que os atos dos administradores sejam vistos por outra pessoa | feito |
+| Conta de administrador | Pelo menos `os.iam.administrators.minimum` (padrão 2) administradores ativos: remover ou desativar abaixo disso é recusado e a tela de usuários avisa. Conceder a role de sistema exige a senha de quem concede e avisa por e-mail os demais administradores. MFA obrigatório | feito |
 
 ## 3. Headers, transporte e erros
 
@@ -113,7 +116,7 @@ Cada módulo de negócio novo documenta no próprio `package-info.java` (e no `P
   1. Toda rota nova está atrás de `anyRequest().authenticated()` ou na lista pública com justificativa.
   2. Todo use case novo tem `@RequiresPermission`; controller não tem regra.
   3. Acesso a dado específico checa dono ou escopo no use case (IDOR).
-  4. Quem concede permissão precisa possuí-la (`GrantGuard`).
+  4. Quem concede permissão precisa possuí-la (`GrantGuard`); permissão que decide quem acessa o quê é reservada (`reserved = true`) e nunca vira tool de IA.
   5. Entrada validada (`@Valid`, tamanhos máximos); saída por DTO, nunca entidade.
   6. Ação relevante gera linha em `audit_event`; log de segurança sem dado pessoal cru e sem quebra de linha (`Sanitize.forLog`).
   7. Nada de segredo em log, resposta ou repositório.
@@ -158,10 +161,18 @@ Aceitos com justificativa: token de convite na URL (uso único, 48 h, `Referrer-
 
 TOTP (RFC 6238, HMAC-SHA1, 6 dígitos, 30 s, janela de ±1 passo) implementado em `Totp` com replay bloqueado por `last_used_step`, mais 10 códigos de recuperação de uso único (SHA-256). Segredo cifrado em repouso com AES-GCM (`OS_MFA_ENCRYPTION_KEY`, 32 bytes). Política: obrigatório para a role de sistema (`os.iam.mfa.require-for-system-role`), opcional para os demais, `require-for-all` disponível. Sessão nova fica presa em `POST /api/auth/mfa` até um código válido (`MfaGateFilter`, 403 `urn:os:problem:mfa-required`); quem é obrigado e não configurou fica preso na tela de conta (`urn:os:problem:mfa-enrolment-required`). Cinco falhas encerram a sessão; rate limit por IP no endpoint. Uso de código de recuperação vira auditoria e log `SECURITY`. Pessoa desativa só com senha e código e só se a política não exigir; administrador com `iam.user.mfa.reset` redefine o fator de outra pessoa, nunca o próprio. Coberto por `MfaTests`.
 
+### Permissões reservadas e política de administradores (2026-09-29)
+
+- Quem acessa o quê é decidido só pelo administrador do sistema. `@RequiresPermission(reserved = true)` marca a permissão; o catálogo expõe a flag (`GET /api/iam/permissions`), `RoleService` recusa permissão reservada em role que não seja a de sistema, e `ToolRegistry` recusa no boot tool que exija uma. Declarar a mesma chave reservada num lugar e não em outro também impede o boot.
+- `iam.user.update` agora só renomeia (`PATCH /api/iam/users/{id}`). Atribuir roles é `PUT /api/iam/users/{id}/roles` com `iam.user.roles.assign` (reservada). Convite com roles exige a mesma permissão; sem ela, a pessoa convidada entra sem acesso.
+- `AdministratorPolicy`: mínimo de administradores ativos (`os.iam.administrators.minimum`, padrão 2), confirmação da senha de quem concede a role de sistema e aviso aos demais administradores depois do commit (evento `AdministratorGranted`, só ids, entregue pelo Spring Modulith). `GET /api/iam/users/administrators` informa ativos e mínimo.
+- Migração `V11` remove as permissões reservadas das roles personalizadas existentes e registra cada remoção em `audit_event` (`iam.role.reserved_permissions_removed`). Teste `ReservedPermissionsMigrationTests` roda a migração sobre dados reais.
+- `iam_anonymize_user` deixou de ser tool de IA: apagar dados de forma irreversível é ato de uma pessoa no portal.
+
 ### Direitos do titular, LGPD art. 18 (2026-09-28)
 
 - Acesso (inciso II): `GET /api/me/data` devolve JSON com tudo que o portal guarda sobre a pessoa, seção por módulo (`account`, `sessions`, `conversations`, `audit`). Cada módulo que guarda dado pessoal implementa `PersonalDataContributor`; `PersonalDataService` agrega e audita (`privacy.data.exported`). Botão em Minha conta.
-- Eliminação/anonimização (inciso VI): `POST /api/iam/users/{id}/anonymize` (`iam.user.anonymize`, tool destrutiva `iam_anonymize_user`) só para conta já desativada: e-mail e nome viram placeholders, credencial e tokens somem, roles são removidas, sessões encerradas, conversas e memória do assistente apagadas. Conta anonimizada não reativa. A trilha de auditoria fica intacta (obrigação legal, art. 7 II e art. 16 I) e a linha `iam.user.anonymized` guarda só o id. Coberto por `PrivacyTests`.
+- Eliminação/anonimização (inciso VI): `POST /api/iam/users/{id}/anonymize` (`iam.user.anonymize`, permissão reservada, só pelo portal: não é tool de IA) só para conta já desativada: e-mail e nome viram placeholders, credencial e tokens somem, roles são removidas, sessões encerradas, conversas e memória do assistente apagadas. Conta anonimizada não reativa. A trilha de auditoria fica intacta (obrigação legal, art. 7 II e art. 16 I) e a linha `iam.user.anonymized` guarda só o id. Coberto por `PrivacyTests`.
 
 ### Trilha de auditoria consultável (2026-09-28)
 

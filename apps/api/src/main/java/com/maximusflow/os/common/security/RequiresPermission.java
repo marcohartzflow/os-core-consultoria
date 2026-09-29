@@ -27,4 +27,11 @@ public @interface RequiresPermission {
 	/** Human readable description shown to administrators when assigning roles. */
 	String description() default "";
 
+	/**
+	 * Reserved permissions control who may access what (roles, role assignment, second-factor
+	 * reset, irreversible erasure). Only the system administrator role holds them: they cannot be
+	 * added to any other role, and no AI tool may require one.
+	 */
+	boolean reserved() default false;
+
 }

@@ -6,7 +6,7 @@ import { ArrowLeft, Copy } from "lucide-react";
 import { api, errorMessage } from "@/core/api/client";
 import type { InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
-import { RolePicker } from "@/core/iam/RolePicker";
+import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
 import { formatDateTime } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
@@ -28,11 +28,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { me } = useAuth();
+  const { me, hasPermission } = useAuth();
+  const mayAssignRoles = hasPermission("iam.user.roles.assign");
   const [user, setUser] = useState<UserSummary | null>(null);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [invitation, setInvitation] = useState<InvitationIssued | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +49,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         setRoles(r);
         setName(u.name);
         setSelected(new Set(u.roles.map((role) => role.id)));
+        setPassword("");
       }),
     [id],
   );
@@ -80,6 +83,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isSelf = user.id === me.id;
+  const held = new Set(user.roles.map((role) => role.id));
+  const confirmGrant = grantsAdministrator(roles, held, selected);
 
   return (
     <>
@@ -124,40 +129,76 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Dados e roles</CardTitle>
-            <CardDescription>Permissões mudam na próxima requisição do usuário, sem novo login.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run("Usuário atualizado", () =>
-                  api(`/api/iam/users/${id}`, { method: "PATCH", body: { name, roleIds: [...selected] } }),
-                );
-              }}
-            >
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="name">Nome</FieldLabel>
-                  <Input id="name" required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
-                </Field>
-                <Field>
-                  <FieldLabel>Roles</FieldLabel>
-                  <RolePicker roles={roles} selected={selected} onChange={setSelected} />
-                </Field>
-                <RequirePermission permission="iam.user.update">
-                  <div>
-                    <Button type="submit" disabled={busy}>
-                      Salvar
-                    </Button>
-                  </div>
-                </RequirePermission>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Dados</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run("Nome atualizado", () => api(`/api/iam/users/${id}`, { method: "PATCH", body: { name } }));
+                }}
+              >
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="name">Nome</FieldLabel>
+                    <Input id="name" required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
+                  </Field>
+                  <RequirePermission permission="iam.user.update">
+                    <div>
+                      <Button type="submit" disabled={busy}>
+                        Salvar nome
+                      </Button>
+                    </div>
+                  </RequirePermission>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Roles</CardTitle>
+              <CardDescription>
+                {mayAssignRoles
+                  ? "Permissões mudam na próxima requisição do usuário, sem novo login."
+                  : "Só administradores do sistema atribuem roles."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run("Roles atualizadas", () =>
+                    api(`/api/iam/users/${id}/roles`, {
+                      method: "PUT",
+                      body: { roleIds: [...selected], currentPassword: confirmGrant ? password : null },
+                    }),
+                  );
+                }}
+              >
+                <FieldGroup>
+                  {mayAssignRoles ? (
+                    <RolePicker roles={roles} selected={selected} onChange={setSelected} />
+                  ) : (
+                    <p className="text-sm">{user.roles.map((role) => role.name).join(", ") || "Nenhuma role"}</p>
+                  )}
+                  {mayAssignRoles && confirmGrant && (
+                    <AdministratorGrantConfirmation value={password} onChange={setPassword} />
+                  )}
+                  {mayAssignRoles && (
+                    <div>
+                      <Button type="submit" disabled={busy}>
+                        Salvar roles
+                      </Button>
+                    </div>
+                  )}
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>

@@ -182,7 +182,7 @@ public class MfaService {
 	}
 
 	/** Administrator removes someone's second factor (lost phone). The person enrols again on next login if required. */
-	@RequiresPermission(value = "iam.user.mfa.reset", description = "Redefinir o segundo fator de usuários")
+	@RequiresPermission(value = "iam.user.mfa.reset", description = "Redefinir o segundo fator de usuários", reserved = true)
 	public void reset(UUID userId) {
 		if (userId.equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Use a sua própria tela de conta para gerenciar o seu segundo fator");

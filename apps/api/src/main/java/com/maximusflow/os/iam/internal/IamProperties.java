@@ -8,7 +8,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties("os.iam")
 public record IamProperties(@DefaultValue Lockout lockout, @DefaultValue Password password, @DefaultValue Tokens tokens,
-		@DefaultValue Bootstrap bootstrap, @DefaultValue Mfa mfa) {
+		@DefaultValue Bootstrap bootstrap, @DefaultValue Mfa mfa, @DefaultValue Administrators administrators) {
+
+	/**
+	 * How many active system administrators the portal keeps at least. Removing or disabling one
+	 * below this number is refused, so losing a single account never locks everyone out of access
+	 * management. Never less than 1.
+	 */
+	public record Administrators(@DefaultValue("2") int minimum) {
+	}
 
 	/** Brute-force protection: lock the account for {@code duration} after {@code maxAttempts} failures. */
 	public record Lockout(@DefaultValue("5") int maxAttempts, @DefaultValue("15m") Duration duration) {

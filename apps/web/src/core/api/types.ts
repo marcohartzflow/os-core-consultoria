@@ -1,6 +1,7 @@
 // Types of the API come from the generated contracts (packages/contracts). Only the aliases the
 // web code uses are re-exported here, plus the few shapes the OpenAPI document does not describe.
 import type {
+  AdministratorStatus,
   AuditEventView,
   ChatMessage,
   ConversationSummary,
@@ -19,6 +20,7 @@ import type {
 } from "@maximusflow/contracts";
 
 export type {
+  AdministratorStatus,
   AuditEventView,
   ChatMessage,
   ConversationSummary,

@@ -57,8 +57,20 @@ public class PermissionCatalog implements SmartInitializingSingleton {
 		String key = annotation.value();
 		int dot = key.indexOf('.');
 		String module = (dot > 0) ? key.substring(0, dot) : key;
-		this.definitions.merge(key, new PermissionDefinition(key, module, annotation.description()),
-				(existing, incoming) -> existing.description().isBlank() ? incoming : existing);
+		this.definitions.merge(key, new PermissionDefinition(key, module, annotation.description(), annotation.reserved()),
+				(existing, incoming) -> {
+					if (existing.reserved() != incoming.reserved()) {
+						throw new IllegalStateException("Permission " + key
+								+ " is declared both reserved and not reserved; every @RequiresPermission of a key must agree");
+					}
+					return existing.description().isBlank() ? incoming : existing;
+				});
+	}
+
+	/** Whether only the system administrator role may hold the permission. */
+	public boolean isReserved(String key) {
+		PermissionDefinition definition = this.definitions.get(key);
+		return definition != null && definition.reserved();
 	}
 
 	public SortedSet<PermissionDefinition> all() {

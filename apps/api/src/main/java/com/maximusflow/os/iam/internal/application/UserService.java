@@ -31,6 +31,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class UserService {
+
+	/** Reserved: only the system administrator decides who accesses what. */
+	public static final String ASSIGN_ROLES = "iam.user.roles.assign";
 
 	/** Bounds the listing, on REST and for the model. */
 	public static final int MAX_LIST = 200;
@@ -68,11 +72,15 @@ public class UserService {
 
 	private final PersonalDataService personalData;
 
+	private final AdministratorPolicy administrators;
+
 	private final Clock clock;
 
 	UserService(UserRepository users, RoleRepository roles, AccountTokens tokens, AccountNotifier notifier,
 			AppLinks links, IamProperties properties, AuditRecorder audit, CurrentUser currentUser,
-			GrantGuard grantGuard, ApplicationEventPublisher events, PersonalDataService personalData, Clock clock) {
+			GrantGuard grantGuard, ApplicationEventPublisher events, PersonalDataService personalData,
+			AdministratorPolicy administrators, Clock clock) {
+		this.administrators = administrators;
 		this.users = users;
 		this.roles = roles;
 		this.tokens = tokens;
@@ -106,15 +114,27 @@ public class UserService {
 		return UserSummary.of(user, this.clock.instant());
 	}
 
+	/**
+	 * Invites a person. Inviting is delegable; giving the new account roles is not: {@code roleIds}
+	 * must be empty unless the caller holds {@value #ASSIGN_ROLES}, and granting the system role
+	 * needs the caller's current password.
+	 */
 	@RequiresPermission(value = "iam.user.create", description = "Convidar usuários")
-	public InvitationIssued invite(String email, String name, Set<UUID> roleIds) {
+	public InvitationIssued invite(String email, String name, Set<UUID> roleIds, @Nullable String currentPassword) {
 		String normalized = User.normalizeEmail(email);
 		if (this.users.existsByEmail(normalized)) {
 			throw new ConflictException("Já existe um usuário com este e-mail");
 		}
 		Set<Role> granted = resolveRoles(roleIds);
-		this.grantGuard.assertCanGrantRoles(granted);
+		if (!granted.isEmpty()) {
+			assertMayAssignRoles();
+			this.grantGuard.assertCanGrantRoles(granted);
+			this.administrators.confirmGrant(granted, currentPassword);
+		}
 		User user = this.users.save(User.invite(normalized, name, granted));
+		if (granted.stream().anyMatch(Role::isSystem)) {
+			this.administrators.granted(user);
+		}
 		String link = issueInvitation(user);
 		this.audit.record("iam.user.invited", "user", user.getId().toString(),
 				Map.of("email", user.getEmail(), "roles", roleNames(user)));
@@ -133,8 +153,23 @@ public class UserService {
 		return new InvitationIssued(UserSummary.of(user, this.clock.instant()), link);
 	}
 
-	@RequiresPermission(value = "iam.user.update", description = "Editar usuários e suas roles")
-	public UserSummary update(UUID id, String name, Set<UUID> roleIds) {
+	@RequiresPermission(value = "iam.user.update", description = "Editar o nome de usuários")
+	public UserSummary rename(UUID id, String name) {
+		User user = load(id);
+		this.grantGuard.assertCanManage(user);
+		String before = user.getName();
+		user.rename(name);
+		this.audit.record("iam.user.renamed", "user", user.getId().toString(),
+				Map.of("nameBefore", before, "nameAfter", user.getName()));
+		return UserSummary.of(user, this.clock.instant());
+	}
+
+	/**
+	 * Replaces the user's roles. Reserved to the system administrator: deciding who accesses what is
+	 * never delegated. {@code currentPassword} is required when the system role is being granted.
+	 */
+	@RequiresPermission(value = ASSIGN_ROLES, description = "Atribuir roles a usuários", reserved = true)
+	public UserSummary assignRoles(UUID id, Set<UUID> roleIds, @Nullable String currentPassword) {
 		User user = load(id);
 		this.grantGuard.assertCanManage(user);
 		Set<Role> before = new HashSet<>(user.getRoles());
@@ -142,13 +177,22 @@ public class UserService {
 		Set<Role> added = after.stream().filter((r) -> !before.contains(r)).collect(Collectors.toSet());
 		this.grantGuard.assertCanGrantRoles(added);
 		if (before.stream().anyMatch(Role::isSystem) && after.stream().noneMatch(Role::isSystem)) {
-			assertNotLastAdministrator(user);
+			this.administrators.assertCanStopBeingAdministrator(user);
 		}
-		user.rename(name);
+		this.administrators.confirmGrant(added, currentPassword);
 		user.replaceRoles(after);
-		this.audit.record("iam.user.updated", "user", user.getId().toString(),
+		this.audit.record("iam.user.roles_assigned", "user", user.getId().toString(),
 				Map.of("rolesBefore", names(before), "rolesAfter", names(after)));
+		if (added.stream().anyMatch(Role::isSystem)) {
+			this.administrators.granted(user);
+		}
 		return UserSummary.of(user, this.clock.instant());
+	}
+
+	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
+	@Transactional(readOnly = true)
+	public AdministratorStatus administrators() {
+		return this.administrators.status();
 	}
 
 	@Tool(name = "iam_disable_user",
@@ -161,9 +205,7 @@ public class UserService {
 		if (user.getId().equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Você não pode desativar a própria conta");
 		}
-		if (user.getStatus() == AccountStatus.ACTIVE && user.getRoles().stream().anyMatch(Role::isSystem)) {
-			assertNotLastAdministrator(user);
-		}
+		this.administrators.assertCanStopBeingAdministrator(user);
 		user.disable();
 		this.events.publishEvent(new UserDisabled(user.getId()));
 		this.audit.record("iam.user.disabled", "user", user.getId().toString(), null);
@@ -182,12 +224,10 @@ public class UserService {
 		return UserSummary.of(user, this.clock.instant());
 	}
 
-	@Tool(name = "iam_anonymize_user",
-			description = "Anonimiza de forma irreversível os dados pessoais de um usuário já desativado (LGPD): "
-					+ "e-mail, nome, credenciais, conversas com o assistente. Exige confirmação da pessoa.")
-	@Destructive("Apaga os dados pessoais do usuário de forma irreversível")
-	@RequiresPermission(value = "iam.user.anonymize", description = "Anonimizar dados pessoais de usuários desativados")
-	public UserSummary anonymize(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
+	/** Irreversible erasure (LGPD). Reserved, and never an AI tool: only a person in the portal does it. */
+	@RequiresPermission(value = "iam.user.anonymize", description = "Anonimizar dados pessoais de usuários desativados",
+			reserved = true)
+	public UserSummary anonymize(UUID id) {
 		User user = load(id);
 		this.grantGuard.assertCanManage(user);
 		if (user.getId().equals(this.currentUser.require().getId())) {
@@ -204,13 +244,11 @@ public class UserService {
 		return UserSummary.of(user, this.clock.instant());
 	}
 
-	/** The system must always keep at least one active administrator, or nobody can manage it. */
-	private void assertNotLastAdministrator(User user) {
-		Role systemRole = this.roles.findFirstBySystemTrue().orElseThrow();
-		long activeAdmins = this.users.countByStatusAndRolesContaining(AccountStatus.ACTIVE, systemRole);
-		boolean userCounts = user.getStatus() == AccountStatus.ACTIVE && user.getRoles().contains(systemRole);
-		if (activeAdmins - (userCounts ? 1 : 0) < 1) {
-			throw new DomainRuleException("Precisa existir ao menos um administrador ativo");
+	private void assertMayAssignRoles() {
+		boolean allowed = this.currentUser.require().getAuthorities().stream()
+			.anyMatch((a) -> ASSIGN_ROLES.equals(a.getAuthority()));
+		if (!allowed) {
+			throw new AccessDeniedException("Assigning roles is reserved to the system administrator");
 		}
 	}
 

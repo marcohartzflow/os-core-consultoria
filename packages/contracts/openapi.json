@@ -1,6 +1,42 @@
 {
   "components" : {
     "schemas" : {
+      "AdministratorStatus" : {
+        "properties" : {
+          "active" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "belowMinimum" : {
+            "type" : "boolean"
+          },
+          "minimum" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "active", "belowMinimum", "minimum" ],
+        "type" : "object"
+      },
+      "AssignRolesRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 128,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "roleIds" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "currentPassword", "roleIds" ],
+        "type" : "object"
+      },
       "Assignee" : {
         "properties" : {
           "id" : {
@@ -185,6 +221,11 @@
       },
       "InviteUserRequest" : {
         "properties" : {
+          "currentPassword" : {
+            "maxLength" : 128,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
           "email" : {
             "format" : "email",
             "maxLength" : 320,
@@ -205,7 +246,7 @@
             "uniqueItems" : true
           }
         },
-        "required" : [ "email", "name", "roleIds" ],
+        "required" : [ "currentPassword", "email", "name", "roleIds" ],
         "type" : "object"
       },
       "LoginRequest" : {
@@ -395,9 +436,12 @@
           },
           "module" : {
             "type" : "string"
+          },
+          "reserved" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "description", "key", "module" ],
+        "required" : [ "description", "key", "module", "reserved" ],
         "type" : "object"
       },
       "RecoveryCodes" : {
@@ -410,6 +454,17 @@
           }
         },
         "required" : [ "recoveryCodes" ],
+        "type" : "object"
+      },
+      "RenameUserRequest" : {
+        "properties" : {
+          "name" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "name" ],
         "type" : "object"
       },
       "RoleRef" : {
@@ -611,25 +666,6 @@
           }
         },
         "required" : [ "description", "destructive", "name" ],
-        "type" : "object"
-      },
-      "UpdateUserRequest" : {
-        "properties" : {
-          "name" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "roleIds" : {
-            "items" : {
-              "format" : "uuid",
-              "type" : "string"
-            },
-            "type" : "array",
-            "uniqueItems" : true
-          }
-        },
-        "required" : [ "name", "roleIds" ],
         "type" : "object"
       },
       "UserSummary" : {
@@ -1390,6 +1426,24 @@
         "tags" : [ "user-controller" ]
       }
     },
+    "/api/iam/users/administrators" : {
+      "get" : {
+        "operationId" : "administrators",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdministratorStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
     "/api/iam/users/{id}" : {
       "get" : {
         "operationId" : "get_2",
@@ -1417,7 +1471,7 @@
         "tags" : [ "user-controller" ]
       },
       "patch" : {
-        "operationId" : "update_2",
+        "operationId" : "rename",
         "parameters" : [ {
           "in" : "path",
           "name" : "id",
@@ -1431,7 +1485,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/UpdateUserRequest"
+                "$ref" : "#/components/schemas/RenameUserRequest"
               }
             }
           },
@@ -1578,6 +1632,43 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/roles" : {
+      "put" : {
+        "operationId" : "assignRoles",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AssignRolesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
       }
     },
     "/api/iam/users/{id}/sessions" : {

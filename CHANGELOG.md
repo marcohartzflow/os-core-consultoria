@@ -19,6 +19,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Ações de UI emitidas por tools (`navigate`), mostradas e executadas no painel do assistente.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
 
+### Alterado
+
+- Permissões reservadas ao administrador do sistema: criar, editar e excluir roles, atribuir roles (`iam.user.roles.assign`, nova), redefinir o segundo fator de outra pessoa e anonimizar. Não entram em outras roles e não viram tools de IA (`iam_anonymize_user` foi removida).
+- `iam.user.update` só renomeia (`PATCH /api/iam/users/{id}`, corpo `{name}`); roles vão por `PUT /api/iam/users/{id}/roles`. Convite com roles exige `iam.user.roles.assign`.
+- Pelo menos 2 administradores ativos (`os.iam.administrators.minimum`); conceder a role de sistema pede a senha de quem concede e avisa os demais administradores por e-mail.
+
 ### Segurança
 
 Revisão completa de 2026-09-29 (três frentes: auth/iam, agente de IA, web/deploy). Corrigido:
@@ -45,5 +51,6 @@ Revisão completa de 2026-09-29 (três frentes: auth/iam, agente de IA, web/depl
 ### Ação necessária no fork
 
 - Primeira versão; nada a migrar.
+- A migração `V11` tira das roles personalizadas as permissões que passaram a ser reservadas (registrado na auditoria). Quem dependia delas passa a pedir ao administrador. Cliente de API que usava `PATCH /api/iam/users/{id}` com `roleIds` passa a usar `PUT /api/iam/users/{id}/roles`. Tenha dois administradores ativos.
 - Deploy: defina `DEPLOY_HOST_KEY` e `OS_IMAGE_REPOSITORY`; gere um par de chaves `age` para o backup (`BACKUP_AGE_RECIPIENT`); em produção `OS_APP_BASE_URL` passa a ser obrigatório (o Compose já o define a partir de `OS_DOMAIN`).
 - Segredos saem do `.env`: rode `deploy/init-secrets.sh` e mova para `deploy/secrets/` os valores de `POSTGRES_PASSWORD` (`db_password`), `ANTHROPIC_API_KEY` (`anthropic_api_key`), `OS_MFA_ENCRYPTION_KEY` (`mfa_encryption_key`) e `SPRING_MAIL_PASSWORD` (`mail_password`), sobrescrevendo os gerados se a instância já existia.
