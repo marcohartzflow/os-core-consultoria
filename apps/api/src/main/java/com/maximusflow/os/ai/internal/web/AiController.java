@@ -47,7 +47,7 @@ class AiController {
 	record CreateConversationRequest(@Nullable @Size(max = 200) String title) {
 	}
 
-	record MessageRequest(@NotBlank @Size(max = 4000) String text) {
+	record MessageRequest(@NotBlank @Size(max = AgentService.MAX_USER_MESSAGE_LENGTH) String text) {
 	}
 
 	private final AgentService agent;

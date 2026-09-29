@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 
@@ -42,12 +43,19 @@ class AccountTokens {
 		return raw;
 	}
 
-	/** Marks the token as used and returns it. Same error for unknown, used and expired tokens. */
+	/**
+	 * Marks the token as used and returns it. Same error for unknown, used and expired tokens, and
+	 * for the loser of two concurrent uses: the database decides who consumed it.
+	 */
 	AccountToken consume(String raw, TokenType type) {
+		Instant now = this.clock.instant();
 		AccountToken token = this.repository.findByTokenHashAndType(hash(raw), type)
-			.filter((t) -> t.isUsable(this.clock.instant()))
+			.filter((t) -> t.isUsable(now))
 			.orElseThrow(() -> new DomainRuleException("Link inválido ou expirado"));
-		token.markUsed(this.clock.instant());
+		if (this.repository.markUsed(token.getId(), now) != 1) {
+			throw new DomainRuleException("Link inválido ou expirado");
+		}
+		token.markUsed(now);
 		return token;
 	}
 

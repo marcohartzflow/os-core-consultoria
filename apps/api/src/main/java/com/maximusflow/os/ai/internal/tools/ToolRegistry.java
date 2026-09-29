@@ -72,6 +72,10 @@ public class ToolRegistry implements SmartInitializingSingleton {
 			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
 					+ " has @Tool but no @RequiresPermission. Every tool must require a permission.");
 		}
+		if (userClass.getPackageName().startsWith(ToolRegistry.class.getPackageName().replace(".internal.tools", ""))) {
+			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
+					+ " lives in the ai module. Confirm, reject and the chat itself are never tools.");
+		}
 		Object bean = this.context.getBean(beanName);
 		ToolCallback callback = MethodToolCallback.builder()
 			.toolDefinition(ToolDefinitions.from(method))

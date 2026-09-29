@@ -18,7 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Read side of the audit trail (LGPD art. 37: the controller must be able to show who did what and
- * when). Reading the trail is itself audited, because it lists personal data.
+ * when). Exporting the trail is itself audited, because it copies personal data out of the system;
+ * paging through it on screen is not, to keep the trail readable.
  */
 @Service
 @Transactional(readOnly = true)

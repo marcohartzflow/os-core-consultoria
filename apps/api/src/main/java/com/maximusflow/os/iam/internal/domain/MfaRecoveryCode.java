@@ -54,6 +54,10 @@ public class MfaRecoveryCode {
 		return this.usedAt != null;
 	}
 
+	public UUID getId() {
+		return this.id;
+	}
+
 	public UUID getUserId() {
 		return this.userId;
 	}

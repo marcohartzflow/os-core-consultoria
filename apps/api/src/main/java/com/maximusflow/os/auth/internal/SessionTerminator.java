@@ -1,5 +1,7 @@
 package com.maximusflow.os.auth.internal;
 
+import com.maximusflow.os.common.logging.Sanitize;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -65,7 +67,7 @@ public class SessionTerminator {
 			}
 		}
 		if (count > 0) {
-			security.info("terminated {} session(s) of {}", count, email);
+			security.info("terminated {} session(s) of {}", count, Sanitize.forLog(email));
 		}
 		return count;
 	}

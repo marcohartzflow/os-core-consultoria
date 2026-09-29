@@ -157,8 +157,8 @@ class SecurityConfig {
 
 	/**
 	 * Argon2id with parameters at or above the OWASP minimum (19 MiB, 2 iterations, parallelism 1).
-	 * bcrypt stays registered so hashes imported from a legacy system can still be verified and are
-	 * upgraded on next login through {@code DelegatingPasswordEncoder}.
+	 * bcrypt stays registered so hashes imported from a legacy system can still be verified; they are
+	 * replaced by Argon2id when the person next sets a password.
 	 */
 	@Bean
 	PasswordEncoder passwordEncoder() {

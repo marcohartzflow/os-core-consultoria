@@ -1,12 +1,12 @@
 package com.maximusflow.os.iam.internal.application;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import javax.crypto.Mac;
+import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -77,6 +77,8 @@ public class MfaService {
 
 	private final Clock clock;
 
+	private final byte[] hashKey;
+
 	private final BytesEncryptor encryptor;
 
 	MfaService(UserMfaRepository enrolments, MfaRecoveryCodeRepository recoveryCodes, UserRepository users,
@@ -92,6 +94,7 @@ public class MfaService {
 		this.grantGuard = grantGuard;
 		this.clock = clock;
 		this.encryptor = encryptor(properties.mfa().encryptionKey());
+		this.hashKey = Base64.getDecoder().decode(properties.mfa().encryptionKey().strip());
 	}
 
 	private static BytesEncryptor encryptor(String base64Key) {
@@ -112,7 +115,13 @@ public class MfaService {
 
 	@Transactional(readOnly = true)
 	public MfaStatus status(UUID userId) {
-		User user = load(userId);
+		return status(load(userId));
+	}
+
+	/** Same as {@link #status(UUID)} for a user already loaded (the per-request principal refresh). */
+	@Transactional(readOnly = true)
+	public MfaStatus status(User user) {
+		UUID userId = user.getId();
 		boolean enabled = this.enrolments.existsByUserIdAndEnabledAtIsNotNull(userId);
 		return new MfaStatus(enabled, required(user), this.recoveryCodes.countByUserIdAndUsedAtIsNull(userId));
 	}
@@ -202,13 +211,15 @@ public class MfaService {
 		}
 		long last = (enrolment.getLastUsedStep() != null) ? enrolment.getLastUsedStep() : Long.MIN_VALUE;
 		long step = Totp.matchingStep(secretOf(enrolment), normalized, now, last);
-		if (step >= 0) {
+		if (step >= 0 && this.enrolments.claimStep(userId, step) == 1) {
 			enrolment.markUsed(step);
 			user.recordLoginSuccess(now);
 			return true;
 		}
-		MfaRecoveryCode recovery = this.recoveryCodes.findByUserIdAndCodeHash(userId, sha256(normalized)).orElse(null);
-		if (recovery != null && recovery.use(now)) {
+		MfaRecoveryCode recovery = this.recoveryCodes.findByUserIdAndCodeHash(userId, codeHash(normalized))
+			.orElse(null);
+		if (recovery != null && !recovery.isUsed() && this.recoveryCodes.markUsed(recovery.getId(), now) == 1) {
+			recovery.use(now);
 			int left = this.recoveryCodes.countByUserIdAndUsedAtIsNull(userId);
 			user.recordLoginSuccess(now);
 			this.audit.recordFor(userId, user.getEmail(), "iam.mfa.recovery_code_used", "user", userId.toString(),
@@ -229,7 +240,7 @@ public class MfaService {
 		for (int i = 0; i < RECOVERY_CODES; i++) {
 			String code = randomCode();
 			plain.add(code);
-			this.recoveryCodes.save(new MfaRecoveryCode(userId, sha256(code), this.clock.instant()));
+			this.recoveryCodes.save(new MfaRecoveryCode(userId, codeHash(code), this.clock.instant()));
 		}
 		return plain;
 	}
@@ -258,11 +269,18 @@ public class MfaService {
 		return sb.toString();
 	}
 
-	static String sha256(String value) {
+	/**
+	 * Recovery codes are short (10 characters), so a plain hash could be brute-forced from a database
+	 * dump. HMAC-SHA256 under the MFA encryption key, which lives outside the database, makes the
+	 * stored value useless without the key.
+	 */
+	String codeHash(String code) {
 		try {
-			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+			Mac mac = Mac.getInstance("HmacSHA256");
+			mac.init(new SecretKeySpec(this.hashKey, "HmacSHA256"));
+			return HexFormat.of().formatHex(mac.doFinal(code.getBytes(StandardCharsets.UTF_8)));
 		}
-		catch (NoSuchAlgorithmException ex) {
+		catch (GeneralSecurityException ex) {
 			throw new IllegalStateException(ex);
 		}
 	}

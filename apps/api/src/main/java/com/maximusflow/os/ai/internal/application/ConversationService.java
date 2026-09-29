@@ -113,7 +113,7 @@ public class ConversationService {
 		return message.getMessageType() == MessageType.USER && text != null && text.startsWith(PORTAL_NOTE);
 	}
 
-	private static String textOf(Message message) {
+	static String textOf(Message message) {
 		String text = message.getText();
 		return (text != null) ? text : "";
 	}

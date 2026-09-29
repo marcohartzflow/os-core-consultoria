@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class PasswordPolicy {
 
+	private static final org.slf4j.Logger security = org.slf4j.LoggerFactory.getLogger("SECURITY");
+
 	private final IamProperties.Password properties;
 
 	private final PasswordEncoder encoder;
@@ -37,10 +39,24 @@ public class PasswordPolicy {
 			throw new DomainRuleException(
 					"A senha pode ter no máximo " + this.properties.maxLength() + " caracteres");
 		}
-		if (this.properties.checkCompromised() && this.compromisedChecker.check(rawPassword).isCompromised()) {
+		if (this.properties.checkCompromised() && isCompromised(rawPassword)) {
 			throw new DomainRuleException("Esta senha apareceu em vazamentos de dados. Escolha outra");
 		}
 		return this.encoder.encode(rawPassword);
+	}
+
+	/**
+	 * Fails closed: while the breach check is unreachable no password is accepted, with a message
+	 * that says so instead of a 500. Accepting unchecked passwords would silently weaken the policy.
+	 */
+	private boolean isCompromised(String rawPassword) {
+		try {
+			return this.compromisedChecker.check(rawPassword).isCompromised();
+		}
+		catch (RuntimeException ex) {
+			security.warn("compromised-password check unavailable reason={}", ex.getClass().getSimpleName());
+			throw new DomainRuleException("A verificação de senha vazada está indisponível. Tente de novo em instantes");
+		}
 	}
 
 	public boolean matches(String rawPassword, String hash) {

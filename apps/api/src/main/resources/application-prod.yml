@@ -8,6 +8,11 @@ springdoc:
   api-docs:
     enabled: false
 
+os:
+  app:
+    # No default in production: links in e-mails must never point at localhost. Startup fails without it.
+    base-url: ${OS_APP_BASE_URL}
+
 logging:
   level:
     # Invitation and reset links must never reach shipped logs; in prod MailAccountNotifier is active.

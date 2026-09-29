@@ -13,6 +13,7 @@ import com.maximusflow.os.iam.internal.domain.User;
 import com.maximusflow.os.iam.internal.persistence.UserRepository;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,9 +38,12 @@ public class AccountRecoveryService {
 
 	private final ApplicationEventPublisher events;
 
+	private final AsyncTaskExecutor executor;
+
 	AccountRecoveryService(UserRepository users, AccountTokens tokens, PasswordPolicy passwordPolicy,
 			AccountNotifier notifier, AppLinks links, IamProperties properties, AuditRecorder audit,
-			ApplicationEventPublisher events) {
+			ApplicationEventPublisher events, AsyncTaskExecutor applicationTaskExecutor) {
+		this.executor = applicationTaskExecutor;
 		this.users = users;
 		this.tokens = tokens;
 		this.passwordPolicy = passwordPolicy;
@@ -57,14 +61,20 @@ public class AccountRecoveryService {
 		this.audit.recordAnonymous("iam.user.activated", user.getEmail(), "user", user.getId().toString(), null);
 	}
 
-	/** Always succeeds from the caller's point of view so e-mails cannot be enumerated. */
+	/**
+	 * Always succeeds from the caller's point of view so e-mails cannot be enumerated: the same
+	 * response, and the e-mail (an SMTP round trip) is sent after this request has answered.
+	 */
 	public void requestPasswordReset(String email) {
 		this.users.findByEmail(User.normalizeEmail(email))
 			.filter((user) -> user.getStatus() == AccountStatus.ACTIVE)
 			.ifPresent((user) -> {
 				String raw = this.tokens.issue(user, TokenType.PASSWORD_RESET,
 						this.properties.tokens().passwordResetTtl());
-				this.notifier.sendPasswordReset(user.getEmail(), user.getName(), this.links.passwordReset(raw));
+				String to = user.getEmail();
+				String name = user.getName();
+				String link = this.links.passwordReset(raw);
+				this.executor.execute(() -> this.notifier.sendPasswordReset(to, name, link));
 				this.audit.recordAnonymous("iam.password_reset.requested", user.getEmail(), "user",
 						user.getId().toString(), null);
 			});

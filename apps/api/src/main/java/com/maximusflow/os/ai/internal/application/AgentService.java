@@ -40,6 +40,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentService {
 
+	/** Bound on one user message; the REST body is validated against the same number. */
+	public static final int MAX_USER_MESSAGE_LENGTH = 4000;
+
 	public record ToolView(String name, String description, boolean destructive) {
 	}
 
@@ -92,7 +95,7 @@ public class AgentService {
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
 	public Reply chat(UUID conversationId, String userMessage, @Nullable Consumer<ToolEvents.Event> listener,
 			@Nullable Consumer<UiAction> uiListener, Consumer<String> onToken) {
-		if (userMessage.isBlank() || userMessage.length() > this.properties.maxUserMessageLength()) {
+		if (userMessage.isBlank() || userMessage.length() > MAX_USER_MESSAGE_LENGTH) {
 			throw new DomainRuleException("Mensagem vazia ou longa demais");
 		}
 		OsPrincipal actor = this.currentUser.require();

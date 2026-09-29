@@ -30,6 +30,9 @@ class MailAccountNotifier implements AccountNotifier {
 
 	MailAccountNotifier(JavaMailSender mailSender, @Value("${os.mail.from}") String from,
 			@Value("${os.mail.portal-name:OS}") String portalName) {
+		if (from.isBlank()) {
+			throw new IllegalStateException("OS_MAIL_FROM is required when SPRING_MAIL_HOST is set");
+		}
 		this.mailSender = mailSender;
 		this.from = from;
 		this.portalName = portalName;

@@ -9,7 +9,6 @@ import com.maximusflow.os.ai.internal.persistence.ConversationRepository;
 import com.maximusflow.os.common.privacy.PersonalDataContributor;
 
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.stereotype.Component;
 
@@ -53,15 +52,11 @@ class ConversationsDataContributor implements PersonalDataContributor {
 			.stream()
 			.filter((m) -> m.getMessageType() == MessageType.USER || m.getMessageType() == MessageType.ASSISTANT)
 			.filter((m) -> !ConversationService.isPortalNote(m))
-			.map((m) -> new ConversationService.ChatMessage(m.getMessageType().getValue(), textOf(m)))
+			.map((m) -> new ConversationService.ChatMessage(m.getMessageType().getValue(), ConversationService.textOf(m)))
 			.toList();
 		return new ConversationExport(conversation.getId(), conversation.getTitle(), conversation.getCreatedAt(),
 				conversation.getUpdatedAt(), messages);
 	}
 
-	private static String textOf(Message message) {
-		String text = message.getText();
-		return (text != null) ? text : "";
-	}
 
 }

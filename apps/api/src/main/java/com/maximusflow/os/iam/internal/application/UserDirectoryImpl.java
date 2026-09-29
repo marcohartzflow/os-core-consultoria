@@ -15,6 +15,8 @@ import com.maximusflow.os.iam.UserDirectory;
 import com.maximusflow.os.iam.internal.IamProperties;
 import com.maximusflow.os.iam.internal.domain.Role;
 import com.maximusflow.os.iam.internal.domain.User;
+import com.maximusflow.os.iam.internal.persistence.AccountTokenRepository;
+import com.maximusflow.os.iam.internal.domain.TokenType;
 import com.maximusflow.os.iam.internal.persistence.UserRepository;
 
 import org.springframework.stereotype.Service;
@@ -34,11 +36,14 @@ class UserDirectoryImpl implements UserDirectory {
 
 	private final MfaService mfa;
 
+	private final AccountTokenRepository tokens;
+
 	private final Clock clock;
 
 	UserDirectoryImpl(UserRepository users, PasswordPolicy passwordPolicy, IamProperties properties,
-			AuditRecorder audit, MfaService mfa, Clock clock) {
+			AuditRecorder audit, MfaService mfa, AccountTokenRepository tokens, Clock clock) {
 		this.mfa = mfa;
+		this.tokens = tokens;
 		this.users = users;
 		this.passwordPolicy = passwordPolicy;
 		this.properties = properties;
@@ -79,6 +84,8 @@ class UserDirectoryImpl implements UserDirectory {
 			throw new DomainRuleException("Senha atual incorreta");
 		}
 		user.setPassword(this.passwordPolicy.validateAndHash(newPassword));
+		// A reset link requested earlier must not outlive the password it was meant to replace.
+		this.tokens.deleteByUserAndType(user, TokenType.PASSWORD_RESET);
 		this.audit.record("iam.password.changed", "user", user.getId().toString(), Map.of("via", "self-service"));
 	}
 
@@ -94,7 +101,7 @@ class UserDirectoryImpl implements UserDirectory {
 	}
 
 	private AccountSnapshot snapshot(User user) {
-		MfaStatus mfaStatus = this.mfa.status(user.getId());
+		MfaStatus mfaStatus = this.mfa.status(user);
 		return new AccountSnapshot(user.getId(), user.getEmail(), user.getName(), user.getPasswordHash(),
 				user.getStatus(), user.getLockedUntil(), user.isPasswordChangeRequired(), mfaStatus.enabled(),
 				mfaStatus.required(),
