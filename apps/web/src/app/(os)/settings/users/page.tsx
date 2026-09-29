@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useTable } from "@tanstack/react-table";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleCheck,
   CircleDashed,
@@ -20,6 +19,8 @@ import {
   UserX,
 } from "lucide-react";
 import { api } from "@/core/api/client";
+import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
+import { fetchAll } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
 import type { AdministratorStatus, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
@@ -35,7 +36,8 @@ import {
   DataTableViewOptions,
   type FacetOption,
 } from "@/core/ui/data-table/DataTable";
-import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table/features";
+import { type DataTableColumnDef } from "@/core/ui/data-table/features";
+import { useServerTable } from "@/core/ui/data-table/useServerTable";
 import { EmptyState, ErrorState, fieldError, FormError, notifySuccess, TableSkeleton } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
@@ -59,38 +61,40 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-type AccountState = "active" | "invited" | "disabled" | "locked" | "anonymized";
-
-/** Same precedence as StatusBadge, so a filter matches the badge a row shows. */
-function stateOf(user: UserSummary): AccountState {
-  if (user.anonymizedAt) return "anonymized";
-  if (user.locked) return "locked";
-  return user.status === "ACTIVE" ? "active" : user.status === "INVITED" ? "invited" : "disabled";
-}
-
+// Values are the API's UserQuery.State; the order follows the badge precedence.
 const STATE_OPTIONS: FacetOption[] = [
-  { value: "active", label: "Ativo", icon: CircleCheck },
-  { value: "invited", label: "Convidado", icon: CircleDashed },
-  { value: "locked", label: "Bloqueado", icon: Lock },
-  { value: "disabled", label: "Desativado", icon: CircleSlash },
-  { value: "anonymized", label: "Anonimizado", icon: UserX },
+  { value: "ACTIVE", label: "Ativo", icon: CircleCheck },
+  { value: "INVITED", label: "Convidado", icon: CircleDashed },
+  { value: "LOCKED", label: "Bloqueado", icon: Lock },
+  { value: "DISABLED", label: "Desativado", icon: CircleSlash },
+  { value: "ANONYMIZED", label: "Anonimizado", icon: UserX },
 ];
 
 const MFA_OPTIONS: FacetOption[] = [
-  { value: "on", label: "Ativa", icon: ShieldCheck },
-  { value: "off", label: "Inativa", icon: ShieldAlert },
+  { value: "true", label: "Ativa", icon: ShieldCheck },
+  { value: "false", label: "Inativa", icon: ShieldAlert },
 ];
 
 const COLUMN_LABELS: Record<string, string> = {
-  roles: "Roles",
-  state: "Status",
+  roleId: "Roles",
+  status: "Status",
   mfa: "Duas etapas",
   lastLoginAt: "Último acesso",
   createdAt: "Criado em",
 };
 
-const EMPTY: UserSummary[] = [];
+const FILTERS = ["status", "roleId", "mfa"] as const;
+
+/** Screen filters to API parameters: the status facet is the API's "state"; mfa is one boolean. */
+function toParams(filters: Record<string, string[]>) {
+  return {
+    state: filters.status,
+    roleId: filters.roleId,
+    mfa: filters.mfa?.length === 1 ? filters.mfa[0] : undefined,
+  };
+}
 
 function Person({ user }: { user: UserSummary }) {
   return (
@@ -159,61 +163,53 @@ function LastAccess({ iso }: { iso: string | null | undefined }) {
 export default function UsersPage() {
   const router = useRouter();
   const [view, setView] = useState<"list" | "grid">("list");
-  const { data, error, refresh: load, retry } = useLoad(() =>
-    Promise.all([
-      api<UserSummary[]>("/api/iam/users"),
-      api<AdministratorStatus>("/api/iam/users/administrators"),
-    ]),
-  );
-  const users = data?.[0] ?? null;
-  const administrators = data?.[1] ?? null;
+  const administrators = useLoad(() => api<AdministratorStatus>("/api/iam/users/administrators"));
+  const { hasPermission } = useAuth();
+  const mayReadRoles = hasPermission("iam.role.read");
+  // Options of the roles filter; without iam.role.read the filter is simply left out.
+  const roles = useLoad(() => (mayReadRoles ? fetchAll<RoleSummary>("/api/iam/roles") : Promise.resolve([])));
+  // Row actions change status, sessions or MFA: reload the page of rows and the administrators count.
+  const refreshRef = useRef<() => Promise<void>>(async () => undefined);
+  const onChanged = useCallback(() => refreshRef.current(), []);
 
   const columns = useMemo<DataTableColumnDef<UserSummary>[]>(
     () => [
       {
-        id: "person",
-        accessorFn: (user) => `${user.name} ${user.email}`,
-        filterFn: "includesString",
-        sortFn: "text",
+        id: "name",
+        accessorFn: (user) => user.name,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Pessoa" />,
-        cell: ({ row }) => <Person user={row.original} />,
+        cell: ({ row }) => <div className="min-w-52"><Person user={row.original} /></div>,
         enableHiding: false,
       },
       {
-        id: "roles",
-        accessorFn: (user) => user.roles.map((role) => role.name),
-        filterFn: "arrIncludesSome",
+        id: "roleId",
+        accessorFn: (user) => user.roles.map((role) => role.id),
         enableSorting: false,
         header: "Roles",
         cell: ({ row }) => <RoleBadges user={row.original} />,
       },
       {
-        id: "state",
-        accessorFn: stateOf,
-        filterFn: "arrIncludesSome",
-        sortFn: "text",
+        id: "status",
+        accessorFn: (user) => user.status,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => <StatusBadge user={row.original} />,
       },
       {
         id: "mfa",
-        accessorFn: (user) => (user.mfaEnabled ? "on" : "off"),
-        filterFn: "arrIncludesSome",
-        sortFn: "text",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Duas etapas" />,
+        accessorFn: (user) => String(user.mfaEnabled),
+        enableSorting: false,
+        header: "Duas etapas",
         cell: ({ row }) => <MfaBadge user={row.original} />,
       },
       {
         id: "lastLoginAt",
-        accessorFn: (user) => (user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0),
-        sortFn: "basic",
+        accessorFn: (user) => user.lastLoginAt ?? "",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Último acesso" />,
         cell: ({ row }) => <LastAccess iso={row.original.lastLoginAt} />,
       },
       {
         id: "createdAt",
-        accessorFn: (user) => new Date(user.createdAt).getTime(),
-        sortFn: "basic",
+        accessorFn: (user) => user.createdAt,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Criado em" />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.createdAt)}</span>,
       },
@@ -224,39 +220,42 @@ export default function UsersPage() {
         header: () => <span className="sr-only">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-end">
-            <UserActions user={row.original} onChanged={load} />
+            <UserActions user={row.original} onChanged={onChanged} />
           </div>
         ),
       },
     ],
-    [load],
+    [onChanged],
   );
 
-  const table = useTable({
-    features: dataTableFeatures,
+  const users = useServerTable<UserSummary>({
+    sortable: ["name", "status", "lastLoginAt", "createdAt"],
+    path: "/api/iam/users",
     columns,
-    data: users ?? EMPTY,
+    filters: FILTERS,
+    toParams,
+    initialVisibility: { createdAt: false },
     getRowId: (user) => user.id,
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 10 },
-      columnVisibility: { createdAt: false },
-      sorting: [{ id: "person", desc: false }],
-    },
-    autoResetPageIndex: false,
+  });
+  const { table, page } = users;
+
+  useEffect(() => {
+    refreshRef.current = async () => {
+      await Promise.all([users.refresh(), administrators.refresh()]);
+    };
   });
 
-  const search = (table.getColumn("person")?.getFilterValue() as string | undefined) ?? "";
   const roleOptions = useMemo<FacetOption[]>(
     () =>
-      [...new Set((users ?? []).flatMap((user) => user.roles.map((role) => role.name)))]
-        .sort((a, b) => a.localeCompare(b, "pt-BR"))
-        .map((name) => ({ value: name, label: name })),
-    [users],
+      (roles.data ?? [])
+        .map((role) => ({ value: role.id, label: role.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
+    [roles.data],
   );
 
-
-  const filtered = table.state.columnFilters.length > 0;
+  const total = page?.page.totalElements ?? 0;
   const rows = table.getRowModel().rows;
+  const belowMinimum = administrators.data?.belowMinimum ? administrators.data : null;
 
   return (
     <>
@@ -265,16 +264,16 @@ export default function UsersPage() {
         description="Quem acessa o portal, com quais roles, e como anda a segurança de cada conta."
         actions={
           <RequirePermission permission="iam.user.create">
-            <InviteDialog onInvited={load} />
+            <InviteDialog onInvited={onChanged} />
           </RequirePermission>
         }
       />
 
-      {administrators?.belowMinimum && (
+      {belowMinimum && (
         <Alert>
           <TriangleAlert />
           <AlertTitle>
-            {administrators.active} de {administrators.minimum} administradores ativos
+            {belowMinimum.active} de {belowMinimum.minimum} administradores ativos
           </AlertTitle>
           <AlertDescription>
             Promova mais uma pessoa de confiança a administrador. Com um só, perder essa conta deixa ninguém capaz de
@@ -283,9 +282,8 @@ export default function UsersPage() {
         </Alert>
       )}
 
-
-      <Card>
-        <CardHeader className="border-b">
+      <DataTableCard>
+        <DataTableCardHeader>
           <CardTitle className="text-xl leading-none">Contas</CardTitle>
           <CardDescription>Busque, filtre e aja sobre as contas sem sair da lista.</CardDescription>
           <div className="col-span-full mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -297,17 +295,16 @@ export default function UsersPage() {
                 <InputGroupInput
                   aria-label="Buscar por nome ou e-mail"
                   placeholder="Buscar por nome ou e-mail…"
-                  value={search}
-                  onChange={(e) => {
-                    table.getColumn("person")?.setFilterValue(e.target.value || undefined);
-                    table.setPageIndex(0);
-                  }}
+                  value={users.search}
+                  onChange={(e) => users.setSearch(e.target.value)}
                 />
               </InputGroup>
-              <DataTableFacetedFilter column={table.getColumn("state")} title="Status" options={STATE_OPTIONS} />
-              <DataTableFacetedFilter column={table.getColumn("roles")} title="Roles" options={roleOptions} />
+              <DataTableFacetedFilter column={table.getColumn("status")} title="Status" options={STATE_OPTIONS} />
+              {mayReadRoles && (
+                <DataTableFacetedFilter column={table.getColumn("roleId")} title="Roles" options={roleOptions} />
+              )}
               <DataTableFacetedFilter column={table.getColumn("mfa")} title="Duas etapas" options={MFA_OPTIONS} />
-              <DataTableResetFilters table={table} />
+              <DataTableResetFilters visible={users.filtered} onReset={users.clearFilters} />
             </div>
             <div className="flex items-center gap-2">
               <DataTableViewOptions table={table} labels={COLUMN_LABELS} />
@@ -323,13 +320,13 @@ export default function UsersPage() {
               </Tabs>
             </div>
           </div>
-        </CardHeader>
+        </DataTableCardHeader>
         <CardContent className="px-0">
-          {error ? (
-            <ErrorState error={error} onRetry={retry} />
-          ) : !users ? (
+          {users.error ? (
+            <ErrorState error={users.error} onRetry={users.retry} />
+          ) : !page ? (
             <TableSkeleton columns={5} />
-          ) : users.length === 0 ? (
+          ) : total === 0 && !users.filtered ? (
             <EmptyState
               icon={Users}
               title="Nenhum usuário ainda"
@@ -338,26 +335,35 @@ export default function UsersPage() {
           ) : view === "list" ? (
             <DataTable
               table={table}
+              loading={users.loading}
               onRowClick={(user) => router.push(`/settings/users/${user.id}`)}
-              empty={<NoMatches onClear={() => table.resetColumnFilters()} />}
+              empty={<NoMatches onClear={users.clearFilters} />}
             />
           ) : rows.length === 0 ? (
-            <NoMatches onClear={() => table.resetColumnFilters()} />
+            <NoMatches onClear={users.clearFilters} />
           ) : (
-            <div className="grid gap-4 px-(--card-spacing) sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              aria-busy={users.loading}
+              className={cn(
+                "grid gap-4 px-(--card-spacing) transition-opacity sm:grid-cols-2 xl:grid-cols-3",
+                users.loading && "opacity-60",
+              )}
+            >
               {rows.map((row) => (
-                <UserCard key={row.id} user={row.original} onChanged={load} />
+                <UserCard key={row.id} user={row.original} onChanged={onChanged} />
               ))}
             </div>
           )}
         </CardContent>
-        {users && users.length > 0 && !error && (
-          <CardFooter className="border-t">
+        {page && total > 0 && !users.error && (
+          <DataTableCardFooter>
             <DataTablePagination table={table} noun={["usuário", "usuários"]} />
-          </CardFooter>
+          </DataTableCardFooter>
         )}
-      </Card>
-      {filtered && <span className="sr-only" aria-live="polite">{`${table.getFilteredRowModel().rows.length} usuários encontrados`}</span>}
+      </DataTableCard>
+      {page && users.filtered && (
+        <span className="sr-only" aria-live="polite">{`${total} usuários encontrados`}</span>
+      )}
     </>
   );
 }
@@ -425,12 +431,17 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (searchParams.has("convidar")) router.replace("/settings/users");
+    if (!searchParams.has("convidar")) return;
+    // Drop only the signal; search, filters and page stay as they were.
+    const rest = new URLSearchParams(searchParams);
+    rest.delete("convidar");
+    const query = rest.toString();
+    router.replace(`/settings/users${query ? `?${query}` : ""}`, { scroll: false });
   }, [searchParams, router]);
 
   useEffect(() => {
     if (!open || !mayAssignRoles) return;
-    api<RoleSummary[]>("/api/iam/roles").then(setRoles, () => setRoles([]));
+    fetchAll<RoleSummary>("/api/iam/roles").then(setRoles, () => setRoles([]));
   }, [open, mayAssignRoles]);
 
   const confirmGrant = grantsAdministrator(roles, new Set(), selected);

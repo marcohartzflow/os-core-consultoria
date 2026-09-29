@@ -28,12 +28,15 @@ Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
 4. **Controller** só mapeia HTTP para o use case: `@Valid` no request, `@ResponseStatus` adequado, nenhuma regra. O prefixo é `/api/<modulo>`; tudo sob `/api/**` já exige sessão.
 5. **Teste** em `src/test/java/...`: siga `TasksModuleTests`. O mínimo é provar que as tools aparecem no `ToolRegistry` com a permissão certa, que REST e tool executam o mesmo use case e que sem permissão a tool é negada.
 
+**Listagens paginadas.** Todo endpoint de lista segue o mesmo contrato: `page`, `size` (1 a 100, padrão 20) e `sort=campo,asc|desc`, convertidos por `PageQuery.of(...)` (`common.paging`) com um mapa `SORTABLE` de nomes permitidos, e a resposta é `PagedModel` (`{content, page}`). Filtros e busca viram uma `Specification` num record `XxxQuery` (veja `TaskQuery`); a busca por texto usa `PageQuery.contains`, que trata `%` e `_` como texto. Ordenar por campo fora do mapa responde 400, assim ninguém ordena por uma coluna que a lista não mostra. As tools de IA continuam com métodos de lista limitados (`MAX_LIST`).
+
 ## 2. Frontend (`apps/web`)
 
 1. **Tipos** em `src/modules/<modulo>/types.ts`, reexportados de `@maximusflow/contracts` (gerados: `pnpm api:test` escreve `packages/contracts/openapi.json`, `pnpm contracts` gera os tipos; o CI falha se estiverem desatualizados). Nada é escrito à mão, como em `src/modules/tasks/types.ts`.
 2. **Tela** em `src/modules/<modulo>/<Modulo>Page.tsx`, usando só componentes de `src/components/ui` (shadcn) e tokens semânticos, como `src/modules/tasks/TasksPage.tsx`. Componente que falte, adicione com `pnpm dlx shadcn@latest add <componente>`. Botões de ação ficam dentro de `<RequirePermission permission="...">`; a API valida de qualquer forma. Use as peças prontas do portal:
    - `useLoad` (`src/core/api/useLoad.ts`) para carregar dados, com `refresh` depois de uma ação e `retry` no erro;
-   - `DataTable`, `DataTableFacetedFilter`, `DataTableViewOptions`, `DataTablePagination` e `dataTableFeatures` (`src/core/ui/data-table/`, TanStack Table v9) para listas;
+   - `useServerTable` com `DataTableCard`, `DataTable`, `DataTableFacetedFilter`, `DataTableViewOptions` e `DataTablePagination` (`src/core/ui/data-table/`, TanStack Table v9) para listas: paginação, ordenação (só as colunas do `SORTABLE` da API), busca e filtros vão para a API, e o estado fica na URL;
+   - `fetchPage`/`fetchAll` (`src/core/api/query.ts`) para ler listas paginadas fora de tabelas (contagens, seletores);
    - `StatCard`/`StatGrid` para indicadores, `ErrorState`, `EmptyState`, `FormError`, `fieldError`, `notifySuccess`, `notifyError` (`src/core/ui/feedback.tsx`) e `ConfirmDialog` para ações difíceis de desfazer.
 3. **Rota** em `src/app/(os)/<modulo>/page.tsx` que só renderiza a tela do módulo. O layout `(os)` já cuida de sessão e shell.
 4. **Menu** em `src/modules/navigation.ts`: adicione uma seção ou item com `permission` igual à permissão de leitura do módulo. Se o módulo cria algo, registre também em `moduleQuickCreate` (menu "Criar" da sidebar, com um parâmetro na URL que a tela lê para abrir o diálogo, como `/tasks?nova`).

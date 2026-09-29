@@ -22,6 +22,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Tratamento de erros padronizado: toasts nas ações, erro por campo nos formulários, telas de erro com "Tentar novamente", página 404 e limite de erro do portal.
 - API: `GET /api/audit/activity` (eventos por dia no fuso de quem vê), `mfaEnabled` no usuário, `userCount` na role, filtros `origin` e `correlationId` na auditoria, erros de validação com o campo (`errors`) e em português.
 - Assistente como janela lateral redimensionável e recolhível (`⌘I`), ao lado da página: histórico, busca, exportação, parar resposta, Markdown, ações por mensagem e configurações em abas; itens ainda sem servidor aparecem como "Prévia".
+- Todas as listas paginadas no servidor com o mesmo contrato (`page`, `size`, `sort` com lista permitida, `{content, page}`): usuários, roles, tarefas e auditoria, com busca e filtros no banco. No web, tabelas com estado na URL, seletor de pessoa com busca no servidor e espaçamento único nos cards de lista.
 - `pnpm demo:data`: popula um ambiente local com dados de demonstração pela API (recusa hosts que não sejam locais).
 - Módulos registram entradas no menu "Criar" (`moduleQuickCreate`) e no painel (`src/modules/dashboard.ts`).
 

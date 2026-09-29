@@ -1,8 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useTable } from "@tanstack/react-table";
 import {
   CircleCheck,
   CircleDashed,
@@ -12,7 +11,8 @@ import {
   TriangleAlert,
   UserRound,
 } from "lucide-react";
-import { api } from "@/core/api/client";
+import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
+import { fetchPage, toQuery } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
 import type { UserSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
@@ -25,14 +25,15 @@ import {
   DataTableViewOptions,
   type FacetOption,
 } from "@/core/ui/data-table/DataTable";
-import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table/features";
+import { type DataTableColumnDef } from "@/core/ui/data-table/features";
+import { useServerTable } from "@/core/ui/data-table/useServerTable";
 import { EmptyState, ErrorState, TableSkeleton } from "@/core/ui/feedback";
 import { formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dueOf, formatDay } from "./dates";
@@ -41,8 +42,7 @@ import { TaskDialog } from "./TaskDialog";
 import type { TaskSummary } from "./types";
 
 const NO_ASSIGNEE = "none";
-const EMPTY_TASKS: TaskSummary[] = [];
-const EMPTY_USERS: UserSummary[] = [];
+const FILTERS = ["status", "assignee"] as const;
 
 const STATUS_OPTIONS: FacetOption[] = [
   { value: "OPEN", label: "Aberta", icon: CircleDashed },
@@ -51,17 +51,19 @@ const STATUS_OPTIONS: FacetOption[] = [
 
 const COLUMN_LABELS: Record<string, string> = {
   assignee: "Responsável",
-  due: "Prazo",
+  dueDate: "Prazo",
   status: "Status",
   updatedAt: "Atualizada",
 };
 
-// Open tasks sort by due date, undated ones after them, done ones last.
-const NO_DUE = Number.MAX_SAFE_INTEGER / 2;
-
-function dueSortKey(task: TaskSummary): number {
-  const base = task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : NO_DUE;
-  return task.status === "DONE" ? base + NO_DUE : base;
+/** The assignee facet mixes people with "no assignee"; the API takes them as two parameters. */
+function toParams(filters: Record<string, string[]>) {
+  const assignee = filters.assignee ?? [];
+  return {
+    status: filters.status,
+    assigneeId: assignee.filter((value) => value !== NO_ASSIGNEE),
+    unassigned: assignee.includes(NO_ASSIGNEE) || undefined,
+  };
 }
 
 export function TaskStatusBadge({ task }: { task: Pick<TaskSummary, "status"> }) {
@@ -110,8 +112,9 @@ function Assignee({ task }: { task: TaskSummary }) {
 }
 
 export function TasksPage() {
-  const { hasPermission } = useAuth();
+  const { me, hasPermission } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const mayCreate = hasPermission("tasks.task.create");
   const mayListUsers = hasPermission("iam.user.read");
@@ -126,29 +129,29 @@ export function TasksPage() {
     if (requested && mayCreate) setEditing("new");
   }
 
+  // Drop ?nova once handled, keeping the table's own parameters (page, filters, search).
   useEffect(() => {
-    if (searchParams.has("nova")) router.replace("/tasks");
-  }, [searchParams, router]);
+    if (!searchParams.has("nova")) return;
+    const rest = new URLSearchParams(searchParams);
+    rest.delete("nova");
+    const query = rest.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
-  const { data, error, refresh, retry } = useLoad(() =>
-    Promise.all([
-      api<TaskSummary[]>("/api/tasks"),
-      mayListUsers ? api<UserSummary[]>("/api/iam/users") : Promise.resolve(EMPTY_USERS),
-    ]),
-  );
-  const tasks = data?.[0] ?? null;
-  const assignable = useMemo(
-    () => (data?.[1] ?? EMPTY_USERS).filter((user) => user.status !== "DISABLED" && !user.anonymizedAt),
-    [data],
+  // Assignee facet: the first active people by name (the facet is a shortcut, not a directory).
+  const people = useLoad(() =>
+    mayListUsers
+      ? fetchPage<UserSummary>(`/api/iam/users${toQuery({ state: ["ACTIVE"], size: 100, sort: "name" })}`).then(
+          (page) => page.content,
+        )
+      : Promise.resolve([] as UserSummary[]),
   );
 
   const columns = useMemo<DataTableColumnDef<TaskSummary>[]>(
     () => [
       {
         id: "title",
-        accessorFn: (task) => `${task.title} ${task.description ?? ""}`,
-        filterFn: "includesString",
-        sortFn: "text",
+        accessorFn: (task) => task.title,
         enableHiding: false,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Tarefa" />,
         cell: ({ row }) => (
@@ -172,30 +175,25 @@ export function TasksPage() {
       {
         id: "assignee",
         accessorFn: (task) => task.assignee?.id ?? NO_ASSIGNEE,
-        filterFn: "arrIncludesSome",
         enableSorting: false,
         header: "Responsável",
         cell: ({ row }) => <Assignee task={row.original} />,
       },
       {
-        id: "due",
-        accessorFn: dueSortKey,
-        sortFn: "basic",
+        id: "dueDate",
+        accessorFn: (task) => task.dueDate,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Prazo" />,
         cell: ({ row }) => <TaskDueDate task={row.original} />,
       },
       {
         id: "status",
         accessorFn: (task) => task.status,
-        filterFn: "arrIncludesSome",
-        sortFn: "text",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => <TaskStatusBadge task={row.original} />,
       },
       {
         id: "updatedAt",
-        accessorFn: (task) => new Date(task.updatedAt).getTime(),
-        sortFn: "basic",
+        accessorFn: (task) => task.updatedAt,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Atualizada" />,
         cell: ({ row }) => (
           <Tooltip>
@@ -213,38 +211,38 @@ export function TasksPage() {
         header: () => <span className="sr-only">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-end">
-            <TaskActions task={row.original} onOpen={() => setEditing(row.original)} onChanged={refresh} />
+            <TaskActions task={row.original} onOpen={() => setEditing(row.original)} onChanged={() => refreshRef()} />
           </div>
         ),
       },
     ],
-    [refresh],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshRef is stable (declared below)
+    [],
   );
 
-  const table = useTable({
-    features: dataTableFeatures,
+  const list = useServerTable<TaskSummary>({
+    sortable: ["title", "dueDate", "status", "updatedAt"],
+    path: "/api/tasks",
     columns,
-    data: tasks ?? EMPTY_TASKS,
+    filters: FILTERS,
+    toParams,
     getRowId: (task) => task.id,
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 10 },
-      sorting: [{ id: "due", desc: false }],
-    },
-    autoResetPageIndex: false,
   });
+  const { table, page, error, loading, retry, search, setSearch, filtered, clearFilters } = list;
+  const refreshRef = list.refresh;
 
-  const search = (table.getColumn("title")?.getFilterValue() as string | undefined) ?? "";
-  const assigneeOptions = useMemo<FacetOption[]>(() => {
-    const names = new Map<string, string>();
-    for (const task of tasks ?? []) if (task.assignee) names.set(task.assignee.id, task.assignee.name);
-    return [
-      ...[...names]
-        .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
-        .map(([value, label]) => ({ value, label, icon: UserRound })),
+  const assigneeOptions = useMemo<FacetOption[]>(
+    () => [
       { value: NO_ASSIGNEE, label: "Sem responsável" },
-    ];
-  }, [tasks]);
+      { value: me.id, label: "Eu", icon: UserRound },
+      ...(people.data ?? [])
+        .filter((user) => user.id !== me.id)
+        .map((user) => ({ value: user.id, label: user.name, icon: UserRound })),
+    ],
+    [people.data, me.id],
+  );
 
+  const total = page?.page.totalElements ?? 0;
 
   return (
     <>
@@ -261,11 +259,10 @@ export function TasksPage() {
         }
       />
 
-
-      <Card>
-        <CardHeader className="border-b">
+      <DataTableCard>
+        <DataTableCardHeader>
           <CardTitle className="text-xl leading-none">Lista de tarefas</CardTitle>
-          <CardDescription>Clique em uma tarefa para ver ou editar. As com prazo mais próximo vêm primeiro.</CardDescription>
+          <CardDescription>Clique em uma tarefa para ver ou editar. As abertas com prazo mais próximo vêm primeiro.</CardDescription>
           <div className="col-span-full mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-1 flex-wrap items-center gap-2">
               <InputGroup className="w-full sm:w-64">
@@ -276,10 +273,7 @@ export function TasksPage() {
                   aria-label="Buscar tarefas"
                   placeholder="Buscar tarefas…"
                   value={search}
-                  onChange={(e) => {
-                    table.getColumn("title")?.setFilterValue(e.target.value || undefined);
-                    table.setPageIndex(0);
-                  }}
+                  onChange={(e) => setSearch(e.target.value)}
                 />
               </InputGroup>
               <DataTableFacetedFilter column={table.getColumn("status")} title="Status" options={STATUS_OPTIONS} />
@@ -288,17 +282,17 @@ export function TasksPage() {
                 title="Responsável"
                 options={assigneeOptions}
               />
-              <DataTableResetFilters table={table} />
+              <DataTableResetFilters visible={filtered} onReset={clearFilters} />
             </div>
             <DataTableViewOptions table={table} labels={COLUMN_LABELS} />
           </div>
-        </CardHeader>
+        </DataTableCardHeader>
         <CardContent className="px-0">
           {error ? (
             <ErrorState error={error} onRetry={retry} />
-          ) : !tasks ? (
+          ) : !page ? (
             <TableSkeleton columns={5} />
-          ) : tasks.length === 0 ? (
+          ) : total === 0 && !filtered ? (
             <EmptyState
               icon={ClipboardList}
               title="Nenhuma tarefa ainda"
@@ -315,6 +309,7 @@ export function TasksPage() {
           ) : (
             <DataTable
               table={table}
+              loading={loading}
               onRowClick={(task) => setEditing(task)}
               empty={
                 <EmptyState
@@ -322,7 +317,7 @@ export function TasksPage() {
                   title="Nenhuma tarefa encontrada"
                   description="Nenhuma tarefa atende à busca e aos filtros escolhidos."
                   action={
-                    <Button variant="outline" size="sm" onClick={() => table.resetColumnFilters()}>
+                    <Button variant="outline" size="sm" onClick={clearFilters}>
                       Limpar filtros
                     </Button>
                   }
@@ -331,21 +326,20 @@ export function TasksPage() {
             />
           )}
         </CardContent>
-        {tasks && tasks.length > 0 && !error && (
-          <CardFooter className="border-t">
+        {page && total > 0 && !error && (
+          <DataTableCardFooter>
             <DataTablePagination table={table} noun={["tarefa", "tarefas"]} />
-          </CardFooter>
+          </DataTableCardFooter>
         )}
-      </Card>
+      </DataTableCard>
 
       {editing && (
         <TaskDialog
           task={editing === "new" ? null : editing}
-          users={assignable}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
-            await refresh();
+            await list.refresh();
           }}
         />
       )}

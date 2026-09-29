@@ -13,13 +13,13 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "@/core/api/client";
+import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
-import type { AdministratorStatus, AuditActivityDay, AuditEventView, Paged, UserSummary } from "@/core/api/types";
+import type { AdministratorStatus, AuditActivityDay, AuditEventView, UserSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { navigationFor } from "@/core/shell/navigation";
 import { PageHeader } from "@/core/ui/page-header";
 import { StatCard, StatGrid } from "@/core/ui/stat-card";
-import { isActiveAccount } from "@/core/iam/accounts";
 import { Badge } from "@/components/ui/badge";
 import { ActivityChart } from "./_dashboard/ActivityChart";
 import { QuickAccessCard, RecentActivityCard, SecurityCard } from "./_dashboard/cards";
@@ -54,6 +54,13 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   );
 }
 
+const RECENT_EVENTS = 6;
+
+/** How many users match: a one-row page, read for its total. */
+function countUsers(filter: Record<string, QueryValue>): Promise<number> {
+  return fetchPage<UserSummary>(`/api/iam/users${toQuery({ ...filter, size: 1 })}`).then((page) => page.page.totalElements);
+}
+
 /** A load that runs only with the permission; without it resolves to `undefined` so the block hides. */
 function when<T>(allowed: boolean, load: () => Promise<T>): () => Promise<T | undefined> {
   return allowed ? load : () => Promise.resolve(undefined);
@@ -72,18 +79,24 @@ export default function DashboardPage() {
   const activity = useLoad(
     when(mayAudit, () => api<AuditActivityDay[]>(`/api/audit/activity?days=90&zone=${encodeURIComponent(zone)}`)),
   );
-  const events = useLoad(when(mayAudit, () => api<Paged<AuditEventView>>("/api/audit/events")));
+  const events = useLoad(
+    when(mayAudit, () =>
+      fetchPage<AuditEventView>(`/api/audit/events${toQuery({ size: RECENT_EVENTS, sort: "occurredAt,desc" })}`),
+    ),
+  );
+  // Counts only: one-row pages whose totals the API computes, never the whole users list.
   const people = useLoad(
     when(mayUsers, () =>
       Promise.all([
-        api<UserSummary[]>("/api/iam/users"),
+        countUsers({ state: "ACTIVE" }),
+        countUsers({ state: "ACTIVE", mfa: false }),
         api<AdministratorStatus>("/api/iam/users/administrators"),
-      ]),
+      ]).then(([active, withoutMfa, administrators]) => ({ accounts: { active, withoutMfa }, administrators })),
     ),
   );
 
   const days = activity.data ?? null;
-  const users = people.data?.[0] ?? null;
+  const accounts = people.data?.accounts ?? null;
 
   // Cheap to rebuild on every render; no memo needed.
   const stats: Stat[] = (() => {
@@ -111,16 +124,14 @@ export default function DashboardPage() {
       });
     }
     if (mayUsers) {
-      const live = users?.filter(isActiveAccount);
-      const active = live?.length;
-      const withoutMfa = live?.filter((u) => !u.mfaEnabled).length ?? 0;
+      const withoutMfa = accounts?.withoutMfa ?? 0;
       list.push({
         key: "users",
         icon: Users,
         label: "Contas ativas",
-        value: people.error ? "—" : (active ?? null),
+        value: people.error ? "—" : (accounts?.active ?? null),
         badge:
-          users &&
+          accounts &&
           (withoutMfa > 0 ? (
             <Badge variant="destructive">
               <ShieldAlert />
@@ -196,8 +207,8 @@ export default function DashboardPage() {
           ))}
           {(mayUsers || mayAudit) && (
             <SecurityCard
-              administrators={mayUsers ? (people.data?.[1] ?? null) : undefined}
-              users={mayUsers ? users : undefined}
+              administrators={mayUsers ? (people.data?.administrators ?? null) : undefined}
+              accounts={mayUsers ? accounts : undefined}
               failuresToday={mayAudit ? failuresToday : undefined}
               error={people.error}
               onRetry={people.retry}
@@ -205,7 +216,7 @@ export default function DashboardPage() {
           )}
           {mayAudit && (
             <RecentActivityCard
-              events={events.data ? events.data.content.slice(0, 6) : null}
+              events={events.data ? events.data.content : null}
               error={events.error}
               onRetry={events.retry}
             />

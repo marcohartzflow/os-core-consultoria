@@ -27,7 +27,7 @@ export function RolePicker({
   return (
     <div className="grid gap-2">
       {roles.map((role) => (
-        <FieldLabel key={role.id} htmlFor={`role-${role.id}`} className="flex items-start gap-2 font-normal">
+        <FieldLabel key={role.id} htmlFor={`role-${role.id}`} className="flex w-full items-start gap-2 rounded-xl px-2 py-1.5 font-normal">
           <Checkbox
             id={`role-${role.id}`}
             checked={selected.has(role.id)}

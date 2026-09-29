@@ -21,7 +21,9 @@ import {
   UserX,
 } from "lucide-react";
 import { api, ApiError } from "@/core/api/client";
-import type { AuditEventView, InvitationIssued, Paged, RoleSummary, UserSummary } from "@/core/api/types";
+import { actionLabel } from "@/core/audit/labels";
+import { fetchPage, fetchAll, toQuery } from "@/core/api/query";
+import type { AuditEventView, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
 import { useLoad } from "@/core/api/useLoad";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
 import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
@@ -69,7 +71,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     () =>
       Promise.all([
         api<UserSummary>(`/api/iam/users/${id}`),
-        api<RoleSummary[]>("/api/iam/roles").catch(() => [] as RoleSummary[]),
+        // Roles need iam.role.read; without it the page still shows the account.
+        fetchAll<RoleSummary>("/api/iam/roles").catch(() => [] as RoleSummary[]),
       ]),
     id,
   );
@@ -642,6 +645,8 @@ function AccountCard({ user }: { user: UserSummary }) {
 }
 
 const EMPTY_EVENTS: AuditEventView[] = [];
+/** Latest events of each query (about the account, by the person); the tab shows the newest 20. */
+const ACTIVITY_SIZE = 20;
 
 /** What was done to this account and what this person did, newest first. */
 function ActivityCard({ user }: { user: UserSummary }) {
@@ -651,11 +656,15 @@ function ActivityCard({ user }: { user: UserSummary }) {
 
   useEffect(() => {
     let current = true;
-    const about = api<Paged<AuditEventView>>(`/api/audit/events?entityId=${encodeURIComponent(user.id)}`);
+    const about = fetchPage<AuditEventView>(
+      `/api/audit/events${toQuery({ entityId: user.id, size: ACTIVITY_SIZE, sort: "occurredAt,desc" })}`,
+    );
     // actorEmail matches part of an address, so keep only this person's own events (by id).
     const by = user.anonymizedAt
       ? Promise.resolve({ content: EMPTY_EVENTS })
-      : api<Paged<AuditEventView>>(`/api/audit/events?actorEmail=${encodeURIComponent(user.email)}`);
+      : fetchPage<AuditEventView>(
+          `/api/audit/events${toQuery({ actorEmail: user.email, size: ACTIVITY_SIZE, sort: "occurredAt,desc" })}`,
+        );
     Promise.all([about, by]).then(
       ([a, b]) => {
         if (!current) return;
@@ -709,9 +718,10 @@ function ActivityCard({ user }: { user: UserSummary }) {
               <Item key={event.id} size="sm">
                 <ItemMedia variant="icon">{event.origin === "AI_TOOL" ? <Bot /> : <Activity />}</ItemMedia>
                 <ItemContent>
-                  <ItemTitle className="font-mono text-xs">{event.action}</ItemTitle>
+                  <ItemTitle>{actionLabel(event.action)}</ItemTitle>
                   <ItemDescription>
-                    {event.actorId === user.id ? "Pela própria pessoa" : `Por ${event.actorEmail ?? "sistema"}`}
+                    <span className="font-mono">{event.action}</span> ·{" "}
+                    {event.actorId === user.id ? "pela própria pessoa" : `por ${event.actorEmail ?? "sistema"}`}
                     {event.origin === "AI_TOOL" && " · pelo assistente"}
                   </ItemDescription>
                 </ItemContent>

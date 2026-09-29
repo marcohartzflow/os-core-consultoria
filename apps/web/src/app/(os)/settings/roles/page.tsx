@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTable } from "@tanstack/react-table";
 import {
   Lock,
   MoreHorizontal,
@@ -14,6 +13,8 @@ import {
   UserCog,
 } from "lucide-react";
 import { api } from "@/core/api/client";
+import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
+import { fetchAll } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
 import type { PermissionDefinition, RoleSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
@@ -27,12 +28,13 @@ import {
   DataTableViewOptions,
   type FacetOption,
 } from "@/core/ui/data-table/DataTable";
-import { dataTableFeatures, type DataTableColumnDef } from "@/core/ui/data-table/features";
+import type { DataTableColumnDef } from "@/core/ui/data-table/features";
+import { useServerTable } from "@/core/ui/data-table/useServerTable";
 import { EmptyState, ErrorState, fieldError, FormError, notifySuccess, TableSkeleton } from "@/core/ui/feedback";
 import { PageHeader } from "@/core/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -77,7 +79,6 @@ const COLUMN_LABELS: Record<string, string> = {
   permissions: "Permissões",
 };
 
-const EMPTY_ROLES: RoleSummary[] = [];
 const EMPTY_PERMISSIONS: PermissionDefinition[] = [];
 
 function groupByModule(permissions: PermissionDefinition[]): [string, PermissionDefinition[]][] {
@@ -96,25 +97,22 @@ export default function RolesPage() {
   const [editing, setEditing] = useState<RoleSummary | "new" | null>(null);
   const [deleting, setDeleting] = useState<RoleSummary | null>(null);
 
-  const { data, error, refresh, retry } = useLoad(() =>
-    Promise.all([
-      api<RoleSummary[]>("/api/iam/roles"),
-      mayReadCatalog ? api<PermissionDefinition[]>("/api/iam/permissions") : Promise.resolve(null),
-    ]),
+  // The catalog (for the coverage bar and the dialog) and every role (for "held by" in the
+  // catalog tab) come apart from the paged table.
+  const catalogLoad = useLoad(() =>
+    mayReadCatalog ? api<PermissionDefinition[]>("/api/iam/permissions") : Promise.resolve(null),
   );
-  const roles = data?.[0] ?? null;
-  const catalog = data?.[1] ?? null;
+  const allRoles = useLoad(() => (mayReadCatalog ? fetchAll<RoleSummary>("/api/iam/roles") : Promise.resolve(null)));
+  const catalog = catalogLoad.data;
 
   const columns = useMemo<DataTableColumnDef<RoleSummary>[]>(
     () => [
       {
         id: "name",
-        accessorFn: (role) => `${role.name} ${role.description ?? ""}`,
-        filterFn: "includesString",
-        sortFn: "text",
+        accessorFn: (role) => role.name,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
         cell: ({ row }) => (
-          <div className="grid min-w-0 gap-0.5">
+          <div className="grid min-w-48 gap-0.5">
             <div className="flex items-center gap-2">
               <span className="truncate font-medium">{row.original.name}</span>
               {row.original.system && (
@@ -134,8 +132,7 @@ export default function RolesPage() {
       {
         id: "type",
         accessorFn: (role) => (role.system ? "system" : "custom"),
-        filterFn: "arrIncludesSome",
-        sortFn: "text",
+        enableSorting: false,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
         cell: ({ row }) => (
           <span className="text-muted-foreground">{row.original.system ? "Sistema" : "Personalizada"}</span>
@@ -144,7 +141,7 @@ export default function RolesPage() {
       {
         id: "userCount",
         accessorFn: (role) => role.userCount,
-        sortFn: "basic",
+        enableSorting: false,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Pessoas" />,
         cell: ({ row }) => (
           <span className="tabular-nums">
@@ -155,7 +152,7 @@ export default function RolesPage() {
       {
         id: "permissions",
         accessorFn: (role) => role.permissions.length,
-        sortFn: "basic",
+        enableSorting: false,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Permissões" />,
         cell: ({ row }) => {
           const count = row.original.permissions.length;
@@ -190,20 +187,22 @@ export default function RolesPage() {
     [catalog],
   );
 
-  const table = useTable({
-    features: dataTableFeatures,
+  const { table, page, error, loading, refresh, retry, search, setSearch, filtered, clearFilters } = useServerTable({
+    sortable: ["name"],
+    path: "/api/iam/roles",
     columns,
-    data: roles ?? EMPTY_ROLES,
+    filters: ["type"],
+    // Both types or none selected means no filter.
+    toParams: (filters) => ({
+      system: filters.type.length === 1 ? String(filters.type[0] === "system") : undefined,
+    }),
+    defaultSort: { id: "name", desc: false },
     getRowId: (role) => role.id,
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 10 },
-      sorting: [{ id: "name", desc: false }],
-    },
-    autoResetPageIndex: false,
   });
 
-  const search = (table.getColumn("name")?.getFilterValue() as string | undefined) ?? "";
-
+  async function reload() {
+    await Promise.all([refresh(), allRoles.refresh()]);
+  }
 
   return (
     <>
@@ -228,8 +227,8 @@ export default function RolesPage() {
         </TabsList>
 
         <TabsContent value="roles">
-          <Card>
-            <CardHeader className="border-b">
+          <DataTableCard>
+            <DataTableCardHeader>
               <CardTitle className="text-xl leading-none">Roles</CardTitle>
               <CardDescription>
                 A role de sistema tem acesso total e não pode ser alterada. Clique em uma role para ver ou editar.
@@ -244,24 +243,21 @@ export default function RolesPage() {
                       aria-label="Buscar roles"
                       placeholder="Buscar por nome ou descrição…"
                       value={search}
-                      onChange={(e) => {
-                        table.getColumn("name")?.setFilterValue(e.target.value || undefined);
-                        table.setPageIndex(0);
-                      }}
+                      onChange={(e) => setSearch(e.target.value)}
                     />
                   </InputGroup>
                   <DataTableFacetedFilter column={table.getColumn("type")} title="Tipo" options={TYPE_OPTIONS} />
-                  <DataTableResetFilters table={table} />
+                  <DataTableResetFilters visible={filtered} onReset={clearFilters} />
                 </div>
                 <DataTableViewOptions table={table} labels={COLUMN_LABELS} />
               </div>
-            </CardHeader>
+            </DataTableCardHeader>
             <CardContent className="px-0">
               {error ? (
                 <ErrorState error={error} onRetry={retry} />
-              ) : !roles ? (
+              ) : !page ? (
                 <TableSkeleton columns={4} />
-              ) : roles.length === 0 ? (
+              ) : page.page.totalElements === 0 && !filtered ? (
                 <EmptyState
                   icon={ShieldHalf}
                   title="Nenhuma role"
@@ -270,6 +266,7 @@ export default function RolesPage() {
               ) : (
                 <DataTable
                   table={table}
+                  loading={loading}
                   onRowClick={setEditing}
                   empty={
                     <EmptyState
@@ -277,7 +274,7 @@ export default function RolesPage() {
                       title="Nenhuma role encontrada"
                       description="Nenhuma role atende à busca e aos filtros escolhidos."
                       action={
-                        <Button variant="outline" size="sm" onClick={() => table.resetColumnFilters()}>
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
                           Limpar filtros
                         </Button>
                       }
@@ -286,17 +283,25 @@ export default function RolesPage() {
                 />
               )}
             </CardContent>
-            {roles && roles.length > 0 && !error && (
-              <CardFooter className="border-t">
+            {page && page.page.totalElements > 0 && !error && (
+              <DataTableCardFooter>
                 <DataTablePagination table={table} noun={["role", "roles"]} />
-              </CardFooter>
+              </DataTableCardFooter>
             )}
-          </Card>
+          </DataTableCard>
         </TabsContent>
 
         {mayReadCatalog && (
           <TabsContent value="catalog">
-            <PermissionCatalog catalog={catalog} roles={roles} error={error} onRetry={retry} />
+            <PermissionCatalog
+              catalog={catalog}
+              roles={allRoles.data}
+              error={catalogLoad.error ?? allRoles.error}
+              onRetry={() => {
+                catalogLoad.retry();
+                allRoles.retry();
+              }}
+            />
           </TabsContent>
         )}
       </Tabs>
@@ -308,7 +313,7 @@ export default function RolesPage() {
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
-            await refresh();
+            await reload();
           }}
         />
       )}
@@ -327,7 +332,7 @@ export default function RolesPage() {
           if (!deleting) return;
           await api(`/api/iam/roles/${deleting.id}`, { method: "DELETE" });
           notifySuccess("Role excluída", `${deleting.name} foi removida.`);
-          await refresh();
+          await reload();
         }}
       />
     </>

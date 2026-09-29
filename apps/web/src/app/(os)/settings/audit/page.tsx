@@ -1,31 +1,27 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { ptBR } from "react-day-picker/locale";
 import type { LucideIcon } from "lucide-react";
-import {
-  Bot,
-  CalendarRange,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Cog,
-  Download,
-  Filter,
-  ListFilter,
-  MousePointerClick,
-  ScrollText,
-  Search,
-  Settings2,
-  X,
-} from "lucide-react";
-import { api } from "@/core/api/client";
-import type { AuditEventView, AuditOrigin, Paged } from "@/core/api/types";
-import { useLoad } from "@/core/api/useLoad";
+import { Bot, CalendarRange, Cog, Download, Filter, MousePointerClick, ScrollText, Search, X } from "lucide-react";
+import { toQuery, type QueryValue } from "@/core/api/query";
+import { actionLabel } from "@/core/audit/labels";
+import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
+import type { AuditEventView, AuditOrigin } from "@/core/api/types";
 import { RequirePermission } from "@/core/auth/AuthProvider";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableFacetedFilter,
+  DataTablePagination,
+  DataTableResetFilters,
+  DataTableViewOptions,
+  type FacetOption,
+} from "@/core/ui/data-table/DataTable";
+import type { DataTableColumnDef } from "@/core/ui/data-table/features";
+import { useServerTable } from "@/core/ui/data-table/useServerTable";
 import { EmptyState, ErrorState, TableSkeleton } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
@@ -33,50 +29,25 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface Filter {
-  actorEmail: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  correlationId: string;
-  origins: AuditOrigin[];
-  range: DateRange | undefined;
-}
-
-const EMPTY_FILTER: Filter = {
-  actorEmail: "",
-  action: "",
-  entityType: "",
-  entityId: "",
-  correlationId: "",
-  origins: [],
-  range: undefined,
-};
 
 const ORIGINS: { value: AuditOrigin; label: string; icon: LucideIcon }[] = [
   { value: "REST", label: "Portal", icon: MousePointerClick },
   { value: "AI_TOOL", label: "Assistente", icon: Bot },
   { value: "SYSTEM", label: "Sistema", icon: Cog },
 ];
+
+const ORIGIN_OPTIONS: FacetOption[] = ORIGINS.map(({ value, label, icon }) => ({ value, label, icon }));
+
+/** Single-value filters kept in the URL; from and to are local days (YYYY-MM-DD), to inclusive. */
+const SCALARS = ["action", "actorEmail", "entityType", "entityId", "correlationId", "from", "to"] as const;
+
+const COLUMN_LABELS: Record<string, string> = { entity: "Entidade", ip: "IP" };
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -88,38 +59,38 @@ function daysAgo(days: number): Date {
   return day;
 }
 
-/** Filter to query string; the date range covers whole local days (end exclusive at the next midnight). */
-function query(filter: Filter, page?: number): string {
-  const params = new URLSearchParams();
-  if (filter.actorEmail.trim()) params.set("actorEmail", filter.actorEmail.trim());
-  if (filter.action.trim()) params.set("action", filter.action.trim());
-  if (filter.entityType.trim()) params.set("entityType", filter.entityType.trim());
-  if (filter.entityId.trim()) params.set("entityId", filter.entityId.trim());
-  if (filter.correlationId.trim()) params.set("correlationId", filter.correlationId.trim());
-  for (const origin of filter.origins) params.append("origin", origin);
-  if (filter.range?.from) {
-    params.set("from", startOfDay(filter.range.from).toISOString());
-    const end = startOfDay(filter.range.to ?? filter.range.from);
-    end.setDate(end.getDate() + 1);
-    params.set("to", end.toISOString());
-  }
-  if (page) params.set("page", String(page));
-  const s = params.toString();
-  return s ? `?${s}` : "";
+/** Local day as it goes in the URL. */
+function toDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function isFiltered(filter: Filter): boolean {
-  return query(filter) !== "";
+function fromDay(day: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return undefined;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-/** Text typed into a box reaches the query only after the user pauses. */
-function useDebounced<T>(value: T, delay = 300): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debounced;
+/**
+ * URL filters to API parameters. The period covers whole local days: from its first midnight to
+ * the midnight after its last day (the API end is exclusive).
+ */
+function auditParams(origins: string[], scalars: Record<string, string>): Record<string, QueryValue> {
+  const from = fromDay(scalars.from ?? "");
+  const last = fromDay(scalars.to ?? "") ?? from;
+  const end = last ? startOfDay(last) : undefined;
+  end?.setDate(end.getDate() + 1);
+  return {
+    origin: origins,
+    action: scalars.action?.trim() || undefined,
+    actorEmail: scalars.actorEmail?.trim() || undefined,
+    entityType: scalars.entityType?.trim() || undefined,
+    entityId: scalars.entityId?.trim() || undefined,
+    correlationId: scalars.correlationId?.trim() || undefined,
+    from: from ? startOfDay(from).toISOString() : undefined,
+    to: end?.toISOString(),
+  };
 }
 
 function OriginBadge({ origin }: { origin: AuditOrigin }) {
@@ -146,7 +117,7 @@ function Actor({ event }: { event: AuditEventView }) {
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-44 items-center gap-3">
       <Avatar className="size-8">
         <AvatarFallback>{initials(event.actorEmail.split("@")[0].replace(/[._-]+/g, " "))}</AvatarFallback>
       </Avatar>
@@ -167,43 +138,112 @@ function When({ iso }: { iso: string }) {
 }
 
 export default function AuditPage() {
-  // Other screens link here pre-filtered (e.g. the activity tab of a user: ?entityId=…).
   const params = useSearchParams();
-  const [filter, setFilter] = useState<Filter>(() => ({
-    ...EMPTY_FILTER,
-    actorEmail: params.get("actorEmail") ?? "",
-    entityType: params.get("entityType") ?? "",
-    entityId: params.get("entityId") ?? "",
-  }));
-  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<AuditEventView | null>(null);
-  const [showEntity, setShowEntity] = useState(true);
-  const [showIp, setShowIp] = useState(true);
 
-  // Text boxes are debounced; origin, dates and buttons apply at once.
-  const actorEmail = useDebounced(filter.actorEmail);
-  const action = useDebounced(filter.action);
-  const entityType = useDebounced(filter.entityType);
-  const applied = useMemo<Filter>(
-    () => ({ ...filter, actorEmail, action, entityType }),
-    [filter, actorEmail, action, entityType],
+  const columns = useMemo<DataTableColumnDef<AuditEventView>[]>(
+    () => [
+      {
+        id: "occurredAt",
+        accessorFn: (event) => event.occurredAt,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Quando" />,
+        cell: ({ row }) => <When iso={row.original.occurredAt} />,
+        enableHiding: false,
+      },
+      {
+        id: "actor",
+        accessorFn: (event) => event.actorEmail ?? "",
+        enableSorting: false,
+        enableHiding: false,
+        header: "Quem",
+        cell: ({ row }) => (
+          <div className="max-w-64">
+            <Actor event={row.original} />
+          </div>
+        ),
+      },
+      {
+        id: "origin",
+        accessorFn: (event) => event.origin,
+        enableSorting: false,
+        enableHiding: false,
+        header: "Origem",
+        cell: ({ row }) => <OriginBadge origin={row.original.origin} />,
+      },
+      {
+        id: "action",
+        accessorFn: (event) => event.action,
+        enableHiding: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Ação" />,
+        cell: ({ row }) => (
+          <button
+            type="button"
+            className="grid min-w-44 gap-0.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+            aria-label={`Ver detalhes de ${actionLabel(row.original.action)}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelected(row.original);
+            }}
+          >
+            <span className="font-medium hover:underline">{actionLabel(row.original.action)}</span>
+            <span className="font-mono text-xs text-muted-foreground">{row.original.action}</span>
+          </button>
+        ),
+      },
+      {
+        id: "entity",
+        accessorFn: (event) => event.entityType ?? "",
+        enableSorting: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Entidade" />,
+        cell: ({ row }) =>
+          row.original.entityType ? (
+            <span className="font-mono text-xs text-muted-foreground">
+              {row.original.entityType}
+              {row.original.entityId && ` · ${row.original.entityId.slice(0, 8)}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "ip",
+        accessorFn: (event) => event.ip ?? "",
+        enableSorting: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="IP" />,
+        cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.ip ?? "—"}</span>,
+      },
+    ],
+    [],
   );
-  const search = query(applied, page);
 
-  const events = useLoad(() => api<Paged<AuditEventView>>(`/api/audit/events${search}`), search);
+  const {
+    table,
+    page,
+    error,
+    loading,
+    retry,
+    filtered,
+    clearFilters,
+    values,
+    drafts,
+    setDraft,
+    setValues,
+  } = useServerTable({
+    sortable: ["occurredAt", "action"],
+    path: "/api/audit/events",
+    columns,
+    filters: ["origin"],
+    scalars: SCALARS,
+    toParams: (filters, scalars) => auditParams(filters.origin, scalars),
+    defaultSort: { id: "occurredAt", desc: true },
+    pageSize: 50,
+    getRowId: (event) => event.id,
+  });
 
-  function update(patch: Partial<Filter>) {
-    setFilter((current) => ({ ...current, ...patch }));
-    setPage(0);
-  }
-
-  function clear() {
-    setFilter(EMPTY_FILTER);
-    setPage(0);
-  }
-
-  const result = events.data;
-  const totalPages = Math.max(result?.page.totalPages ?? 1, 1);
+  const range: DateRange | undefined = fromDay(values.from)
+    ? { from: fromDay(values.from), to: fromDay(values.to) ?? fromDay(values.from) }
+    : undefined;
+  const exportQuery = toQuery(auditParams(params.getAll("origin"), values));
 
   return (
     <>
@@ -213,7 +253,7 @@ export default function AuditPage() {
         actions={
           <RequirePermission permission="audit.event.export">
             <Button variant="outline" asChild>
-              <a href={`/api/audit/events.csv${query(applied)}`} download>
+              <a href={`/api/audit/events.csv${exportQuery}`} download>
                 <Download />
                 Exportar CSV
               </a>
@@ -222,9 +262,8 @@ export default function AuditPage() {
         }
       />
 
-
-      <Card>
-        <CardHeader className="border-b">
+      <DataTableCard>
+        <DataTableCardHeader>
           <CardTitle className="text-xl leading-none">Eventos</CardTitle>
           <CardDescription>Os filtros se aplicam enquanto você digita. Clique num evento para ver tudo.</CardDescription>
           <div className="col-span-full mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -238,8 +277,8 @@ export default function AuditPage() {
                   placeholder="Ação, ex.: iam.user"
                   className="font-mono text-xs"
                   maxLength={100}
-                  value={filter.action}
-                  onChange={(e) => update({ action: e.target.value })}
+                  value={drafts.action ?? ""}
+                  onChange={(e) => setDraft("action", e.target.value)}
                 />
               </InputGroup>
               <InputGroup className="w-full sm:w-52">
@@ -247,8 +286,8 @@ export default function AuditPage() {
                   aria-label="E-mail de quem agiu"
                   placeholder="Quem (e-mail)"
                   maxLength={320}
-                  value={filter.actorEmail}
-                  onChange={(e) => update({ actorEmail: e.target.value })}
+                  value={drafts.actorEmail ?? ""}
+                  onChange={(e) => setDraft("actorEmail", e.target.value)}
                 />
               </InputGroup>
               <InputGroup className="w-full sm:w-36">
@@ -256,191 +295,76 @@ export default function AuditPage() {
                   aria-label="Tipo de entidade"
                   placeholder="Entidade"
                   maxLength={100}
-                  value={filter.entityType}
-                  onChange={(e) => update({ entityType: e.target.value })}
+                  value={drafts.entityType ?? ""}
+                  onChange={(e) => setDraft("entityType", e.target.value)}
                 />
               </InputGroup>
-              <OriginFilter value={filter.origins} onChange={(origins) => update({ origins })} />
-              <RangeFilter value={filter.range} onChange={(range) => update({ range })} />
-              {(filter.entityId || filter.correlationId) && (
+              <DataTableFacetedFilter column={table.getColumn("origin")} title="Origem" options={ORIGIN_OPTIONS} />
+              <RangeFilter
+                value={range}
+                onChange={(next) =>
+                  setValues({
+                    from: next?.from ? toDay(next.from) : "",
+                    to: next?.to ? toDay(next.to) : next?.from ? toDay(next.from) : "",
+                  })
+                }
+              />
+              {(values.entityId || values.correlationId) && (
                 <Button
                   variant="secondary"
                   size="sm"
                   aria-label="Remover filtro de entidade ou correlação"
-                  onClick={() => update({ entityId: "", correlationId: "" })}
+                  onClick={() => setValues({ entityId: "", correlationId: "" })}
                 >
                   <Filter data-icon="inline-start" />
-                  {filter.correlationId ? "Mesma requisição" : `Id ${filter.entityId.slice(0, 8)}…`}
+                  {values.correlationId ? "Mesma requisição" : `Id ${values.entityId.slice(0, 8)}…`}
                   <X data-icon="inline-end" />
                 </Button>
               )}
-              {isFiltered(filter) && (
-                <Button variant="ghost" size="sm" onClick={clear}>
-                  Limpar
-                  <X data-icon="inline-end" />
-                </Button>
-              )}
+              <DataTableResetFilters visible={filtered} onReset={clearFilters} />
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="hidden lg:flex">
-                  <Settings2 data-icon="inline-start" />
-                  Colunas
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Mostrar colunas</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem
-                  checked={showEntity}
-                  onCheckedChange={(v) => setShowEntity(!!v)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  Entidade
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={showIp}
-                  onCheckedChange={(v) => setShowIp(!!v)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  IP
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <DataTableViewOptions table={table} labels={COLUMN_LABELS} />
           </div>
-        </CardHeader>
+        </DataTableCardHeader>
         <CardContent className="px-0">
-          {events.error ? (
-            <ErrorState error={events.error} onRetry={events.retry} />
-          ) : !result ? (
+          {error ? (
+            <ErrorState error={error} onRetry={retry} />
+          ) : !page ? (
             <TableSkeleton rows={8} columns={5} />
-          ) : result.content.length === 0 ? (
-            isFiltered(applied) ? (
-              <EmptyState
-                icon={Search}
-                title="Nenhum evento encontrado"
-                description="Nenhum registro atende aos filtros escolhidos."
-                action={
-                  <Button variant="outline" size="sm" onClick={clear}>
-                    Limpar filtros
-                  </Button>
-                }
-              />
-            ) : (
-              <EmptyState
-                icon={ScrollText}
-                title="Nenhum evento ainda"
-                description="Logins, mudanças de acesso e ações do assistente aparecem aqui."
-              />
-            )
+          ) : page.page.totalElements === 0 && !filtered ? (
+            <EmptyState
+              icon={ScrollText}
+              title="Nenhum evento ainda"
+              description="Logins, mudanças de acesso e ações do assistente aparecem aqui."
+            />
           ) : (
-            <Table className="**:data-[slot=table-cell]:px-(--card-spacing) **:data-[slot=table-head]:px-(--card-spacing)">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-11 text-muted-foreground">Quando</TableHead>
-                  <TableHead className="h-11 text-muted-foreground">Quem</TableHead>
-                  <TableHead className="h-11 text-muted-foreground">Origem</TableHead>
-                  <TableHead className="h-11 text-muted-foreground">Ação</TableHead>
-                  {showEntity && <TableHead className="h-11 text-muted-foreground">Entidade</TableHead>}
-                  {showIp && <TableHead className="h-11 text-muted-foreground">IP</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {result.content.map((event) => (
-                  <TableRow key={event.id} className="cursor-pointer" onClick={() => setSelected(event)}>
-                    <TableCell className="py-3">
-                      <When iso={event.occurredAt} />
-                    </TableCell>
-                    <TableCell className="max-w-64 py-3">
-                      <Actor event={event} />
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <OriginBadge origin={event.origin} />
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-ml-3 font-mono text-xs"
-                        aria-label={`Ver detalhes de ${event.action}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelected(event);
-                        }}
-                      >
-                        {event.action}
-                      </Button>
-                    </TableCell>
-                    {showEntity && (
-                      <TableCell className="py-3 text-muted-foreground">
-                        {event.entityType ? (
-                          <span className="font-mono text-xs">
-                            {event.entityType}
-                            {event.entityId && ` · ${event.entityId.slice(0, 8)}`}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                    )}
-                    {showIp && (
-                      <TableCell className="py-3 font-mono text-xs text-muted-foreground">{event.ip ?? "—"}</TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              table={table}
+              loading={loading}
+              onRowClick={setSelected}
+              empty={
+                <EmptyState
+                  icon={Search}
+                  title="Nenhum evento encontrado"
+                  description="Nenhum registro atende aos filtros escolhidos."
+                  action={
+                    <Button variant="outline" size="sm" onClick={clearFilters}>
+                      Limpar filtros
+                    </Button>
+                  }
+                />
+              }
+            />
           )}
         </CardContent>
-        {result && !events.error && result.content.length > 0 && (
-          <CardFooter className="flex flex-col gap-3 border-t text-sm sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-muted-foreground tabular-nums">
-              {result.page.totalElements} {result.page.totalElements === 1 ? "registro" : "registros"} · página{" "}
-              {result.page.number + 1} de {totalPages}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Primeira página"
-                disabled={page === 0}
-                onClick={() => setPage(0)}
-              >
-                <ChevronsLeft />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Página anterior"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                <ChevronLeft />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Próxima página"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Última página"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage(totalPages - 1)}
-              >
-                <ChevronsRight />
-              </Button>
-            </div>
-          </CardFooter>
+        {page && page.page.totalElements > 0 && !error && (
+          <DataTableCardFooter>
+            <DataTablePagination table={table} noun={["evento", "eventos"]} />
+          </DataTableCardFooter>
         )}
-      </Card>
+      </DataTableCard>
       <span className="sr-only" aria-live="polite">
-        {result ? `${result.page.totalElements} eventos encontrados` : ""}
+        {page ? `${page.page.totalElements} eventos encontrados` : ""}
       </span>
 
       <EventSheet
@@ -448,65 +372,10 @@ export default function AuditPage() {
         onClose={() => setSelected(null)}
         onFilter={(patch) => {
           setSelected(null);
-          setFilter({ ...EMPTY_FILTER, ...patch });
-          setPage(0);
+          setValues(patch, { reset: true });
         }}
       />
     </>
-  );
-}
-
-function OriginFilter({ value, onChange }: { value: AuditOrigin[]; onChange: (origins: AuditOrigin[]) => void }) {
-  const selected = new Set(value);
-  function toggle(origin: AuditOrigin) {
-    const next = new Set(selected);
-    if (next.has(origin)) next.delete(origin);
-    else next.add(origin);
-    onChange(ORIGINS.map((o) => o.value).filter((o) => next.has(o)));
-  }
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className={selected.size > 0 ? "border-solid" : "border-dashed"}>
-          <ListFilter data-icon="inline-start" />
-          Origem
-          {selected.size > 0 && (
-            <>
-              <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-4" />
-              {ORIGINS.filter((o) => selected.has(o.value)).map((o) => (
-                <Badge variant="secondary" key={o.value}>
-                  {o.label}
-                </Badge>
-              ))}
-            </>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuLabel>Origem</DropdownMenuLabel>
-        <DropdownMenuGroup>
-          {ORIGINS.map((origin) => (
-            <DropdownMenuCheckboxItem
-              key={origin.value}
-              checked={selected.has(origin.value)}
-              onCheckedChange={() => toggle(origin.value)}
-              onSelect={(e) => e.preventDefault()}
-            >
-              <origin.icon className="text-muted-foreground" />
-              {origin.label}
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuGroup>
-        {selected.size > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="justify-center" onSelect={() => onChange([])}>
-              Limpar filtro
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -589,7 +458,7 @@ function EventSheet({
 }: {
   event: AuditEventView | null;
   onClose: () => void;
-  onFilter: (patch: Partial<Filter>) => void;
+  onFilter: (patch: Record<string, string>) => void;
 }) {
   return (
     <Sheet open={event !== null} onOpenChange={(open) => !open && onClose()}>
@@ -597,9 +466,10 @@ function EventSheet({
         {event && (
           <>
             <SheetHeader className="border-b">
-              <SheetTitle className="font-mono text-base">{event.action}</SheetTitle>
+              <SheetTitle>{actionLabel(event.action)}</SheetTitle>
               <SheetDescription>
-                {formatDateTime(event.occurredAt)} · {formatRelative(event.occurredAt)}
+                <span className="font-mono">{event.action}</span> · {formatDateTime(event.occurredAt)} ·{" "}
+                {formatRelative(event.occurredAt)}
               </SheetDescription>
             </SheetHeader>
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-4">

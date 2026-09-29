@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -19,6 +20,7 @@ import type { RowData } from "@tanstack/react-table";
 import type { DataTableColumn, DataTableInstance } from "./features";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -29,6 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,9 +45,12 @@ export function DataTable<TData extends RowData>({
   table,
   empty,
   onRowClick,
+  loading = false,
 }: {
   table: DataTableInstance<TData>;
   empty: ReactNode;
+  /** A new page is on its way: the current rows stay, dimmed, instead of flashing a skeleton. */
+  loading?: boolean;
   /** Opens the row; keyboard users get the same through the link or button inside the row. */
   onRowClick?: (row: TData) => void;
 }) {
@@ -62,7 +68,7 @@ export function DataTable<TData extends RowData>({
           </TableRow>
         ))}
       </TableHeader>
-      <TableBody>
+      <TableBody aria-busy={loading} className={cn("transition-opacity", loading && "opacity-60")}>
         {rows.length ? (
           rows.map((row) => (
             <TableRow
@@ -107,8 +113,9 @@ export function DataTableColumnHeader<TData extends RowData>({
   title: string;
   className?: string;
 }) {
-  if (!column.getCanSort() && !column.getCanHide()) {
-    return <span className={className}>{title}</span>;
+  // Only sortable columns get the menu; hiding any column stays in the "Colunas" menu.
+  if (!column.getCanSort()) {
+    return <span className={cn("font-medium", className)}>{title}</span>;
   }
   const sorted = column.getIsSorted();
   const Icon = sorted === "desc" ? ArrowDown : sorted === "asc" ? ArrowUp : ChevronsUpDown;
@@ -162,9 +169,9 @@ export interface FacetOption {
 }
 
 /**
- * Multi-choice filter over one column (dashed button, count per option), as in the shadcn tasks
- * example. The column must use the `arrIncludesSome` filter and an accessor that returns the
- * option values (a string or an array of strings).
+ * Multi-choice filter over one column (dashed button, as in the shadcn tasks example). Tables
+ * filtered in the browser show how many rows each option has; tables filtered by the API do not
+ * (the current page is not the whole set). Long lists get a search box.
  */
 export function DataTableFacetedFilter<TData extends RowData>({
   column,
@@ -178,10 +185,12 @@ export function DataTableFacetedFilter<TData extends RowData>({
   if (!column) return null;
   const selected = new Set((column.getFilterValue() as string[] | undefined) ?? []);
   const counts = new Map<string, number>();
-  for (const row of column.table.getPreFilteredRowModel().rows) {
-    const value = row.getValue(column.id) as string | string[] | undefined;
-    for (const v of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
-      counts.set(v, (counts.get(v) ?? 0) + 1);
+  if (!column.table.options.manualFiltering) {
+    for (const row of column.table.getPreFilteredRowModel().rows) {
+      const value = row.getValue(column.id) as string | string[] | undefined;
+      for (const v of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+        counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
     }
   }
 
@@ -190,12 +199,14 @@ export function DataTableFacetedFilter<TData extends RowData>({
     if (next.has(value)) next.delete(value);
     else next.add(value);
     column?.setFilterValue(next.size ? [...next] : undefined);
-    column?.table.setPageIndex(0);
+    // Tables paged by the API go back to page 1 on any filter change by themselves; a second
+    // update here would be built from the same (old) URL and undo the filter.
+    if (!column?.table.options.manualFiltering) column?.table.setPageIndex(0);
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Popover>
+      <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className={cn("border-dashed", selected.size > 0 && "border-solid")}>
           <ListFilter data-icon="inline-start" />
           {title}
@@ -208,7 +219,7 @@ export function DataTableFacetedFilter<TData extends RowData>({
                 options
                   .filter((option) => selected.has(option.value))
                   .map((option) => (
-                    <Badge variant="secondary" key={option.value}>
+                    <Badge variant="secondary" key={option.value} className="max-w-32 truncate">
                       {option.label}
                     </Badge>
                   ))
@@ -216,55 +227,63 @@ export function DataTableFacetedFilter<TData extends RowData>({
             </>
           )}
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>{title}</DropdownMenuLabel>
-        <DropdownMenuGroup>
-          {options.map((option) => (
-            <DropdownMenuCheckboxItem
-              key={option.value}
-              checked={selected.has(option.value)}
-              onCheckedChange={() => toggle(option.value)}
-              onSelect={(event) => event.preventDefault()}
-            >
-              {option.icon && <option.icon className="text-muted-foreground" />}
-              <span className="flex-1">{option.label}</span>
-              <span className="font-mono text-xs text-muted-foreground tabular-nums">{counts.get(option.value) ?? 0}</span>
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuGroup>
-        {selected.size > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="justify-center"
-              onSelect={() => {
-                column.setFilterValue(undefined);
-                column.table.setPageIndex(0);
-              }}
-            >
-              Limpar filtro
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-60 p-0">
+        <Command>
+          {options.length > 7 && <CommandInput placeholder={`Buscar ${title.toLowerCase()}…`} />}
+          <CommandList>
+            <CommandEmpty>Nenhuma opção.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => {
+                const isSelected = selected.has(option.value);
+                return (
+                  <CommandItem key={option.value} value={option.label} onSelect={() => toggle(option.value)}>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "flex size-4 items-center justify-center rounded-[4px] border border-input",
+                        isSelected && "border-primary bg-primary text-primary-foreground",
+                      )}
+                    >
+                      {isSelected && <Check className="size-3" />}
+                    </span>
+                    {option.icon && <option.icon className="text-muted-foreground" />}
+                    <span className="flex-1 truncate">{option.label}</span>
+                    {counts.size > 0 && (
+                      <span className="font-mono text-xs text-muted-foreground tabular-nums">{counts.get(option.value) ?? 0}</span>
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            {selected.size > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem
+                    className="justify-center"
+                    onSelect={() => {
+                      column.setFilterValue(undefined);
+                      if (!column.table.options.manualFiltering) column.table.setPageIndex(0);
+                    }}
+                  >
+                    Limpar filtro
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-/** "Limpar" button, shown only while some filter is active. */
-export function DataTableResetFilters<TData extends RowData>({ table, onReset }: { table: DataTableInstance<TData>; onReset?: () => void }) {
-  if (table.state.columnFilters.length === 0) return null;
+/** "Limpar" button, shown only while a search or filter is active. */
+export function DataTableResetFilters({ visible, onReset }: { visible: boolean; onReset: () => void }) {
+  if (!visible) return null;
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => {
-        table.resetColumnFilters();
-        table.setPageIndex(0);
-        onReset?.();
-      }}
-    >
+    <Button variant="ghost" size="sm" onClick={onReset}>
       Limpar
       <X data-icon="inline-end" />
     </Button>
@@ -310,13 +329,15 @@ export function DataTableViewOptions<TData extends RowData>({
   );
 }
 
-const PAGE_SIZES = [10, 20, 30, 50];
+const PAGE_SIZES = [10, 20, 30, 50, 100];
 
 /** Footer: how many rows match, rows per page and page navigation. */
 export function DataTablePagination<TData extends RowData>({ table, noun }: { table: DataTableInstance<TData>; noun: [string, string] }) {
   const { pageIndex, pageSize } = table.state.pagination;
-  const total = table.getFilteredRowModel().rows.length;
-  const all = table.getPreFilteredRowModel().rows.length;
+  // Tables paged by the API know only the total of the current search.
+  const manual = Boolean(table.options.manualPagination);
+  const total = manual ? (table.options.rowCount ?? 0) : table.getFilteredRowModel().rows.length;
+  const all = manual ? total : table.getPreFilteredRowModel().rows.length;
   const pageCount = Math.max(table.getPageCount(), 1);
   const label = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
   return (

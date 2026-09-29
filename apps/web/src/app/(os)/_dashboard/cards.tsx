@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { Bot, ChevronRight, Cog, ShieldCheck, ShieldX } from "lucide-react";
-import type { AdministratorStatus, AuditEventView, UserSummary } from "@/core/api/types";
+import type { AdministratorStatus, AuditEventView } from "@/core/api/types";
 import type { NavItem } from "@/core/shell/navigation";
 import { ErrorState } from "@/core/ui/feedback";
 import { formatDateTime, formatRelative, initials } from "@/core/ui/format";
-import { isActiveAccount } from "@/core/iam/accounts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { actionLabel } from "./labels";
+import { actionLabel } from "@/core/audit/labels";
 
 /** Rows placeholder while a card loads. */
 export function ListSkeleton({ rows = 4 }: { rows?: number }) {
@@ -59,26 +58,25 @@ function SeeAll({ href, label }: { href: string; label: string }) {
 /** Account health: administrators against the minimum, accounts without a second factor, failed sign-ins today. */
 export function SecurityCard({
   administrators,
-  users,
+  accounts,
   failuresToday,
   error,
   onRetry,
 }: {
   administrators: AdministratorStatus | null | undefined;
-  users: UserSummary[] | null | undefined;
+  /** Active accounts and how many of them have no second factor (counts from the API). */
+  accounts: { active: number; withoutMfa: number } | null | undefined;
   failuresToday: number | null | undefined;
   error: unknown;
   onRetry: () => void;
 }) {
-  const live = users?.filter(isActiveAccount);
-  const withoutMfa = live?.filter((user) => !user.mfaEnabled).length;
-  const loading = users === null || administrators === null;
+  const loading = accounts === null || administrators === null;
   return (
     <Card>
       <CardHeader>
         <CardTitle>Segurança</CardTitle>
         <CardDescription>Pontos que merecem atenção agora.</CardDescription>
-        {users !== undefined && <SeeAll href="/settings/users" label="Usuários" />}
+        {accounts !== undefined && <SeeAll href="/settings/users" label="Usuários" />}
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {error ? (
@@ -105,18 +103,18 @@ export function SecurityCard({
               </div>
             )}
             <ItemGroup className="gap-2">
-              {live && withoutMfa !== undefined && (
+              {accounts && (
                 <Item variant="outline" size="sm">
                   <ItemMedia variant="icon">
                     <ShieldCheck />
                   </ItemMedia>
                   <ItemContent>
                     <ItemTitle>Sem verificação em duas etapas</ItemTitle>
-                    <ItemDescription>De {live.length} contas ativas</ItemDescription>
+                    <ItemDescription>De {accounts.active} contas ativas</ItemDescription>
                   </ItemContent>
                   <ItemActions>
-                    <Badge variant={withoutMfa > 0 ? "destructive" : "secondary"} className="tabular-nums">
-                      {withoutMfa}
+                    <Badge variant={accounts.withoutMfa > 0 ? "destructive" : "secondary"} className="tabular-nums">
+                      {accounts.withoutMfa}
                     </Badge>
                   </ItemActions>
                 </Item>
@@ -198,7 +196,7 @@ export function RecentActivityCard({
                     <ActorAvatar event={event} />
                   </ItemMedia>
                   <ItemContent className="min-w-0">
-                    <ItemTitle className="truncate">{actionLabel(event.action)}</ItemTitle>
+                    <ItemTitle className="w-full min-w-0"><span className="truncate">{actionLabel(event.action)}</span></ItemTitle>
                     <ItemDescription className="truncate">
                       {event.origin === "AI_TOOL"
                         ? `Assistente, a pedido de ${event.actorEmail ?? "alguém"}`

@@ -1,33 +1,36 @@
 "use client";
 
 import { ListTodo } from "lucide-react";
-import { api } from "@/core/api/client";
+import { fetchPage, toQuery } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { StatCard } from "@/core/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { dueOf } from "./dates";
+import { isoDay } from "./dates";
 import { MyTasksCard } from "./MyTasksCard";
 import type { TaskSummary } from "./types";
 
-function useOpenTasks() {
-  return useLoad(() => api<TaskSummary[]>("/api/tasks?status=OPEN"));
+/** How many tasks match, read from the page total: the rows themselves are not needed. */
+function count(params: Record<string, string>) {
+  return fetchPage<TaskSummary>(`/api/tasks${toQuery({ ...params, size: 1 })}`).then((page) => page.page.totalElements);
 }
 
 /** Indicator of the tasks example module on the dashboard. */
 export function OpenTasksStat() {
-  const tasks = useOpenTasks();
-  const open = tasks.data;
-  const overdue = open?.filter((task) => dueOf(task) === "overdue").length ?? 0;
+  const counts = useLoad(() =>
+    Promise.all([count({ status: "OPEN" }), count({ status: "OPEN", dueBefore: isoDay(new Date()) })]),
+  );
+  const [open, overdue] = counts.data ?? [null, 0];
   return (
     <StatCard
       icon={ListTodo}
       label="Tarefas abertas"
-      value={tasks.error ? "—" : (open?.length ?? null)}
+      value={counts.error ? "—" : open}
       badge={
-        open && (overdue > 0 ? <Badge variant="destructive">{overdue} atrasadas</Badge> : <Badge variant="secondary">Em dia</Badge>)
+        counts.data &&
+        (overdue > 0 ? <Badge variant="destructive">{overdue} atrasadas</Badge> : <Badge variant="secondary">Em dia</Badge>)
       }
-      hint={tasks.error ? "Não foi possível carregar" : "De toda a equipe"}
+      hint={counts.error ? "Não foi possível carregar" : "De toda a equipe"}
     />
   );
 }
@@ -35,6 +38,8 @@ export function OpenTasksStat() {
 /** "Minhas tarefas" card of the tasks example module on the dashboard. */
 export function MyTasksWidget() {
   const { me } = useAuth();
-  const tasks = useOpenTasks();
-  return <MyTasksCard tasks={tasks.data} meId={me.id} error={tasks.error} onRetry={tasks.retry} />;
+  const mine = useLoad(() =>
+    fetchPage<TaskSummary>(`/api/tasks${toQuery({ status: "OPEN", assigneeId: me.id, size: 5 })}`),
+  );
+  return <MyTasksCard page={mine.data} meId={me.id} error={mine.error} onRetry={mine.retry} />;
 }

@@ -7,37 +7,38 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { dueOf } from "./dates";
+import type { Paged } from "@/core/api/types";
 import { TaskDueDate } from "./TasksPage";
 import type { TaskSummary } from "./types";
 
-const ORDER = { overdue: 0, today: 1, tomorrow: 2, soon: 3, later: 4, none: 5, done: 6 } as const;
-
-/** Dashboard card of the tasks example module: open tasks assigned to the viewer, overdue first. */
+/**
+ * Dashboard card of the tasks example module: the first open tasks assigned to the viewer (the
+ * API sorts the nearest due date first) and how many there are in all.
+ */
 export function MyTasksCard({
-  tasks,
+  page,
   meId,
   error,
   onRetry,
 }: {
-  tasks: TaskSummary[] | null;
+  page: Paged<TaskSummary> | null;
   meId: string;
   error: unknown;
   onRetry: () => void;
 }) {
-  const mine = (tasks ?? [])
-    .filter((task) => task.status === "OPEN" && task.assignee?.id === meId)
-    .sort((a, b) => ORDER[dueOf(a)] - ORDER[dueOf(b)] || (a.dueDate ?? "9").localeCompare(b.dueDate ?? "9"));
+  const mine = page?.content ?? [];
+  const total = page?.page.totalElements ?? 0;
+  const href = `/tasks?status=OPEN&assignee=${encodeURIComponent(meId)}`;
   return (
     <Card>
       <CardHeader>
         <CardTitle>Minhas tarefas</CardTitle>
         <CardDescription>
-          {tasks ? `${mine.length} ${mine.length === 1 ? "aberta" : "abertas"} com você` : "Abertas com você"}
+          {page ? `${total} ${total === 1 ? "aberta" : "abertas"} com você` : "Abertas com você"}
         </CardDescription>
         <CardAction>
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/tasks">
+            <Link href={href}>
               Tarefas
               <ChevronRight data-icon="inline-end" />
             </Link>
@@ -47,7 +48,7 @@ export function MyTasksCard({
       <CardContent>
         {error ? (
           <ErrorState error={error} onRetry={onRetry} className="p-4" />
-        ) : !tasks ? (
+        ) : !page ? (
           <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando">
             {Array.from({ length: 4 }, (_, i) => (
               <Skeleton key={i} className="h-12 w-full" />
@@ -57,11 +58,11 @@ export function MyTasksCard({
           <EmptyState icon={CircleCheck} title="Nada pendente" description="Nenhuma tarefa aberta com você." className="p-6" />
         ) : (
           <ItemGroup className="gap-2">
-            {mine.slice(0, 5).map((task) => (
+            {mine.map((task) => (
               <Item key={task.id} variant="outline" size="sm" asChild>
-                <Link href="/tasks">
+                <Link href={href}>
                   <ItemContent className="min-w-0">
-                    <ItemTitle className="truncate">{task.title}</ItemTitle>
+                    <ItemTitle className="w-full min-w-0"><span className="truncate">{task.title}</span></ItemTitle>
                     {task.description && <ItemDescription className="truncate">{task.description}</ItemDescription>}
                   </ItemContent>
                   <ItemActions>
@@ -70,8 +71,8 @@ export function MyTasksCard({
                 </Link>
               </Item>
             ))}
-            {mine.length > 5 && (
-              <p className="text-center text-xs text-muted-foreground">e mais {mine.length - 5} na lista de tarefas</p>
+            {total > mine.length && (
+              <p className="text-center text-xs text-muted-foreground">e mais {total - mine.length} na lista de tarefas</p>
             )}
           </ItemGroup>
         )}
