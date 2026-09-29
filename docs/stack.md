@@ -47,7 +47,7 @@ Notas do Spring Boot 4 que afetam o código:
 | TypeScript | 5.x | https://www.typescriptlang.org/docs/ |
 | Tailwind CSS | 4.x | https://tailwindcss.com/docs |
 | shadcn/ui (CLI v4, presets) | `shadcn@latest`, style `radix-nova`, base Radix, ícones Lucide | https://ui.shadcn.com/docs/cli, https://ui.shadcn.com/docs/theming, https://ui.shadcn.com/create |
-| openapi-typescript + openapi-fetch | 7.x | https://openapi-ts.dev/ (geração do client em `packages/contracts`, fase 3) |
+| openapi-typescript | 7.x | https://openapi-ts.dev/ (tipos gerados em `packages/contracts` a partir do `openapi.json` que o teste `OpenApiContractTests` escreve) |
 
 ### shadcn/ui e presets
 

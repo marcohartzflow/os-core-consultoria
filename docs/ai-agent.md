@@ -48,7 +48,7 @@ Por requisição de chat, `AgentService`:
 
 1. Lê as `GrantedAuthority` do usuário atual.
 2. Seleciona do registry só as tools cuja permissão o usuário tem.
-3. Chama `chatClient.prompt().user(msg).toolCallbacks(permitidas).toolContext(Map.of("conversationId", id, "userId", ...)).advisors(a -> a.param(ChatMemory.CONVERSATION_ID, id)).stream().content()`.
+3. Chama `chatClient.prompt().user(msg).tools(permitidas).toolContext(Map.of("conversationId", id)).advisors(a -> a.param(ChatMemory.CONVERSATION_ID, id)).stream().content().toStream()`. O usuário vem do `SecurityContext`, repassado a cada tool call por `ContextPropagatingToolCallback`. Fechar o stream cancela a chamada ao modelo: o turno para quando o cliente desconecta ou o `os.ai.turn-timeout` vence.
 
 O `ToolCallingManager` é configurado com `resolutionFallbackEnabled(false)` (padrão), `maxCallsPerTool` e `maxTotalToolCalls`. O fallback por nome ficaria acessível a qualquer tool do contexto, o que quebraria o filtro.
 
@@ -71,11 +71,13 @@ Toda tool com `delete`, `pay`, `send`, `cancel` ou mudança em massa é destruti
 
 ## Validação de entrada
 
-O Spring AI não valida o JSON do modelo contra o schema antes de invocar. O registry envolve cada callback com validação Bean Validation (`jakarta.validation`) nos parâmetros do use case, que já existe para o REST. Entrada inválida retorna erro ao modelo sem tocar o banco.
+O Spring AI não valida o JSON do modelo contra o schema antes de invocar. Cada use case valida os próprios argumentos (como `TaskService.validate`), pois o mesmo método atende REST e tool; entrada inválida vira `DomainRuleException`, que volta ao modelo como erro sem tocar o banco. Listagens têm teto (200) para o prompt não receber uma tabela inteira.
 
 ## Auditoria
 
-Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conversa, nome da tool, argumentos (com campos sensíveis mascarados conforme o inventário de dados), resultado ou erro, duração. Confirmações e recusas também.
+Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conversa, nome da tool, argumentos como o modelo os enviou, resultado ou erro, duração. Confirmações, recusas e expirações também. Tool que receba dado pessoal sensível nos argumentos deve mascará-lo antes (responsabilidade do módulo), pois a trilha é imutável e sobrevive à anonimização.
+
+O resultado de uma tool nunca entra no prompt de sistema: o desfecho de uma confirmação vira uma frase fixa no papel de usuário (`ConversationService.PORTAL_NOTE`), oculta na tela e na exportação.
 
 ## Memória e streaming
 
@@ -89,7 +91,7 @@ Cada tool call gera uma linha em `audit_event` com origem `AI_TOOL`, id da conve
 - Modelo padrão: `claude-opus-5` (`spring.ai.anthropic.chat.model`). Thinking adaptativo é o comportamento padrão do modelo; não configurar `budget_tokens`.
 - `max-tokens` 16000 para chamadas não-streaming; streaming pode subir.
 - Prompt caching: `spring.ai.anthropic.chat.cache-options.strategy=SYSTEM_AND_TOOLS` quando o catálogo de tools estabilizar. O catálogo por usuário varia, então a ordem das tools precisa ser determinística para o cache funcionar.
-- System prompt em `ai/internal/prompts/system.st`, versionado, sem segredos, sem regras de autorização.
+- System prompt em `src/main/resources/prompts/system.st`, versionado, sem segredos, sem regras de autorização.
 
 ## Ações de UI
 

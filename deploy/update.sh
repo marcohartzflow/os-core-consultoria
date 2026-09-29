@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 tag="${1:-}"
-./backup.sh
+./backup.sh > /dev/null
 
 if [[ -n "$tag" ]]; then
   [[ -f .env ]] || { echo "deploy/.env not found; copy .env.example first" >&2; exit 1; }

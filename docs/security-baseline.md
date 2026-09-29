@@ -23,7 +23,7 @@ Referências: OWASP ASVS 5.0 (V7, V8, V16), OWASP Cheat Sheets, OWASP Top 10 for
 | Senha vazada | `HaveIBeenPwnedRestApiPasswordChecker` (k-anonymity, só 5 caracteres do hash saem do servidor) no cadastro e troca de senha | fase 2 |
 | Força bruta | Limite por conta e por IP com backoff; lockout temporário registrado em log de segurança | fase 2 |
 | Registro | Não existe registro público. Convite por e-mail com token de uso único, expira em 48 h, hash do token no banco | fase 2 |
-| MFA | TOTP opcional por usuário, obrigatório para roles de administração | fase 3 ou posterior, conforme cliente |
+| MFA | TOTP (RFC 6238) com códigos de recuperação, segredo cifrado com AES-GCM; obrigatório para a role de sistema, opcional para os demais (`os.iam.mfa.*`); falhas contam no lockout da conta | feito |
 
 ## 2. Autorização (ASVS V8)
 
@@ -38,7 +38,7 @@ Referências: OWASP ASVS 5.0 (V7, V8, V16), OWASP Cheat Sheets, OWASP Top 10 for
 
 ## 3. Headers, transporte e erros
 
-- HSTS com `includeSubDomains` e `max-age` de 1 ano no perfil `prod`; TLS terminado no proxy reverso do cliente, `forward-headers-strategy=framework`.
+- HSTS com `includeSubDomains` e `max-age` de 1 ano no perfil `prod`; TLS terminado no proxy reverso do cliente, `forward-headers-strategy=native` (o Tomcat só confia em `X-Forwarded-*` de proxies de rede interna; um balanceador externo entra em `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES`).
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Permissions-Policy` restritiva. Spring Security e `next.config.ts` já cobrem os básicos.
 - Content-Security-Policy no Next com nonce por requisição (fase 2). Sem `unsafe-inline` em `script-src`.
 - Erros retornam Problem Details (RFC 9457) sem stack trace, sem mensagem interna, sem detalhe de binding (`server.error.include-*` desligados).
@@ -60,17 +60,17 @@ Dois trilhos separados:
 
 - Quem, quando, qual ação, sobre qual entidade, valores antes e depois quando aplicável, origem (REST ou tool de IA, com id da conversa).
 - Escrita pelo próprio use case ou por listener de evento de domínio, dentro da mesma transação.
-- Sem `UPDATE` nem `DELETE` na tabela: usuário de banco da aplicação recebe só `INSERT` e `SELECT` nela.
+- Sem `UPDATE`, `DELETE` nem `TRUNCATE` na tabela: triggers no banco (`V10`) recusam para qualquer role, inclusive o dono.
 - Retenção definida por cliente, padrão 5 anos.
 
 Toda tool call do agente de IA gera entrada na trilha, com sucesso ou erro (ver `ai-agent.md`).
 
 ## 5. Dados confidenciais
 
-- Criptografia em trânsito obrigatória (TLS 1.2+). Em repouso, disco criptografado no host e backup criptografado.
+- Criptografia em trânsito obrigatória (TLS 1.2+). Em repouso, disco criptografado no host e backup criptografado com `age` (`deploy/backup.sh`), chave privada fora do servidor.
 - Campos de alta sensibilidade (documento, dados bancários, saúde, o que o cliente classificar) recebem criptografia em nível de aplicação com AES-256-GCM via `AttributeConverter` do JPA. A chave vem de variável de ambiente ou cofre, nunca do banco nem do repositório. Rotação de chave prevista com id de chave gravado junto ao dado.
 - Segredos (`ANTHROPIC_API_KEY`, senha do banco, chave de criptografia) só por variável de ambiente. `.env`, `*.pem`, `*.key` e `application-local.yml` estão no `.gitignore`.
-- Mínimo privilégio no banco: a aplicação usa um role sem `SUPERUSER`, sem `CREATE` em produção (migrações rodam com role separado).
+- Mínimo privilégio no banco: o deploy de referência usa um único role dono do schema, pois o Flyway roda no boot da API. Um fork que exija separação cria um role sem `CREATE` para a aplicação e roda as migrações com outro; a trilha de auditoria não depende disso (triggers).
 - Backups diários, testados, retidos conforme contrato; restauração documentada.
 
 ## 6. LGPD
@@ -79,14 +79,14 @@ Toda tool call do agente de IA gera entrada na trilha, com sucesso ou erro (ver 
 |---|---|---|
 | Art. 6 | Finalidade, adequação, necessidade, transparência, segurança, prevenção, não discriminação, responsabilização | Coleta mínima por módulo; cada campo pessoal documentado no inventário de dados do módulo |
 | Art. 7 e 11 | Base legal para cada tratamento | Inventário de dados registra a base legal por campo ou processo; dado sensível exige base do art. 11 |
-| Art. 18 | Direitos do titular: acesso, correção, anonimização, portabilidade, eliminação, informação sobre compartilhamento, revogação de consentimento | Módulo `iam` oferece exportação dos dados do usuário e anonimização ou exclusão; módulos de negócio implementam `PersonalDataHandler` para participar dessas operações |
+| Art. 18 | Direitos do titular: acesso, correção, anonimização, portabilidade, eliminação, informação sobre compartilhamento, revogação de consentimento | `GET /api/me/data` exporta tudo que o portal guarda sobre a pessoa; anonimização irreversível de contas desativadas; módulos de negócio implementam `PersonalDataContributor` para participar das duas operações |
 | Art. 37 | Registro das operações de tratamento | Trilha de auditoria (seção 4) + inventário de dados por módulo, no formato do modelo de Registro das Operações da ANPD |
-| Art. 41 | Encarregado (DPO) | Campo de configuração do cliente exibido na página de privacidade do portal |
+| Art. 41 | Encarregado (DPO) | Informado pelo cliente na política de privacidade da empresa; o portal não tem página própria para isso (fork pode adicionar) |
 | Art. 46 | Medidas técnicas e administrativas de segurança | Este documento inteiro |
-| Art. 48 | Comunicação de incidente à ANPD e aos titulares | Runbook de incidente em `docs/incident-response.md` (fase 2); logs de segurança fora do host viabilizam a investigação |
+| Art. 48 | Comunicação de incidente à ANPD e aos titulares | Runbook de incidente é responsabilidade do cliente (`SECURITY.md` cobre o reporte à Maximus Flow); a trilha de auditoria e o backup fora do host viabilizam a investigação |
 | Art. 15 e 16 | Término do tratamento e eliminação | Política de retenção por tipo de dado, job de expurgo ou anonimização |
 
-Cada módulo de negócio novo preenche `docs/data-inventory/<modulo>.md`: campos pessoais, sensíveis ou não, base legal, finalidade, retenção, compartilhamento com terceiros.
+Cada módulo de negócio novo documenta no próprio `package-info.java` (e no `PersonalDataContributor` que implementa) quais campos pessoais guarda, com base legal, finalidade e retenção. Os módulos core registram: `iam` (e-mail, nome, hash de senha, segredo TOTP cifrado; base legal execução de contrato de trabalho), `audit_event` (ator e ação; obrigação legal, art. 37, retido mesmo após anonimização), `ai` (conversas com o assistente; apagadas na anonimização).
 
 ### IA e LGPD
 

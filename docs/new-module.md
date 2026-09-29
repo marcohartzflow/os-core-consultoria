@@ -30,7 +30,7 @@ Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
 
 ## 2. Frontend (`apps/web`)
 
-1. **Tipos** em `src/modules/<modulo>/types.ts`, espelhando os records do backend.
+1. **Tipos** em `src/modules/<modulo>/types.ts`, reexportados de `@maximusflow/contracts` (gerados: `pnpm api:test` escreve `packages/contracts/openapi.json`, `pnpm contracts` gera os tipos; o CI falha se estiverem desatualizados). Nada é escrito à mão, como em `src/modules/tasks/types.ts`.
 2. **Tela** em `src/modules/<modulo>/<Modulo>Page.tsx`, usando só componentes de `src/components/ui` (shadcn) e tokens semânticos, como `src/modules/tasks/TasksPage.tsx`. Componente que falte, adicione com `pnpm dlx shadcn@latest add <componente>`. Botões de ação ficam dentro de `<RequirePermission permission="...">`; a API valida de qualquer forma.
 3. **Rota** em `src/app/(os)/<modulo>/page.tsx` que só renderiza a tela do módulo. O layout `(os)` já cuida de sessão e shell.
 4. **Menu** em `src/modules/navigation.ts`: adicione uma seção ou item com `permission` igual à permissão de leitura do módulo.

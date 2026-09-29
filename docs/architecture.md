@@ -90,7 +90,7 @@ Controller não tem regra de negócio. Autorização fica no use case (ver seç�
 
 ### Uma origem só
 
-O browser só conhece o domínio do Next. O `next.config.ts` reescreve `/api/*` para o Spring. Sem CORS, cookie first-party, SSE do chat funciona com `EventSource` nativo.
+O browser só conhece o domínio do Next. O `next.config.ts` reescreve `/api/*` para o Spring. Sem CORS, cookie first-party; o chat é um `POST` com resposta `text/event-stream` lida com `fetch` (o `EventSource` nativo só faz `GET`, sem corpo nem header CSRF).
 
 ## 5. Frontend
 

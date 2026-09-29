@@ -3,6 +3,13 @@
 # internal networks (forward-headers-strategy: native), which the Compose network is.
 {$OS_DOMAIN} {
 	encode zstd gzip
-	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# Bodies are JSON forms and short chat messages; nothing legitimate is anywhere near this.
+	request_body {
+		max_size 2MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
 	reverse_proxy web:3000
 }

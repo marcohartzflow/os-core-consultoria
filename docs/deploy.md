@@ -10,6 +10,7 @@ As imagens da API e do web são construídas no GitHub Actions do fork (`cd.yml`
 - Portas 80 e 443 abertas para a internet (Let's Encrypt valida por HTTP e o portal responde por HTTPS). Nenhuma outra porta é publicada: Postgres, API e web só existem na rede interna do Compose.
 - Um registro DNS (A/AAAA) do domínio do portal apontando para o servidor antes do primeiro `up`.
 - Disco criptografado (LUKS ou equivalente da nuvem): o banco guarda dados confidenciais em repouso.
+- `age` instalado (`apt install age`) para o backup criptografado.
 
 ## Primeira instalação
 
@@ -48,15 +49,9 @@ Reverter: `deploy/update.sh $(cat deploy/.previous-tag)` (o script guarda a tag 
 
 ## Backup e restauração
 
-- `deploy/backup.sh` gera `backups/os-<data>.sql.gz` e apaga dumps com mais de 14 dias (`BACKUP_KEEP_DAYS`). Agende no cron do servidor e copie o diretório para fora do host todo dia.
-- Restaurar em um banco vazio:
-
-```bash
-docker compose up -d postgres
-gunzip -c backups/os-<data>.sql.gz | docker compose exec -T postgres psql -U os -d os
-docker compose up -d
-```
-
+- Gere um par de chaves `age` fora do servidor (`age-keygen -o os-backup.key`), coloque a chave pública em `BACKUP_AGE_RECIPIENT` no `.env` e guarde a privada com quem pode restaurar (cofre de senhas da empresa). O servidor nunca tem a chave privada.
+- `deploy/backup.sh` gera `backups/os-<data>.sql.gz.age`, com permissão só do dono, e apaga dumps com mais de 14 dias (`BACKUP_KEEP_DAYS`). Sem chave configurada ele se recusa a rodar (`BACKUP_PLAINTEXT=yes` só em volume já criptografado). Agende no cron e defina `BACKUP_UPLOAD_CMD` para copiar cada arquivo para fora do host (object storage, outro servidor).
+- Restaurar em um banco vazio: `BACKUP_AGE_IDENTITY=os-backup.key deploy/restore.sh backups/os-<data>.sql.gz.age` com o Postgres no ar (`docker compose up -d postgres`) e depois `docker compose up -d`.
 - Teste a restauração pelo menos uma vez por trimestre. Backup não testado não é backup.
 
 ## Como o tráfego flui
@@ -65,7 +60,9 @@ docker compose up -d
 browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Spring, porta 8080) --> postgres
 ```
 
-- Caddy termina TLS, adiciona `X-Forwarded-For` e `X-Forwarded-Proto` e envia HSTS.
+- Caddy termina TLS, adiciona `X-Forwarded-For` e `X-Forwarded-Proto`, envia HSTS, limita o corpo das requisições a 2 MB e não anuncia a própria versão.
+- Cada container roda sem capabilities, sem ganho de privilégio, com limite de memória e de processos; API e web rodam como usuário sem privilégio em sistema de arquivos somente leitura. Só o Caddy publica portas.
+- Se um balanceador de carga da nuvem ficar na frente (endereço público), defina `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` com o endereço dele: sem isso o Tomcat ignora `X-Forwarded-*` de fora da rede interna, e todos os visitantes compartilham o endereço do proxy no limite de taxa e na auditoria.
 - O Next reescreve `/api/*` para `http://api:8080` (endereço fixado na build da imagem, `ARG API_URL`).
 - A API roda com o perfil `prod`: cookie `Secure`, OpenAPI desligado, `forward-headers-strategy: native` (só confia em proxies de rede interna, que é o caso da rede do Compose).
 - O health check do container da API lê `/actuator/health`; ele não depende de SMTP.

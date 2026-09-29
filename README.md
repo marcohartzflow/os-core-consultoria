@@ -7,10 +7,12 @@ Documentação completa, com ordem de leitura por público, em [`docs/README.md`
 ## Estrutura
 
 ```
-apps/api   Spring Boot 4.1 (Java 25, Gradle)  ->  http://localhost:8080
-apps/web   Next.js 16 (App Router)            ->  http://localhost:3000, repassa /api/* para o Spring
-deploy/    Compose, Caddyfile e backup para instalar um OS em um servidor
-docs/      documentação de arquitetura e conformidade
+apps/api            Spring Boot 4.1 (Java 25, Gradle)  ->  http://localhost:8080
+apps/web            Next.js 16 (App Router)            ->  http://localhost:3000, repassa /api/* para o Spring
+packages/contracts  tipos TypeScript gerados do OpenAPI da API (consumidos pelo web)
+deploy/             Compose, Caddyfile, update, backup e restore para instalar um OS em um servidor
+docs/               documentação de arquitetura e conformidade
+.github/            CI (testes, contratos, imagens) e CD (só em forks com DEPLOY_HOST)
 ```
 
 ## Requisitos
@@ -33,7 +35,7 @@ pnpm dev
 
 No IntelliJ, abra a raiz do repositório e use a run configuration compartilhada `OsApiApplication` (`.run/`): ela roda com working directory `apps/api`, onde está o `compose.yaml`, e com o perfil `local`.
 
-Copie `apps/api/src/main/resources/application-local.yml.example` para `application-local.yml`, preencha `ANTHROPIC_API_KEY` e os dados do primeiro administrador (`os.iam.bootstrap.*`), e rode com `SPRING_PROFILES_ACTIVE=local`. O primeiro admin é criado só quando a tabela de usuários está vazia. Depois, convide os demais em Administração > Usuários; sem servidor de e-mail configurado, o link do convite aparece na resposta e no log da API.
+Copie `apps/api/src/main/resources/application-local.yml.example` para `application-local.yml`, preencha `ANTHROPIC_API_KEY` e os dados do primeiro administrador (`os.iam.bootstrap.*`), e rode com o perfil `local`: `SPRING_PROFILES_ACTIVE=local pnpm api` (a run configuration do IntelliJ já define o perfil). O primeiro admin é criado só quando a tabela de usuários está vazia. Depois, convide os demais em Administração > Usuários; sem servidor de e-mail configurado, o link do convite aparece na resposta e no log da API.
 
 Interface: shadcn/ui com presets. Componentes novos entram com `pnpm dlx shadcn@latest add <componente>` em `apps/web`; a identidade visual inteira troca com `pnpm dlx shadcn@latest apply --preset <codigo>`. Detalhes e regras em `docs/stack.md`.
 

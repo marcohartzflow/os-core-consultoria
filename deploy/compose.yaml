@@ -1,18 +1,43 @@
 # Reference deployment of one OS instance on a single host: Postgres, API, web and Caddy (TLS).
 # Copy .env.example to .env, fill it in, then: deploy/update.sh <tag> (images from the registry)
 # or deploy/update.sh (build here). Image names come from OS_IMAGE_REPOSITORY and OS_IMAGE_TAG.
+#
+# Every service drops all capabilities, cannot gain privileges, and has memory and process limits;
+# api and web run as their image's non-root user on a read-only filesystem. Only Caddy publishes ports.
 name: os
+
+x-hardened: &hardened
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
 
 services:
   postgres:
+    <<: *hardened
     image: postgres:18
-    restart: unless-stopped
+    # The entrypoint starts as root to fix volume ownership, then drops to the postgres user.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       POSTGRES_DB: os
       POSTGRES_USER: os
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres-data:/var/lib/postgresql
+    tmpfs:
+      - /tmp
+      - /run/postgresql
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 512
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U os -d os"]
       interval: 10s
@@ -20,10 +45,13 @@ services:
       retries: 6
 
   api:
+    <<: *hardened
     image: ${OS_IMAGE_REPOSITORY:-os}/os-api:${OS_IMAGE_TAG:-latest}
     build:
       context: ../apps/api
-    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,6 +72,12 @@ services:
       SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      # The JVM sizes its heap from this limit, not from the host (MaxRAMPercentage in the image).
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
+          pids: 512
     healthcheck:
       # The JRE image has no curl; bash can open the TCP socket and read the health status.
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
@@ -53,18 +87,34 @@ services:
       start_period: 60s
 
   web:
+    <<: *hardened
     image: ${OS_IMAGE_REPOSITORY:-os}/os-web:${OS_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
-    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       api:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          pids: 512
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   caddy:
+    <<: *hardened
     image: caddy:2
-    restart: unless-stopped
+    cap_add:
+      - NET_BIND_SERVICE
     ports:
       - "80:80"
       - "443:443"
@@ -75,8 +125,14 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          pids: 512
     depends_on:
-      - web
+      web:
+        condition: service_healthy
 
 volumes:
   postgres-data:
