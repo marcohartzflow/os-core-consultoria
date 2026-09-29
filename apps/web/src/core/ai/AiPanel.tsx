@@ -40,9 +40,11 @@ export function AiPanelTrigger() {
   );
 }
 
-/** Only internal paths, exactly as the API validates them; never a full URL. */
+/** Only internal paths, exactly as the API validates them (UiAction.Navigate); never a full URL. */
 function internalPath(path: unknown): string | null {
-  return typeof path === "string" && path.startsWith("/") && !path.startsWith("//") ? path : null;
+  return typeof path === "string" && /^\/[A-Za-z0-9._~/-]{0,2047}$/.test(path) && !path.startsWith("//")
+    ? path
+    : null;
 }
 
 function AiPanel() {
@@ -106,18 +108,18 @@ function AiPanel() {
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
-    let conversationId = activeId;
-    if (!conversationId) {
-      const created = await api<ConversationSummary>("/api/ai/conversations", { method: "POST", body: {} });
-      setConversations((list) => [created, ...list]);
-      setActiveId(created.id);
-      conversationId = created.id;
-    }
     setBusy(true);
     setError(null);
-    setInput("");
-    setLines((l) => [...l, { kind: "user", text }]);
     try {
+      let conversationId = activeId;
+      if (!conversationId) {
+        const created = await api<ConversationSummary>("/api/ai/conversations", { method: "POST", body: {} });
+        setConversations((list) => [created, ...list]);
+        setActiveId(created.id);
+        conversationId = created.id;
+      }
+      setInput("");
+      setLines((l) => [...l, { kind: "user", text }]);
       const response = await fetch(`/api/ai/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: await mutationHeaders(),
@@ -125,7 +127,13 @@ function AiPanel() {
         body: JSON.stringify({ text }),
       });
       if (!response.ok || !response.body) {
-        throw new Error(response.status === 403 ? "Sem permissão para usar o assistente" : "Falha ao enviar");
+        throw new Error(
+          response.status === 403
+            ? "Sem permissão para usar o assistente"
+            : response.status === 429
+              ? "Aguarde a resposta anterior terminar"
+              : "Falha ao enviar",
+        );
       }
       await readEvents(response.body, (event, data) => {
         switch (event) {
@@ -159,15 +167,17 @@ function AiPanel() {
             }
             break;
           }
-          case "token":
+          case "token": {
+            const token = typeof data.text === "string" ? data.text : "";
             setLines((l) => {
               const last = l[l.length - 1];
               if (last?.kind === "assistant" && last.streaming) {
-                return [...l.slice(0, -1), { kind: "assistant", text: last.text + data.text, streaming: true }];
+                return [...l.slice(0, -1), { kind: "assistant", text: last.text + token, streaming: true }];
               }
-              return [...l, { kind: "assistant", text: data.text, streaming: true }];
+              return [...l, { kind: "assistant", text: token, streaming: true }];
             });
             break;
+          }
           case "done":
             setLines((l) => {
               const last = l[l.length - 1];

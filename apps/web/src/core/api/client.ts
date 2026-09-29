@@ -5,6 +5,8 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly title: string,
     public readonly detail: string,
+    /** RFC 9457 problem type, e.g. urn:os:problem:mfa-required. */
+    public readonly type: string | null = null,
   ) {
     super(detail || title);
   }
@@ -12,6 +14,27 @@ export class ApiError extends Error {
   get unauthorized() {
     return this.status === 401;
   }
+}
+
+/** 403 types the API uses while the session is gated: the shell must re-read /api/me and redirect. */
+const GATE_TYPES = new Set([
+  "urn:os:problem:mfa-required",
+  "urn:os:problem:mfa-enrolment-required",
+  "urn:os:problem:password-change-required",
+]);
+
+interface SessionHandlers {
+  /** The session is gone: any call answered 401. */
+  unauthorized: () => void;
+  /** The session is gated (second factor, enrolment, forced password change). */
+  gated: () => void;
+}
+
+let sessionHandlers: SessionHandlers | null = null;
+
+/** Installed by the authenticated shell so every call reacts to a lost or gated session, not only the first one. */
+export function setSessionHandlers(handlers: SessionHandlers | null) {
+  sessionHandlers = handlers;
 }
 
 function readCookie(name: string): string | null {
@@ -67,11 +90,15 @@ export async function api<T = void>(path: string, options: RequestOptions = {}):
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(
+    const error = new ApiError(
       response.status,
       problem?.title ?? response.statusText,
       problem?.detail ?? "Falha ao comunicar com o servidor",
+      problem?.type ?? null,
     );
+    if (error.unauthorized) sessionHandlers?.unauthorized();
+    else if (response.status === 403 && error.type && GATE_TYPES.has(error.type)) sessionHandlers?.gated();
+    throw error;
   }
   return (await response.json()) as T;
 }

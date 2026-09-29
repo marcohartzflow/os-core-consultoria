@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export default function AccountPage() {
   const { me } = useAuth();
+  // While a gate is active the API refuses everything but the gate's own calls; do not make them.
+  const enrolling = me.mfa.required && !me.mfa.enabled;
   return (
     <>
       <PageHeader title="Minha conta" description={me.email} />
@@ -29,7 +31,7 @@ export default function AccountPage() {
         </Alert>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        {(me.mfa.required && !me.mfa.enabled) && (
+        {enrolling && (
           <Alert className="lg:col-span-2">
             <AlertTitle>Configure o segundo fator para continuar</AlertTitle>
             <AlertDescription>
@@ -38,8 +40,8 @@ export default function AccountPage() {
           </Alert>
         )}
         <ChangePasswordCard />
-        <MfaCard />
-        <SessionsCard />
+        {!me.passwordChangeRequired && <MfaCard />}
+        {!me.passwordChangeRequired && !enrolling && <SessionsCard />}
         <Card>
           <CardHeader>
             <CardTitle>Meus dados</CardTitle>

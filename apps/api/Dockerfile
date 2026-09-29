@@ -9,7 +9,7 @@ COPY gradle gradle
 RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon -q dependencies > /dev/null
 COPY src src
 RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon -x test bootJar \
-    && cp build/libs/*-SNAPSHOT.jar app.jar \
+    && cp "$(ls build/libs/*.jar | grep -v -- '-plain.jar')" app.jar \
     && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 FROM eclipse-temurin:25-jre

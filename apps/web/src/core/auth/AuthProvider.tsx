@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, ApiError } from "@/core/api/client";
+import { api, ApiError, setSessionHandlers } from "@/core/api/client";
 import type { Me } from "@/core/api/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,17 +16,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Loads the current user once and redirects to /login whenever the API says the session is gone. */
+/**
+ * Loads the current user once, redirects to /login whenever any API call says the session is gone,
+ * and re-reads /api/me whenever a call says the session is gated so the gate effect below applies.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
+  // Reads the location at call time (not the render's pathname) so a route change does not
+  // re-create the callback and re-fetch /api/me on every navigation.
   const toLogin = useCallback(() => {
-    const next = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
+    const current = window.location.pathname;
+    const next = current && current !== "/" ? `?next=${encodeURIComponent(current)}` : "";
     router.replace(`/login${next}`);
-  }, [router, pathname]);
+  }, [router]);
 
   const refresh = useCallback(
     () =>
@@ -40,6 +46,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setSessionHandlers({ unauthorized: toLogin, gated: () => void refresh() });
+    return () => setSessionHandlers(null);
+  }, [toLogin, refresh]);
 
   // The API gates the session until these are resolved; keep the person on the right screen.
   useEffect(() => {
