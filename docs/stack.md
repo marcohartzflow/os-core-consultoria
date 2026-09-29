@@ -79,8 +79,10 @@ Regras que mantêm a troca de preset segura:
 3. Nada de caixa desenhada à mão (div com borda, fundo e raio próprios): o formato muda de preset para preset (o `luma` usa cantos bem arredondados, o `nova` quase retos) e uma caixa própria fica fora do padrão. Use o componente equivalente: `Card`, `Alert`, `Item` (linhas, balões do chat), `Textarea readOnly` (blocos de texto ou código), `Badge`.
 4. Fontes entram por `--font-sans`, `--font-heading` e `--font-geist-mono` em `src/app/layout.tsx` + `globals.css`; o `apply` reescreve os dois.
 5. Tema claro, escuro ou do sistema vem do `next-themes` (guia de dark mode do shadcn para Next.js), com o nonce da CSP no `ThemeProvider`. Os tokens `.dark` do `globals.css` são do preset.
-6. O layout do portal (sidebar recolhível em ícones, cabeçalho com busca `⌘J`, cards com tabela, login em duas colunas) segue o template [next-shadcn-admin-dashboard](https://github.com/arhamkhnz/next-shadcn-admin-dashboard), adaptado às regras acima: sem presets de tema próprios, sem cores cruas.
-7. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build`, conferir cada componente com `add <componente> --dry-run --overwrite` (tudo deve sair `identical`) e conferir as telas.
+6. O layout do portal segue o template [next-shadcn-admin-dashboard](https://github.com/arhamkhnz/next-shadcn-admin-dashboard) e o bloco oficial `dashboard-01` do shadcn (`pnpm dlx shadcn@latest view dashboard-01`), adaptados às regras acima: sem presets de tema próprios, sem cores cruas (gráficos usam `--chart-1..5`). Sidebar recolhível com menu "Criar", breadcrumb e busca `⌘J` no cabeçalho, indicadores, gráfico de atividade, listas com filtros facetados, colunas e paginação, ações por linha com confirmação.
+7. Listas usam TanStack Table v9 (`useTable` + `tableFeatures`; a API da v8, `useReactTable`, não existe mais). O guia de cada recurso vem no próprio pacote: `node_modules/@tanstack/react-table/skills/` e `node_modules/@tanstack/table-core/skills/`.
+8. Erros: carregamento que falha mostra `ErrorState` com "Tentar novamente"; erro de formulário fica no formulário (`FormError`, e `fieldError` para o campo que a API apontou em `errors`); resultado de ação vira toast (sonner). Nunca mostrar stack ou mensagem interna: o `error.tsx` do portal mostra só o código `digest`.
+9. Depois de um `apply`, rodar `pnpm lint && pnpm check-types && pnpm build`, conferir cada componente com `add <componente> --dry-run --overwrite` (tudo deve sair `identical`) e conferir as telas.
 
 ## JDK: uma única fonte de verdade
 

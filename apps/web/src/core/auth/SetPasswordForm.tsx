@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { api, errorMessage } from "@/core/api/client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { api } from "@/core/api/client";
+import { fieldError, FormError } from "@/core/ui/feedback";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { AuthHeading } from "./AuthHeading";
+import { PasswordInput } from "./PasswordInput";
 
 /** Shared by invitation acceptance and password reset confirmation. */
 export function SetPasswordForm({
@@ -26,63 +27,70 @@ export function SetPasswordForm({
 }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [mismatch, setMismatch] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (password !== confirm) {
-      setError("As senhas não conferem");
+      setMismatch(true);
       return;
     }
+    setMismatch(false);
     setBusy(true);
     setError(null);
     try {
       await api(endpoint, { method: "POST", body: { token, password } });
       onDone();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
       setBusy(false);
     }
   }
+
+  const passwordError = fieldError(error, "password");
 
   return (
     <form onSubmit={submit}>
       <FieldGroup>
         <AuthHeading title={title} description={description} />
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <Field>
+        <FormError error={error} />
+        <Field data-invalid={!!passwordError}>
           <FieldLabel htmlFor="password">Nova senha</FieldLabel>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={12}
             maxLength={128}
+            aria-invalid={!!passwordError}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <FieldDescription>
-            Mínimo de 12 caracteres. Senhas que apareceram em vazamentos são recusadas.
-          </FieldDescription>
+          {passwordError ? (
+            <FieldError>{passwordError}</FieldError>
+          ) : (
+            <FieldDescription>Mínimo de 12 caracteres. Senhas que apareceram em vazamentos são recusadas.</FieldDescription>
+          )}
         </Field>
-        <Field>
+        <Field data-invalid={mismatch}>
           <FieldLabel htmlFor="confirm">Confirmar senha</FieldLabel>
-          <Input
+          <PasswordInput
             id="confirm"
-            type="password"
             autoComplete="new-password"
             required
+            aria-invalid={mismatch}
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
+            onChange={(e) => {
+              setConfirm(e.target.value);
+              setMismatch(false);
+            }}
           />
+          {mismatch && <FieldError>As senhas não conferem.</FieldError>}
         </Field>
         <Button type="submit" className="w-full" disabled={busy}>
+          {busy && <Spinner data-icon="inline-start" />}
           {busy ? "Salvando…" : submitLabel}
         </Button>
       </FieldGroup>

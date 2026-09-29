@@ -31,9 +31,13 @@ Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
 ## 2. Frontend (`apps/web`)
 
 1. **Tipos** em `src/modules/<modulo>/types.ts`, reexportados de `@maximusflow/contracts` (gerados: `pnpm api:test` escreve `packages/contracts/openapi.json`, `pnpm contracts` gera os tipos; o CI falha se estiverem desatualizados). Nada é escrito à mão, como em `src/modules/tasks/types.ts`.
-2. **Tela** em `src/modules/<modulo>/<Modulo>Page.tsx`, usando só componentes de `src/components/ui` (shadcn) e tokens semânticos, como `src/modules/tasks/TasksPage.tsx`. Componente que falte, adicione com `pnpm dlx shadcn@latest add <componente>`. Botões de ação ficam dentro de `<RequirePermission permission="...">`; a API valida de qualquer forma.
+2. **Tela** em `src/modules/<modulo>/<Modulo>Page.tsx`, usando só componentes de `src/components/ui` (shadcn) e tokens semânticos, como `src/modules/tasks/TasksPage.tsx`. Componente que falte, adicione com `pnpm dlx shadcn@latest add <componente>`. Botões de ação ficam dentro de `<RequirePermission permission="...">`; a API valida de qualquer forma. Use as peças prontas do portal:
+   - `useLoad` (`src/core/api/useLoad.ts`) para carregar dados, com `refresh` depois de uma ação e `retry` no erro;
+   - `DataTable`, `DataTableFacetedFilter`, `DataTableViewOptions`, `DataTablePagination` e `dataTableFeatures` (`src/core/ui/data-table/`, TanStack Table v9) para listas;
+   - `StatCard`/`StatGrid` para indicadores, `ErrorState`, `EmptyState`, `FormError`, `fieldError`, `notifySuccess`, `notifyError` (`src/core/ui/feedback.tsx`) e `ConfirmDialog` para ações difíceis de desfazer.
 3. **Rota** em `src/app/(os)/<modulo>/page.tsx` que só renderiza a tela do módulo. O layout `(os)` já cuida de sessão e shell.
-4. **Menu** em `src/modules/navigation.ts`: adicione uma seção ou item com `permission` igual à permissão de leitura do módulo.
+4. **Menu** em `src/modules/navigation.ts`: adicione uma seção ou item com `permission` igual à permissão de leitura do módulo. Se o módulo cria algo, registre também em `moduleQuickCreate` (menu "Criar" da sidebar, com um parâmetro na URL que a tela lê para abrir o diálogo, como `/tasks?nova`).
+5. **Painel** (opcional) em `src/modules/dashboard.ts`: um indicador (`stat`) e/ou um card (`card`) que carregam os próprios dados, com a permissão de leitura do módulo. O painel nunca importa o módulo diretamente, então remover o módulo é apagar a pasta e as entradas desses arquivos.
 
 ## 3. O que acontece sozinho
 

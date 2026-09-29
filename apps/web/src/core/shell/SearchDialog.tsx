@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { Search, UserRound } from "lucide-react";
 import { useAuth } from "@/core/auth/AuthProvider";
-import { navigationFor } from "./navigation";
+import { navigationFor, quickCreateFor } from "./navigation";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -25,8 +25,9 @@ export function SearchDialog() {
   const [open, setOpen] = useState(false);
   const sections = [
     ...navigationFor(hasPermission),
+    { title: "Criar", items: quickCreateFor(hasPermission) },
     { title: "Conta", items: [{ label: "Minha conta", href: "/account", icon: UserRound }] },
-  ];
+  ].filter((section) => section.items.length > 0);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -42,13 +43,15 @@ export function SearchDialog() {
   return (
     <>
       <Button
-        variant="link"
+        variant="outline"
+        size="sm"
         onClick={() => setOpen(true)}
-        className="px-0! font-normal text-muted-foreground hover:no-underline"
+        className="w-9 justify-start px-0 font-normal text-muted-foreground sm:w-48 sm:px-3"
+        aria-label="Buscar telas"
       >
-        <Search data-icon="inline-start" />
-        Buscar
-        <Kbd>⌘J</Kbd>
+        <Search className="mx-auto sm:mx-0" />
+        <span className="hidden flex-1 text-left sm:inline">Buscar…</span>
+        <Kbd className="hidden sm:inline-flex">⌘J</Kbd>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Ir para uma tela do portal">
         <Command>

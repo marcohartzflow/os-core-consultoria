@@ -1,0 +1,54 @@
+/** Readable names for the audit actions shown on the dashboard; unknown ones show their key. */
+const ACTION_LABELS: Record<string, string> = {
+  "auth.login.success": "Entrou no portal",
+  "auth.login.failure": "Tentativa de login falhou",
+  "auth.mfa.verified": "Confirmou a verificação em duas etapas",
+  "auth.mfa.locked": "Bloqueado por códigos errados",
+  "auth.session.terminated": "Encerrou uma sessão",
+  "auth.sessions.terminated_by_admin": "Sessões encerradas por administrador",
+  "auth.sessions.terminated_others": "Encerrou as outras sessões",
+  "iam.user.invited": "Convidou um usuário",
+  "iam.user.invitation_resent": "Reenviou um convite",
+  "iam.user.renamed": "Renomeou um usuário",
+  "iam.user.roles_assigned": "Alterou roles de um usuário",
+  "iam.user.disabled": "Desativou um usuário",
+  "iam.user.enabled": "Reativou um usuário",
+  "iam.user.anonymized": "Anonimizou um usuário",
+  "iam.user.bootstrapped": "Administrador inicial criado",
+  "iam.administrator.announced": "Novo administrador anunciado",
+  "iam.role.created": "Criou uma role",
+  "iam.role.updated": "Alterou uma role",
+  "iam.role.deleted": "Excluiu uma role",
+  "iam.password.changed": "Trocou a senha",
+  "iam.password.rehashed": "Senha migrada para Argon2id",
+  "iam.mfa.enabled": "Ativou duas etapas",
+  "iam.mfa.disabled": "Desativou duas etapas",
+  "iam.mfa.reset": "Duas etapas redefinidas",
+  "iam.mfa.failed": "Código de duas etapas errado",
+  "iam.mfa.recovery_code_used": "Usou um código de recuperação",
+  "tasks.task.created": "Criou uma tarefa",
+  "tasks.task.updated": "Alterou uma tarefa",
+  "tasks.task.completed": "Concluiu uma tarefa",
+  "tasks.task.reopened": "Reabriu uma tarefa",
+  "tasks.task.deleted": "Excluiu uma tarefa",
+  "ai.turn.started": "Conversou com o assistente",
+  "ai.tool.executed": "Assistente executou uma ação",
+  "ai.tool.failed": "Ação do assistente falhou",
+  "ai.action.parked": "Assistente pediu confirmação",
+  "ai.action.confirmed": "Confirmou ação do assistente",
+  "ai.action.rejected": "Recusou ação do assistente",
+  "ai.action.expired": "Ação do assistente expirou",
+  "ai.action.failed": "Ação confirmada falhou",
+  "audit.exported": "Exportou a auditoria",
+  "privacy.data.exported": "Exportou os próprios dados",
+};
+
+export function actionLabel(action: string): string {
+  return ACTION_LABELS[action] ?? action;
+}
+
+/** `YYYY-MM-DD` from the API to a local Date (never through UTC, which would shift the day). */
+export function parseDay(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}

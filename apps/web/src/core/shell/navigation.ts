@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ScrollText, ShieldCheck, Users } from "lucide-react";
-import { moduleNavigation } from "@/modules/navigation";
+import { LayoutDashboard, ScrollText, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { moduleNavigation, moduleQuickCreate } from "@/modules/navigation";
 
 export interface NavItem {
   label: string;
@@ -35,4 +35,35 @@ export function navigationFor(hasPermission: (permission: string) => boolean): N
       items: section.items.filter((item) => !item.permission || hasPermission(item.permission)),
     }))
     .filter((section) => section.items.length > 0);
+}
+
+/** "Criar" menu of the sidebar: module entries first, then the core ones the user may use. */
+export function quickCreateFor(hasPermission: (permission: string) => boolean): NavItem[] {
+  const items: NavItem[] = [
+    ...moduleQuickCreate,
+    { label: "Convidar usuário", href: "/settings/users?convidar", icon: UserPlus, permission: "iam.user.create" },
+  ];
+  return items.filter((item) => !item.permission || hasPermission(item.permission));
+}
+
+/**
+ * Trail for the header: section and screen from the navigation, plus "Detalhes" below a known
+ * screen. Paths outside the navigation (the account page) get their own label.
+ */
+export function breadcrumbFor(
+  pathname: string,
+  hasPermission: (permission: string) => boolean,
+): { label: string; href?: string }[] {
+  if (pathname === "/") return [{ label: "Painel" }];
+  if (pathname === "/account") return [{ label: "Conta" }, { label: "Minha conta" }];
+  for (const section of navigationFor(hasPermission)) {
+    for (const item of section.items) {
+      if (item.href === "/") continue;
+      if (pathname === item.href) return [{ label: section.title }, { label: item.label }];
+      if (pathname.startsWith(item.href + "/")) {
+        return [{ label: section.title }, { label: item.label, href: item.href }, { label: "Detalhes" }];
+      }
+    }
+  }
+  return [];
 }

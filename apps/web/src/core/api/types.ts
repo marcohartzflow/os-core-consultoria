@@ -2,6 +2,7 @@
 // web code uses are re-exported here, plus the few shapes the OpenAPI document does not describe.
 import type {
   AdministratorStatus,
+  AuditActivityDay,
   AuditEventView,
   ChatMessage,
   ConversationSummary,
@@ -21,6 +22,7 @@ import type {
 
 export type {
   AdministratorStatus,
+  AuditActivityDay,
   AuditEventView,
   ChatMessage,
   ConversationSummary,
@@ -48,4 +50,6 @@ export interface ProblemDetail {
   title?: string;
   detail?: string;
   type?: string;
+  /** Present on 400 "Dados inválidos": message per field name. */
+  errors?: Record<string, string>;
 }

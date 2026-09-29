@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { usePathname, useRouter } from "next/navigation";
 import { api, ApiError, setSessionHandlers } from "@/core/api/client";
 import type { Me } from "@/core/api/types";
+import { ErrorState } from "@/core/ui/feedback";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface AuthContextValue {
   me: Me;
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
 
   // Reads the location at call time (not the render's pathname) so a route change does not
   // re-create the callback and re-fetch /api/me on every navigation.
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () =>
       api<Me>("/api/me").then(setMe, (error: unknown) => {
         if (error instanceof ApiError && error.unauthorized) toLogin();
-        else setFailed(error instanceof Error ? error.message : "Erro inesperado");
+        else setFailed(error);
       }),
     [toLogin],
   );
@@ -87,12 +87,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   if (failed) {
     return (
-      <div className="flex min-h-svh items-center justify-center p-6">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertTitle>Não foi possível carregar sua sessão</AlertTitle>
-          <AlertDescription>{failed}</AlertDescription>
-        </Alert>
-      </div>
+      <main className="flex min-h-svh items-center justify-center p-6">
+        <ErrorState
+          error={failed}
+          onRetry={() => {
+            setFailed(null);
+            void refresh();
+          }}
+        />
+      </main>
     );
   }
   if (!value) {

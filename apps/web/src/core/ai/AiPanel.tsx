@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Bot, Plus, Send, Wrench } from "lucide-react";
+import { Bot, CircleAlert, Plus, Send, Sparkles, TriangleAlert, Wrench } from "lucide-react";
 import { api, errorMessage, mutationHeaders } from "@/core/api/client";
 import type { ChatMessage, ConversationSummary, PendingActionView } from "@/core/api/types";
-import { RequirePermission } from "@/core/auth/AuthProvider";
+import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { Item, ItemContent } from "@/components/ui/item";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -117,8 +119,8 @@ function AiPanel() {
     }
   }
 
-  async function send() {
-    const text = input.trim();
+  async function send(prompt?: string) {
+    const text = (prompt ?? input).trim();
     if (!text || busy) return;
     setBusy(true);
     setError(null);
@@ -271,18 +273,15 @@ function AiPanel() {
 
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-3 py-4">
-          {lines.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Pergunte algo ou peça uma ação. Exemplo: “quem está com acesso bloqueado?”
-            </p>
-          )}
+          {lines.length === 0 && !busy && <Suggestions onPick={(text) => void send(text)} />}
           {lines.map((line, index) => (
             <LineView key={index} line={line} />
           ))}
           {pending.map((action) => (
             <Alert key={action.id} variant="destructive">
+              <TriangleAlert />
               <AlertTitle className="flex items-center gap-2">
-                Confirmação
+                Confirme antes de executar
                 <span className="font-mono text-xs font-normal text-muted-foreground">{action.tool}</span>
               </AlertTitle>
               <AlertDescription>
@@ -298,9 +297,16 @@ function AiPanel() {
               </AlertDescription>
             </Alert>
           ))}
-          {busy && <p className="text-xs text-muted-foreground">Pensando…</p>}
+          {busy && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+              <Spinner className="size-3" />
+              Pensando…
+            </p>
+          )}
           {error && (
             <Alert variant="destructive">
+              <CircleAlert />
+              <AlertTitle>O assistente não conseguiu responder</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -335,6 +341,37 @@ function AiPanel() {
         </Button>
       </form>
     </>
+  );
+}
+
+/** First screen of a conversation: what the assistant can do, as prompts the user may send. */
+function Suggestions({ onPick }: { onPick: (text: string) => void }) {
+  const { hasPermission } = useAuth();
+  const prompts = [
+    hasPermission("tasks.task.read") && "Quais tarefas estão atrasadas?",
+    hasPermission("iam.user.read") && "Quem está com o acesso bloqueado ou sem duas etapas?",
+    hasPermission("audit.event.read") && "O que aconteceu hoje na auditoria?",
+    "Quais são as minhas permissões?",
+  ].filter((prompt): prompt is string => Boolean(prompt));
+  return (
+    <Empty className="p-6">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Sparkles />
+        </EmptyMedia>
+        <EmptyTitle>Como posso ajudar?</EmptyTitle>
+        <EmptyDescription>
+          Pergunte sobre os dados do portal ou peça uma ação. Tudo roda com as suas permissões e fica na auditoria.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className="gap-2">
+        {prompts.map((prompt) => (
+          <Button key={prompt} variant="outline" size="sm" className="h-auto w-full justify-start py-2 text-left whitespace-normal" onClick={() => onPick(prompt)}>
+            {prompt}
+          </Button>
+        ))}
+      </EmptyContent>
+    </Empty>
   );
 }
 

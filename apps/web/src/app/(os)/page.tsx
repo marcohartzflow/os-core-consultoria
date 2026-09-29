@@ -1,200 +1,219 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bot, ChevronRight, KeyRound, Smartphone, UserCog, Users } from "lucide-react";
+import {
+  KeyRound,
+  LogIn,
+  ShieldAlert,
+  ShieldX,
+  Smartphone,
+  TrendingDown,
+  TrendingUp,
+  UserCog,
+  Users,
+} from "lucide-react";
 import { api } from "@/core/api/client";
-import type { AdministratorStatus, AuditEventView, Paged, UserSummary } from "@/core/api/types";
+import { useLoad } from "@/core/api/useLoad";
+import type { AdministratorStatus, AuditActivityDay, AuditEventView, Paged, UserSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { navigationFor } from "@/core/shell/navigation";
-import { formatDateTime } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { StatCard, StatGrid } from "@/core/ui/stat-card";
+import { isActiveAccount } from "@/core/iam/accounts";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ActivityChart } from "./_dashboard/ActivityChart";
+import { QuickAccessCard, RecentActivityCard, SecurityCard } from "./_dashboard/cards";
+import { moduleDashboard } from "@/modules/dashboard";
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  badge,
-  note,
-}: {
+const TODAY = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+interface Stat {
+  key: string;
   icon: LucideIcon;
   label: string;
-  value: string | number;
+  value: React.ReactNode | null;
   badge?: React.ReactNode;
-  note: string;
-}) {
+  hint: string;
+}
+
+function sum(days: AuditActivityDay[], pick: (day: AuditActivityDay) => number) {
+  return days.reduce((total, day) => total + pick(day), 0);
+}
+
+/** Change against the previous period, as the badge of the reference's metric cards. */
+function Trend({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0) return current > 0 ? <Badge variant="outline">Novo</Badge> : null;
+  const change = Math.round(((current - previous) / previous) * 100);
+  const Icon = change >= 0 ? TrendingUp : TrendingDown;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <Avatar className="size-8">
-            <AvatarFallback className="text-muted-foreground">
-              <Icon className="size-4" />
-            </AvatarFallback>
-          </Avatar>
-        </CardTitle>
-        <CardDescription>{label}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-3xl leading-none font-medium tracking-tight tabular-nums">{value}</div>
-          {badge}
-        </div>
-        <p className="text-sm text-muted-foreground">{note}</p>
-      </CardContent>
-    </Card>
+    <Badge variant="outline">
+      <Icon />
+      {change > 0 ? "+" : ""}
+      {change}%
+    </Badge>
   );
 }
 
-interface Overview {
-  users: UserSummary[] | null;
-  administrators: AdministratorStatus | null;
-  events: AuditEventView[] | null;
+/** A load that runs only with the permission; without it resolves to `undefined` so the block hides. */
+function when<T>(allowed: boolean, load: () => Promise<T>): () => Promise<T | undefined> {
+  return allowed ? load : () => Promise.resolve(undefined);
 }
 
 export default function DashboardPage() {
   const { me, hasPermission } = useAuth();
-  const mayReadUsers = hasPermission("iam.user.read");
-  const mayReadAudit = hasPermission("audit.event.read");
-  const [overview, setOverview] = useState<Overview>({ users: null, administrators: null, events: null });
+  const mayAudit = hasPermission("audit.event.read");
+  const mayUsers = hasPermission("iam.user.read");
+  const widgets = moduleDashboard.filter((widget) => hasPermission(widget.permission));
+  const moduleStats = widgets.flatMap((widget) => (widget.stat ? [widget.stat] : []));
+  const moduleCards = widgets.flatMap((widget) => (widget.card ? [widget.card] : []));
+  const moduleStatCount = moduleStats.length;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  useEffect(() => {
-    let current = true;
-    // Each block is optional: a failure or a missing permission only hides that block.
-    Promise.all([
-      mayReadUsers ? api<UserSummary[]>("/api/iam/users").catch(() => null) : null,
-      mayReadUsers ? api<AdministratorStatus>("/api/iam/users/administrators").catch(() => null) : null,
-      mayReadAudit ? api<Paged<AuditEventView>>("/api/audit/events").catch(() => null) : null,
-    ]).then(([users, administrators, events]) => {
-      if (current) setOverview({ users, administrators, events: events?.content.slice(0, 5) ?? null });
-    });
-    return () => {
-      current = false;
-    };
-  }, [mayReadUsers, mayReadAudit]);
+  const activity = useLoad(
+    when(mayAudit, () => api<AuditActivityDay[]>(`/api/audit/activity?days=90&zone=${encodeURIComponent(zone)}`)),
+  );
+  const events = useLoad(when(mayAudit, () => api<Paged<AuditEventView>>("/api/audit/events")));
+  const people = useLoad(
+    when(mayUsers, () =>
+      Promise.all([
+        api<UserSummary[]>("/api/iam/users"),
+        api<AdministratorStatus>("/api/iam/users/administrators"),
+      ]),
+    ),
+  );
 
-  const active = overview.users?.filter((u) => u.status === "ACTIVE" && !u.locked && !u.anonymizedAt).length;
-  const invited = overview.users?.filter((u) => u.status === "INVITED").length ?? 0;
+  const days = activity.data ?? null;
+  const users = people.data?.[0] ?? null;
+
+  // Cheap to rebuild on every render; no memo needed.
+  const stats: Stat[] = (() => {
+    const list: Stat[] = [];
+    if (mayAudit) {
+      const last7 = days?.slice(-7) ?? [];
+      const previous7 = days?.slice(-14, -7) ?? [];
+      const logins = days && sum(last7, (d) => d.loginSuccess);
+      const failures = days && sum(last7, (d) => d.loginFailure);
+      list.push({
+        key: "logins",
+        icon: LogIn,
+        label: "Logins em 7 dias",
+        value: activity.error ? "—" : logins,
+        badge: days && <Trend current={logins ?? 0} previous={sum(previous7, (d) => d.loginSuccess)} />,
+        hint: activity.error ? "Não foi possível carregar" : "Comparado aos 7 dias anteriores",
+      });
+      list.push({
+        key: "failures",
+        icon: ShieldX,
+        label: "Logins com falha em 7 dias",
+        value: activity.error ? "—" : failures,
+        badge: days && (failures ? <Badge variant="destructive">Verifique</Badge> : <Badge variant="secondary">Nenhuma</Badge>),
+        hint: "Senha errada ou conta inexistente",
+      });
+    }
+    if (mayUsers) {
+      const live = users?.filter(isActiveAccount);
+      const active = live?.length;
+      const withoutMfa = live?.filter((u) => !u.mfaEnabled).length ?? 0;
+      list.push({
+        key: "users",
+        icon: Users,
+        label: "Contas ativas",
+        value: people.error ? "—" : (active ?? null),
+        badge:
+          users &&
+          (withoutMfa > 0 ? (
+            <Badge variant="destructive">
+              <ShieldAlert />
+              {withoutMfa} sem duas etapas
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Todas protegidas</Badge>
+          )),
+        hint: people.error ? "Não foi possível carregar" : "Contas com acesso ao portal",
+      });
+    }
+    // Personal cards fill the row when the account cannot see portal-wide numbers.
+    const personal: Stat[] = [
+      {
+        key: "mfa",
+        icon: Smartphone,
+        label: "Sua verificação em duas etapas",
+        value: me.mfa.enabled ? "Ativa" : "Inativa",
+        badge: !me.mfa.enabled && <Badge variant="destructive">Recomendado</Badge>,
+        hint: me.mfa.enabled ? "Um código é pedido a cada login" : "Ative em Minha conta",
+      },
+      {
+        key: "roles",
+        icon: UserCog,
+        label: "Suas roles",
+        value: me.roles.length,
+        hint: me.roles.length ? me.roles.join(", ") : "Peça acesso a um administrador",
+      },
+      {
+        key: "permissions",
+        icon: KeyRound,
+        label: "Suas permissões",
+        value: me.permissions.length,
+        hint: "No portal e pelo assistente",
+      },
+    ];
+    for (const card of personal) if (list.length + moduleStatCount < 4) list.push(card);
+    return list;
+  })();
+
+  const portalStats = (mayAudit ? 2 : 0) + (mayUsers ? 1 : 0);
   const shortcuts = navigationFor(hasPermission)
     .flatMap((section) => section.items)
     .filter((item) => item.href !== "/");
+  const failuresToday = days ? (days.at(-1)?.loginFailure ?? 0) : null;
 
   return (
     <>
-      <PageHeader title={`Olá, ${me.name.split(" ")[0]}`} description="Visão geral da sua conta e do portal." />
-      <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card sm:grid-cols-2 xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
-        <MetricCard
-          icon={UserCog}
-          label="Suas roles"
-          value={me.roles.length}
-          note={me.roles.length ? me.roles.join(", ") : "Peça acesso a um administrador"}
-        />
-        <MetricCard
-          icon={KeyRound}
-          label="Suas permissões"
-          value={me.permissions.length}
-          note="Ações que você pode executar, no portal e pelo assistente"
-        />
-        <MetricCard
-          icon={Smartphone}
-          label="Verificação em duas etapas"
-          value={me.mfa.enabled ? "Ativa" : "Inativa"}
-          badge={!me.mfa.enabled && <Badge variant="destructive">Recomendado</Badge>}
-          note={me.mfa.enabled ? "Sua conta pede um código a cada login" : "Ative em Minha conta"}
-        />
-        {active !== undefined ? (
-          <MetricCard
-            icon={Users}
-            label="Usuários ativos"
-            value={active}
-            badge={invited > 0 && <Badge variant="secondary">{invited} convidados</Badge>}
-            note={
-              overview.administrators
-                ? `${overview.administrators.active} ${overview.administrators.active === 1 ? "administrador" : "administradores"}, mínimo ${overview.administrators.minimum}`
-                : "Contas que podem entrar no portal"
-            }
-          />
-        ) : (
-          <MetricCard
-            icon={Bot}
-            label="Assistente"
-            value={hasPermission("ai.chat.use") ? "Disponível" : "Sem acesso"}
-            note={
-              hasPermission("ai.chat.use")
-                ? "Abra pelo botão Assistente no topo da tela"
-                : "Peça acesso a um administrador"
-            }
-          />
-        )}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acesso rápido</CardTitle>
-            <CardDescription>As áreas que suas permissões liberam.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ItemGroup className="gap-2">
-              {shortcuts.map((item) => (
-                <Item key={item.href} variant="outline" size="sm" asChild>
-                  <Link href={item.href}>
-                    <ItemMedia variant="icon">
-                      <item.icon />
-                    </ItemMedia>
-                    <ItemContent>
-                      <ItemTitle>{item.label}</ItemTitle>
-                    </ItemContent>
-                    <ItemActions>
-                      <ChevronRight className="size-4" />
-                    </ItemActions>
-                  </Link>
-                </Item>
-              ))}
-              {shortcuts.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nenhuma área liberada ainda.</p>
-              )}
-            </ItemGroup>
-          </CardContent>
-        </Card>
-        {overview.events && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Atividade recente</CardTitle>
-              <CardDescription>Últimos eventos da auditoria.</CardDescription>
-              <CardAction>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/settings/audit">
-                    Ver tudo
-                    <ChevronRight data-icon="inline-end" />
-                  </Link>
-                </Button>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <ItemGroup className="gap-2">
-                {overview.events.map((event) => (
-                  <Item key={event.id} size="sm">
-                    <ItemContent>
-                      <ItemTitle className="font-mono text-xs">{event.action}</ItemTitle>
-                      <ItemDescription>{event.actorEmail ?? "sistema"}</ItemDescription>
-                    </ItemContent>
-                    <ItemActions className="text-xs whitespace-nowrap text-muted-foreground">
-                      {formatDateTime(event.occurredAt)}
-                    </ItemActions>
-                  </Item>
-                ))}
-                {overview.events.length === 0 && <p className="text-sm text-muted-foreground">Nenhum evento.</p>}
-              </ItemGroup>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <PageHeader
+        title={`Olá, ${me.name.split(" ")[0]}`}
+        description={`${TODAY.format(new Date()).replace(/^./, (c) => c.toUpperCase())} · Visão geral do portal`}
+      />
+
+      <StatGrid>
+        {/* Portal-wide numbers, then the modules' indicators, then the personal cards that fill the row. */}
+        {stats.slice(0, portalStats).map(({ key, ...card }) => (
+          <StatCard key={key} {...card} />
+        ))}
+        {moduleStats.map((Stat, index) => (
+          <Stat key={index} />
+        ))}
+        {stats.slice(portalStats).map(({ key, ...card }) => (
+          <StatCard key={key} {...card} />
+        ))}
+      </StatGrid>
+
+      {mayAudit && <ActivityChart days={days} error={activity.error} onRetry={activity.retry} />}
+
+      {(mayUsers || moduleCards.length > 0 || mayAudit) && (
+        <div className="grid gap-4 md:gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          {moduleCards.map((Card, index) => (
+            <Card key={index} />
+          ))}
+          {(mayUsers || mayAudit) && (
+            <SecurityCard
+              administrators={mayUsers ? (people.data?.[1] ?? null) : undefined}
+              users={mayUsers ? users : undefined}
+              failuresToday={mayAudit ? failuresToday : undefined}
+              error={people.error}
+              onRetry={people.retry}
+            />
+          )}
+          {mayAudit && (
+            <RecentActivityCard
+              events={events.data ? events.data.content.slice(0, 6) : null}
+              error={events.error}
+              onRetry={events.retry}
+            />
+          )}
+        </div>
+      )}
+
+      <QuickAccessCard items={shortcuts} />
     </>
   );
 }

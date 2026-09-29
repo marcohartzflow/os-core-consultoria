@@ -18,7 +18,10 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 - Tipos TypeScript gerados do OpenAPI (`packages/contracts`), verificados no CI.
 - Ações de UI emitidas por tools (`navigate`), mostradas e executadas no painel do assistente.
 - Deploy de referência com Docker Compose e Caddy, backup, CI com build das imagens, CD por SSH para forks.
-- Layout do portal no estilo do template next-shadcn-admin-dashboard: sidebar recolhível em ícones, busca de telas (⌘J), tema claro/escuro/sistema, painel com indicadores e atividade recente, listas em cards com busca e filtro, login em duas colunas, página 404.
+- Portal redesenhado no estilo do template next-shadcn-admin-dashboard e do bloco dashboard-01 do shadcn: painel com indicadores, gráfico de atividade e cards de segurança; listas com busca, filtros facetados, colunas, paginação e ações por linha com confirmação; detalhe do usuário e Minha conta em abas; menu "Criar", breadcrumb, busca `⌘J`, tema claro/escuro; login em duas colunas.
+- Tratamento de erros padronizado: toasts nas ações, erro por campo nos formulários, telas de erro com "Tentar novamente", página 404 e limite de erro do portal.
+- API: `GET /api/audit/activity` (eventos por dia no fuso de quem vê), `mfaEnabled` no usuário, `userCount` na role, filtros `origin` e `correlationId` na auditoria, erros de validação com o campo (`errors`) e em português.
+- Módulos registram entradas no menu "Criar" (`moduleQuickCreate`) e no painel (`src/modules/dashboard.ts`).
 
 ### Alterado
 
@@ -35,6 +38,8 @@ Revisão completa de 2026-09-29 (três frentes: auth/iam, agente de IA, web/depl
 - Confirmação de ação destrutiva do assistente é reivindicada atomicamente (`PENDING` para `EXECUTING`): duas confirmações concorrentes executam uma vez; expiração é registrada e auditada.
 - Resultado de tool nunca entra no prompt de sistema; o desfecho vira nota fixa no papel de usuário, oculta na tela e na exportação.
 - Falhas de código MFA contam no lockout da conta e são auditadas (`iam.mfa.failed`).
+- Cookie de sessão expirado prendia o navegador num ciclo `/` ↔ `/login`: o proxy não redireciona mais a tela de login só pela presença do cookie; ela consulta `/api/me` e segue só com sessão viva.
+- Busca da auditoria trata `%` e `_` como texto, não como curinga do `LIKE`.
 - `audit_event` é append-only por trigger (`V10`), para qualquer role.
 - Link de convite só é devolvido ao administrador quando não há entrega por e-mail.
 - Eventos de domínio carregam só o id do usuário (o arquivo de eventos guardava e-mail após anonimização).

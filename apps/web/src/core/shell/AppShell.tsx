@@ -2,13 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Command } from "lucide-react";
+import { Fragment } from "react";
+import { ChevronDown, CirclePlus, Command } from "lucide-react";
 import { AiPanelTrigger } from "@/core/ai/AiPanel";
 import { useAuth } from "@/core/auth/AuthProvider";
-import { navigationFor } from "./navigation";
+import { breadcrumbFor, navigationFor, quickCreateFor } from "./navigation";
 import { NavUser } from "./NavUser";
 import { SearchDialog } from "./SearchDialog";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -32,6 +48,71 @@ function Brand() {
       <Command />
       <span className="text-base font-semibold">OS</span>
     </>
+  );
+}
+
+/** Primary "Criar" button at the top of the sidebar, as in the reference; hidden when nothing is allowed. */
+function QuickCreate({ hasPermission }: { hasPermission: (permission: string) => boolean }) {
+  const items = quickCreateFor(hasPermission);
+  if (items.length === 0) return null;
+  return (
+    <SidebarGroup>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  tooltip="Criar"
+                  className="bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground data-[state=open]:bg-primary/90 data-[state=open]:text-primary-foreground"
+                >
+                  <CirclePlus />
+                  <span>Criar</span>
+                  <ChevronDown className="ml-auto" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-52">
+                <DropdownMenuLabel>Criar</DropdownMenuLabel>
+                {items.map((item) => (
+                  <DropdownMenuItem key={item.href} asChild>
+                    <Link href={item.href}>
+                      <item.icon />
+                      {item.label}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+function Trail({ pathname, hasPermission }: { pathname: string; hasPermission: (permission: string) => boolean }) {
+  const trail = breadcrumbFor(pathname, hasPermission);
+  return (
+    <Breadcrumb className="hidden md:block">
+      <BreadcrumbList>
+        {trail.map((crumb, index) => (
+          <Fragment key={crumb.label}>
+            {index > 0 && <BreadcrumbSeparator />}
+            <BreadcrumbItem>
+              {index === trail.length - 1 ? (
+                <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+              ) : crumb.href ? (
+                <BreadcrumbLink asChild>
+                  <Link href={crumb.href}>{crumb.label}</Link>
+                </BreadcrumbLink>
+              ) : (
+                <span>{crumb.label}</span>
+              )}
+            </BreadcrumbItem>
+          </Fragment>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 }
 
@@ -72,6 +153,7 @@ export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; chil
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
+          <QuickCreate hasPermission={hasPermission} />
           {sections.map((section) => (
             <SidebarGroup key={section.title}>
               <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
@@ -99,12 +181,13 @@ export function AppShell({ sidebarOpen, children }: { sidebarOpen: boolean; chil
       <SidebarInset className="min-w-0 overflow-x-clip peer-data-[variant=inset]:border">
         <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-t-[inherit] border-b bg-background/50 backdrop-blur-md">
           <div className="flex w-full items-center justify-between px-4 lg:px-6">
-            <div className="flex items-center gap-1 lg:gap-2">
+            <div className="flex min-w-0 items-center gap-1 lg:gap-2">
               <SidebarTrigger className="-ml-1" />
               <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center" />
-              <SearchDialog />
+              <Trail pathname={pathname} hasPermission={hasPermission} />
             </div>
             <div className="flex items-center gap-2">
+              <SearchDialog />
               <ThemeSwitcher />
               <AiPanelTrigger />
             </div>
