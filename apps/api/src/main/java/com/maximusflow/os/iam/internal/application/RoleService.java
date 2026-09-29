@@ -19,6 +19,9 @@ import com.maximusflow.os.iam.internal.persistence.UserRepository;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,11 +52,24 @@ public class RoleService {
 	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
 	@Transactional(readOnly = true)
 	public List<RoleSummary> list() {
-		Map<UUID, Long> members = this.roles.countMembers().stream()
-			.collect(Collectors.toMap(RoleRepository.RoleMembership::getRoleId, RoleRepository.RoleMembership::getUsers));
+		Map<UUID, Long> members = members();
 		return this.roles.findAllByOrderByNameAsc().stream()
 			.map((role) -> RoleSummary.of(role, members.getOrDefault(role.getId(), 0L)))
 			.toList();
+	}
+
+	/** Sortable fields of the roles listing (API name to entity property). */
+	public static final Map<String, String> SORTABLE = Map.of("name", "name");
+
+	public static final Sort DEFAULT_SORT = Sort.by("name");
+
+	/** One page of the roles listing, with how many people hold each role. */
+	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
+	@Transactional(readOnly = true)
+	public Page<RoleSummary> search(RoleQuery query, Pageable pageable) {
+		Map<UUID, Long> members = members();
+		return this.roles.findAll(query.toSpecification(), pageable)
+			.map((role) -> RoleSummary.of(role, members.getOrDefault(role.getId(), 0L)));
 	}
 
 	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
@@ -126,10 +142,13 @@ public class RoleService {
 
 
 	private RoleSummary summary(Role role) {
-		return RoleSummary.of(role, this.roles.countMembers().stream()
-			.filter((m) -> m.getRoleId().equals(role.getId()))
-			.mapToLong(RoleRepository.RoleMembership::getUsers)
-			.sum());
+		return RoleSummary.of(role, members().getOrDefault(role.getId(), 0L));
+	}
+
+	private Map<UUID, Long> members() {
+		return this.roles.countMembers()
+			.stream()
+			.collect(Collectors.toMap(RoleRepository.RoleMembership::getRoleId, RoleRepository.RoleMembership::getUsers));
 	}
 
 }

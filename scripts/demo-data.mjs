@@ -89,6 +89,17 @@ class Session {
   }
 }
 
+/** Every item of a paginated listing (the API answers {content, page}). */
+async function listAll(session, path) {
+  const items = [];
+  for (let page = 0; ; page++) {
+    const separator = path.includes("?") ? "&" : "?";
+    const result = await expect(session.request("GET", `${path}${separator}page=${page}&size=100`), path);
+    items.push(...result.content);
+    if (page + 1 >= result.page.totalPages) return items;
+  }
+}
+
 async function expect(promise, what) {
   const { status, data } = await promise;
   if (status >= 400) throw new Error(`${what}: ${status} ${data?.title ?? ""} ${data?.detail ?? ""}`.trim());
@@ -212,7 +223,7 @@ async function main() {
   // Roles
   const catalog = await expect(admin.request("GET", "/api/iam/permissions"), "Catálogo");
   const allowed = catalog.filter((p) => !p.reserved).map((p) => p.key);
-  const existingRoles = await expect(admin.request("GET", "/api/iam/roles"), "Roles");
+  const existingRoles = await listAll(admin, "/api/iam/roles");
   const roleIds = {};
   for (const [key, role] of Object.entries(ROLES)) {
     const found = existingRoles.find((r) => r.name === role.name);
@@ -233,7 +244,7 @@ async function main() {
   }
 
   // People: most accept the invitation and sign in once; a few stay invited; two are disabled.
-  const existingUsers = await expect(admin.request("GET", "/api/iam/users"), "Usuários");
+  const existingUsers = await listAll(admin, "/api/iam/users");
   const people = [];
   let linkless = 0;
   for (const [index, [name, area]] of PEOPLE.entries()) {
@@ -277,7 +288,7 @@ async function main() {
   }
 
   // Tasks, assigned to people of the matching area (or to the administrator).
-  const existingTasks = await expect(admin.request("GET", "/api/tasks"), "Tarefas");
+  const existingTasks = await listAll(admin, "/api/tasks");
   const titles = new Set(existingTasks.map((t) => t.title));
   let createdTasks = 0;
   for (const [index, [title, description, area, due]] of TASKS.entries()) {

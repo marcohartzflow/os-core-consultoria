@@ -1,10 +1,11 @@
 package com.maximusflow.os.iam.internal.web;
 
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import com.maximusflow.os.common.paging.PageQuery;
 import com.maximusflow.os.iam.internal.application.AdministratorStatus;
+import com.maximusflow.os.iam.internal.application.UserQuery;
 import com.maximusflow.os.iam.internal.application.UserService;
 import com.maximusflow.os.iam.internal.application.UserSummary;
 
@@ -15,6 +16,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -52,8 +55,14 @@ class UserController {
 	}
 
 	@GetMapping
-	List<UserSummary> list() {
-		return this.service.list();
+	PagedModel<UserSummary> search(@RequestParam(required = false) @Size(max = 200) @Nullable String q,
+			@RequestParam(required = false) @Size(max = 5) @Nullable Set<UserQuery.State> state,
+			@RequestParam(required = false) @Size(max = 50) @Nullable Set<UUID> roleId,
+			@RequestParam(required = false) @Nullable Boolean mfa, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) int size,
+			@RequestParam(required = false) @Size(max = 40) @Nullable String sort) {
+		return new PagedModel<>(this.service.search(new UserQuery(q, orEmpty(state), orEmpty(roleId), mfa),
+				PageQuery.of(page, size, sort, UserService.SORTABLE, UserService.DEFAULT_SORT)));
 	}
 
 	@GetMapping("/{id}")
@@ -104,7 +113,7 @@ class UserController {
 		return this.service.anonymize(id);
 	}
 
-	private static Set<UUID> orEmpty(@Nullable Set<UUID> ids) {
+	private static <T> Set<T> orEmpty(@Nullable Set<T> ids) {
 		return (ids != null) ? ids : Set.of();
 	}
 

@@ -3,10 +3,11 @@ package com.maximusflow.os.common.audit;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 import jakarta.persistence.criteria.Predicate;
+
+import com.maximusflow.os.common.paging.PageQuery;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.data.jpa.domain.Specification;
@@ -25,10 +26,10 @@ public record AuditFilter(@Nullable String actorEmail, @Nullable String action, 
 			List<Predicate> predicates = new ArrayList<>();
 			if (StringUtils.hasText(this.actorEmail)) {
 				predicates.add(cb.like(cb.lower(root.get("actorEmail")),
-						"%" + literal(this.actorEmail.strip().toLowerCase(Locale.ROOT)) + "%", ESCAPE));
+						PageQuery.contains(this.actorEmail), PageQuery.LIKE_ESCAPE));
 			}
 			if (StringUtils.hasText(this.action)) {
-				predicates.add(cb.like(root.get("action"), literal(this.action.strip()) + "%", ESCAPE));
+				predicates.add(cb.like(root.get("action"), PageQuery.startsWith(this.action), PageQuery.LIKE_ESCAPE));
 			}
 			if (StringUtils.hasText(this.entityType)) {
 				predicates.add(cb.equal(root.get("entityType"), this.entityType.strip()));
@@ -50,14 +51,6 @@ public record AuditFilter(@Nullable String actorEmail, @Nullable String action, 
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};
-	}
-
-
-	private static final char ESCAPE = '\\';
-
-	/** The typed text is matched as is: % and _ are not wildcards for the person searching. */
-	static String literal(String text) {
-		return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
 }

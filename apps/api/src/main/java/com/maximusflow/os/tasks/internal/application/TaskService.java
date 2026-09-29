@@ -26,6 +26,9 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,6 +82,22 @@ public class TaskService {
 		}
 		Map<UUID, Optional<TaskSummary.Assignee>> names = new HashMap<>();
 		return found.stream().map((task) -> summary(task, names)).toList();
+	}
+
+	/** Sortable fields of the tasks listing (API name to entity property). */
+	public static final Map<String, String> SORTABLE = Map.of("title", "title", "dueDate", "dueDate", "status",
+			"status", "updatedAt", "updatedAt", "createdAt", "createdAt");
+
+	/** Open tasks first (OPEN sorts after DONE as text), then by due date with undated ones last. */
+	public static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("status"), Sort.Order.asc("dueDate").nullsLast(),
+			Sort.Order.asc("createdAt"));
+
+	/** One page of the tasks listing, filtered and sorted in the database. */
+	@RequiresPermission(value = "tasks.task.read", description = "Ver tarefas")
+	@Transactional(readOnly = true)
+	public Page<TaskSummary> search(TaskQuery query, Pageable pageable) {
+		Map<UUID, Optional<TaskSummary.Assignee>> names = new HashMap<>();
+		return this.tasks.findAll(query.toSpecification(), pageable).map((task) -> summary(task, names));
 	}
 
 	@Tool(name = "tasks_get", description = "Detalha uma tarefa pelo id.")

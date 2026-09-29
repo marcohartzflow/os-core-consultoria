@@ -48,7 +48,7 @@ class AuditTrailTests {
 
 		this.mvc.perform(get("/api/audit/events").cookie(session).param("action", "auth.login.success").param("actorEmail", "ADMIN@example").param("page", "0"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.page.size").value(50))
+			.andExpect(jsonPath("$.page.size").value(20))
 			.andExpect(jsonPath("$.content[0].action").value("auth.login.success"))
 			.andExpect(jsonPath("$.content[0].actorEmail").value("admin@example.com"))
 			.andExpect(jsonPath("$.content[0].origin").value("REST"));
@@ -128,10 +128,10 @@ class AuditTrailTests {
 
 		this.mvc.perform(get("/api/iam/users").cookie(session))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.email == 'admin@example.com')].mfaEnabled").value(false));
+			.andExpect(jsonPath("$.content[?(@.email == 'admin@example.com')].mfaEnabled").value(false));
 		this.mvc.perform(get("/api/iam/roles").cookie(session))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.system == true)].userCount").value(org.hamcrest.Matchers.everyItem(
+			.andExpect(jsonPath("$.content[?(@.system == true)].userCount").value(org.hamcrest.Matchers.everyItem(
 					org.hamcrest.Matchers.greaterThanOrEqualTo(1))));
 	}
 

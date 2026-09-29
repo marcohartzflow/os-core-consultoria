@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.maximusflow.os.common.error.DomainRuleException;
+import com.maximusflow.os.common.paging.PageQuery;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.Max;
@@ -40,9 +41,12 @@ class AuditController {
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) @Nullable Instant to,
 			@RequestParam(required = false) @Size(max = 3) @Nullable Set<AuditOrigin> origin,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String correlationId,
-			@RequestParam(defaultValue = "0") @Min(0) @Max(10_000) int page) {
+			@RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) int size,
+			@RequestParam(required = false) @Size(max = 40) @Nullable String sort) {
 		return new PagedModel<>(this.service.search(
-				new AuditFilter(actorEmail, action, entityType, entityId, from, to, origin, correlationId), page));
+				new AuditFilter(actorEmail, action, entityType, entityId, from, to, origin, correlationId),
+				PageQuery.of(page, size, sort, AuditQueryService.SORTABLE, AuditQueryService.DEFAULT_SORT)));
 	}
 
 	/**

@@ -418,6 +418,48 @@
         },
         "type" : "object"
       },
+      "PagedModelRoleSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RoleSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
+      "PagedModelTaskSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TaskSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
+      "PagedModelUserSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/UserSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
       "PendingActionView" : {
         "properties" : {
           "arguments" : {
@@ -1036,7 +1078,7 @@
     },
     "/api/audit/events" : {
       "get" : {
-        "operationId" : "search",
+        "operationId" : "search_3",
         "parameters" : [ {
           "in" : "query",
           "name" : "actorEmail",
@@ -1119,9 +1161,25 @@
           "schema" : {
             "default" : 0,
             "format" : "int32",
-            "maximum" : 10000,
-            "minimum" : 0,
             "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
           }
         } ],
         "responses" : {
@@ -1359,7 +1417,7 @@
     },
     "/api/iam/permissions" : {
       "get" : {
-        "operationId" : "list_3",
+        "operationId" : "list",
         "responses" : {
           "200" : {
             "content" : {
@@ -1380,16 +1438,57 @@
     },
     "/api/iam/roles" : {
       "get" : {
-        "operationId" : "list_2",
+        "operationId" : "search_2",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "system",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "items" : {
-                    "$ref" : "#/components/schemas/RoleSummary"
-                  },
-                  "type" : "array"
+                  "$ref" : "#/components/schemas/PagedModelRoleSummary"
                 }
               }
             },
@@ -1507,16 +1606,85 @@
     },
     "/api/iam/users" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "search_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "state",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "ACTIVE", "INVITED", "LOCKED", "DISABLED", "ANONYMIZED" ],
+              "type" : "string"
+            },
+            "maxItems" : 5,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "roleId",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 50,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "mfa",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "items" : {
-                    "$ref" : "#/components/schemas/UserSummary"
-                  },
-                  "type" : "array"
+                  "$ref" : "#/components/schemas/PagedModelUserSummary"
                 }
               }
             },
@@ -2011,21 +2179,85 @@
     },
     "/api/tasks" : {
       "get" : {
-        "operationId" : "list",
+        "operationId" : "search",
         "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
           "in" : "query",
           "name" : "status",
           "required" : false,
           "schema" : {
-            "enum" : [ "OPEN", "DONE" ],
-            "type" : "string"
+            "items" : {
+              "enum" : [ "OPEN", "DONE" ],
+              "type" : "string"
+            },
+            "maxItems" : 2,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
           }
         }, {
           "in" : "query",
           "name" : "assigneeId",
           "required" : false,
           "schema" : {
-            "format" : "uuid",
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 50,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "unassigned",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "dueBefore",
+          "required" : false,
+          "schema" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
             "type" : "string"
           }
         } ],
@@ -2034,10 +2266,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "items" : {
-                    "$ref" : "#/components/schemas/TaskSummary"
-                  },
-                  "type" : "array"
+                  "$ref" : "#/components/schemas/PagedModelTaskSummary"
                 }
               }
             },

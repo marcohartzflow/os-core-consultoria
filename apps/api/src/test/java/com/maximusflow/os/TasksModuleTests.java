@@ -96,8 +96,8 @@ class TasksModuleTests {
 		// Both land in the same list, visible over REST with the same shape.
 		this.mvc.perform(get("/api/tasks").cookie(admin.cookie()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + restId + "')].title").value("Fechar folha de setembro"))
-			.andExpect(jsonPath("$[?(@.id == '" + toolId + "')].assignee.name").value("Admin"));
+			.andExpect(jsonPath("$.content[?(@.id == '" + restId + "')].title").value("Fechar folha de setembro"))
+			.andExpect(jsonPath("$.content[?(@.id == '" + toolId + "')].assignee.name").value("Admin"));
 
 		// The tool refuses an assignee that does not exist; the rule lives in the use case.
 		// (MockMvc clears the thread's SecurityContext after each request, so act again.)

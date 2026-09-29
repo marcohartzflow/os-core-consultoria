@@ -139,7 +139,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["search"];
+        get: operations["search_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -267,7 +267,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -283,7 +283,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_2"];
+        get: operations["search_2"];
         put?: never;
         post: operations["create_1"];
         delete?: never;
@@ -315,7 +315,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["search_1"];
         put?: never;
         post: operations["invite"];
         delete?: never;
@@ -619,7 +619,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["search"];
         put?: never;
         post: operations["create"];
         delete?: never;
@@ -820,6 +820,18 @@ export interface components {
             content?: components["schemas"]["AuditEventView"][];
             page?: components["schemas"]["PageMetadata"];
         };
+        PagedModelRoleSummary: {
+            content?: components["schemas"]["RoleSummary"][];
+            page?: components["schemas"]["PageMetadata"];
+        };
+        PagedModelTaskSummary: {
+            content?: components["schemas"]["TaskSummary"][];
+            page?: components["schemas"]["PageMetadata"];
+        };
+        PagedModelUserSummary: {
+            content?: components["schemas"]["UserSummary"][];
+            page?: components["schemas"]["PageMetadata"];
+        };
         PendingActionView: {
             arguments: string;
             /** Format: uuid */
@@ -965,6 +977,9 @@ export type MfaRequest = components['schemas']['MfaRequest'];
 export type MfaStatus = components['schemas']['MfaStatus'];
 export type PageMetadata = components['schemas']['PageMetadata'];
 export type PagedModelAuditEventView = components['schemas']['PagedModelAuditEventView'];
+export type PagedModelRoleSummary = components['schemas']['PagedModelRoleSummary'];
+export type PagedModelTaskSummary = components['schemas']['PagedModelTaskSummary'];
+export type PagedModelUserSummary = components['schemas']['PagedModelUserSummary'];
 export type PendingActionView = components['schemas']['PendingActionView'];
 export type PermissionDefinition = components['schemas']['PermissionDefinition'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
@@ -1203,7 +1218,7 @@ export interface operations {
             };
         };
     };
-    search: {
+    search_3: {
         parameters: {
             query?: {
                 actorEmail?: string;
@@ -1215,6 +1230,8 @@ export interface operations {
                 origin?: ("REST" | "AI_TOOL" | "SYSTEM")[];
                 correlationId?: string;
                 page?: number;
+                size?: number;
+                sort?: string;
             };
             header?: never;
             path?: never;
@@ -1392,7 +1409,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list: {
         parameters: {
             query?: never;
             header?: never;
@@ -1412,9 +1429,15 @@ export interface operations {
             };
         };
     };
-    list_2: {
+    search_2: {
         parameters: {
-            query?: never;
+            query?: {
+                q?: string;
+                system?: boolean;
+                page?: number;
+                size?: number;
+                sort?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1427,7 +1450,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["RoleSummary"][];
+                    "*/*": components["schemas"]["PagedModelRoleSummary"];
                 };
             };
         };
@@ -1524,9 +1547,17 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    search_1: {
         parameters: {
-            query?: never;
+            query?: {
+                q?: string;
+                state?: ("ACTIVE" | "INVITED" | "LOCKED" | "DISABLED" | "ANONYMIZED")[];
+                roleId?: string[];
+                mfa?: boolean;
+                page?: number;
+                size?: number;
+                sort?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1539,7 +1570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["UserSummary"][];
+                    "*/*": components["schemas"]["PagedModelUserSummary"];
                 };
             };
         };
@@ -1998,11 +2029,17 @@ export interface operations {
             };
         };
     };
-    list: {
+    search: {
         parameters: {
             query?: {
-                status?: "OPEN" | "DONE";
-                assigneeId?: string;
+                q?: string;
+                status?: ("OPEN" | "DONE")[];
+                assigneeId?: string[];
+                unassigned?: boolean;
+                dueBefore?: string;
+                page?: number;
+                size?: number;
+                sort?: string;
             };
             header?: never;
             path?: never;
@@ -2016,7 +2053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["TaskSummary"][];
+                    "*/*": components["schemas"]["PagedModelTaskSummary"];
                 };
             };
         };

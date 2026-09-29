@@ -1,6 +1,7 @@
 package com.maximusflow.os.iam.internal.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,11 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,6 +112,23 @@ public class UserService {
 		return this.users.findAllByOrderByNameAsc(Limit.of(MAX_LIST)).stream()
 			.map((u) -> UserSummary.of(u, this.clock.instant(), withMfa.contains(u.getId())))
 			.toList();
+	}
+
+	/** Sortable fields of the users listing (API name to entity property). */
+	public static final Map<String, String> SORTABLE = Map.of("name", "name", "email", "email", "status", "status",
+			"lastLoginAt", "lastLoginAt", "createdAt", "createdAt");
+
+	public static final Sort DEFAULT_SORT = Sort.by("name");
+
+	/** One page of the users listing, filtered and sorted in the database. */
+	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
+	@Transactional(readOnly = true)
+	public Page<UserSummary> search(UserQuery query, Pageable pageable) {
+		Instant now = this.clock.instant();
+		Page<User> page = this.users.findAll(query.toSpecification(now), pageable);
+		Set<UUID> withMfa = page.isEmpty() ? Set.of()
+				: this.mfa.findUserIdsWithMfaEnabled(page.map(User::getId).getContent());
+		return page.map((u) -> UserSummary.of(u, now, withMfa.contains(u.getId())));
 	}
 
 	@Tool(name = "iam_get_user", description = "Detalha um usuário do portal pelo id.")

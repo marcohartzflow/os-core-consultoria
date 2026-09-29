@@ -1,5 +1,6 @@
 package com.maximusflow.os.iam.internal.persistence;
 
+import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
 
@@ -17,6 +18,9 @@ public interface UserMfaRepository extends JpaRepository<UserMfa, UUID> {
 	/** Users with a confirmed second factor; the user list shows it without one query per row. */
 	@Query("select m.userId from UserMfa m where m.enabledAt is not null")
 	Set<UUID> findUserIdsWithMfaEnabled();
+
+	@Query("select m.userId from UserMfa m where m.enabledAt is not null and m.userId in :ids")
+	Set<UUID> findUserIdsWithMfaEnabled(@Param("ids") Collection<UUID> ids);
 
 	/**
 	 * Records the TOTP step that was just accepted, only if it is newer than the last one: two

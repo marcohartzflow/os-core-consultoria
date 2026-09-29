@@ -20,6 +20,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,10 +80,14 @@ public class AuditQueryService {
 	}
 
 	@RequiresPermission(value = "audit.event.read", description = "Ver a trilha de auditoria")
-	public Page<AuditEventView> search(AuditFilter filter, int page) {
-		return this.repository.findAll(filter.toSpecification(), PageRequest.of(page, PAGE_SIZE, NEWEST_FIRST))
-			.map(AuditEventView::of);
+	public Page<AuditEventView> search(AuditFilter filter, Pageable pageable) {
+		return this.repository.findAll(filter.toSpecification(), pageable).map(AuditEventView::of);
 	}
+
+	/** Sortable fields of the listing; newest first by default. */
+	static final Map<String, String> SORTABLE = Map.of("occurredAt", "occurredAt", "action", "action");
+
+	static final Sort DEFAULT_SORT = NEWEST_FIRST;
 
 	@Tool(name = "audit_search",
 			description = "Consulta a trilha de auditoria: quem fez o quê e quando. Devolve as 50 entradas mais "
@@ -96,7 +101,9 @@ public class AuditQueryService {
 			@ToolParam(required = false, description = "Id da entidade") @Nullable String entityId,
 			@ToolParam(required = false, description = "Início (ISO-8601, ex.: 2026-09-01T00:00:00Z)") @Nullable Instant from,
 			@ToolParam(required = false, description = "Fim exclusivo (ISO-8601)") @Nullable Instant to) {
-		return search(new AuditFilter(actorEmail, action, entityType, entityId, from, to, null, null), 0).getContent();
+		return search(new AuditFilter(actorEmail, action, entityType, entityId, from, to, null, null),
+				PageRequest.of(0, PAGE_SIZE, NEWEST_FIRST))
+			.getContent();
 	}
 
 	/** Writes up to {@value EXPORT_LIMIT} matching entries as CSV (RFC 4180), newest first. */
