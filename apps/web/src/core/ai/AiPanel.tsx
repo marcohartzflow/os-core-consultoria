@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -46,6 +47,9 @@ function internalPath(path: unknown): string | null {
     ? path
     : null;
 }
+
+/** Radix Select reserves the empty string, so the "no conversation yet" choice needs its own value. */
+const NEW_CONVERSATION = "new";
 
 function AiPanel() {
   const router = useRouter();
@@ -230,23 +234,26 @@ function AiPanel() {
         </SheetTitle>
         <SheetDescription>Opera o portal com as suas permissões. Ações sensíveis pedem confirmação.</SheetDescription>
         <div className="flex items-center gap-2 pt-1">
-          <select
-            className="h-8 flex-1 rounded-md border bg-background px-2 text-sm"
-            value={activeId ?? ""}
-            onChange={(e) => {
+          <Select
+            value={activeId ?? NEW_CONVERSATION}
+            onValueChange={(value) => {
               setLines([]);
               setPending([]);
-              setActiveId(e.target.value || null);
+              setActiveId(value === NEW_CONVERSATION ? null : value);
             }}
-            aria-label="Conversa"
           >
-            {conversations.length === 0 && <option value="">Nova conversa</option>}
-            {conversations.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title || "Sem título"}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="flex-1" size="sm" aria-label="Conversa">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NEW_CONVERSATION}>Nova conversa</SelectItem>
+              {conversations.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.title || "Sem título"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="icon-sm" aria-label="Nova conversa" onClick={() => void newConversation()}>
             <Plus />
           </Button>

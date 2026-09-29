@@ -16,13 +16,13 @@ const PUBLIC_PREFIXES = ["/login", "/invite", "/password-reset"];
  *    Pages must render dynamically for the nonce to apply (see `dynamic` in app/layout.tsx).
  */
 export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   const hasSession = request.cookies.has(SESSION_COOKIE);
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (!isPublic && !hasSession) {
     const login = new URL("/login", request.url);
-    if (pathname !== "/") login.searchParams.set("next", pathname);
+    if (pathname !== "/") login.searchParams.set("next", pathname + search);
     return NextResponse.redirect(login);
   }
   if (pathname === "/login" && hasSession) {
@@ -62,7 +62,7 @@ export const config = {
   matcher: [
     {
       // Everything except the API proxy, Next internals and static assets; skip prefetches.
-      source: "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+      source: "/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

@@ -159,14 +159,26 @@ export default function AuditPage() {
             </TableHeader>
             <TableBody>
               {result.content.map((event) => (
-                <TableRow key={event.id} className="cursor-pointer" onClick={() => setOpen(open === event.id ? null : event.id)}>
+                <TableRow key={event.id}>
                   <TableCell className="whitespace-nowrap">{formatDateTime(event.occurredAt)}</TableCell>
                   <TableCell>{event.actorEmail ?? <span className="text-muted-foreground">sistema</span>}</TableCell>
                   <TableCell>
                     <Badge variant={event.origin === "AI_TOOL" ? "default" : "outline"}>{event.origin}</Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {event.action}
+                    {event.details ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-1 py-0 font-mono text-xs"
+                        aria-expanded={open === event.id}
+                        onClick={() => setOpen(open === event.id ? null : event.id)}
+                      >
+                        {event.action}
+                      </Button>
+                    ) : (
+                      event.action
+                    )}
                     {open === event.id && event.details && (
                       <pre className="mt-2 max-w-xl overflow-x-auto rounded-md bg-muted p-2 text-xs whitespace-pre-wrap">
                         {JSON.stringify(event.details, null, 2)}
