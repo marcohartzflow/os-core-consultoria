@@ -1,8 +1,13 @@
 package com.maximusflow.os;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
@@ -13,6 +18,7 @@ import com.maximusflow.os.ai.internal.tools.ToolRegistry;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.AccountSnapshot;
 import com.maximusflow.os.iam.UserDirectory;
+import com.maximusflow.os.tasks.internal.application.TaskService;
 
 import jakarta.servlet.http.Cookie;
 
@@ -62,6 +68,9 @@ class AiToolsTests {
 
 	@Autowired
 	UserDirectory userDirectory;
+
+	@Autowired
+	TaskService tasks;
 
 	@AfterEach
 	void clearContext() {
@@ -113,6 +122,43 @@ class AiToolsTests {
 		UUID again = stub2(disable, conversationId).apply("{\"id\":\"" + UUID.randomUUID() + "\"}");
 		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(again))
 			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		assertThat(this.pendingActions.open(conversationId)).isEmpty();
+	}
+
+	@Test
+	void confirmationRunsTheToolExactlyOnceEvenWhenConfirmedConcurrently() throws Exception {
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("teste").id();
+		UUID taskId = this.tasks.create("Excluir uma vez", null, null, null).id();
+		RegisteredTool delete = this.registry.find("tasks_delete").orElseThrow();
+		UUID actionId = stub2(delete, conversationId).apply("{\"id\":\"" + taskId + "\"}");
+
+		SecurityContext context = SecurityContextHolder.getContext();
+		CountDownLatch start = new CountDownLatch(1);
+		Callable<String> confirm = () -> {
+			SecurityContextHolder.setContext(context);
+			start.await();
+			try {
+				return this.pendingActions.confirm(actionId).status().name();
+			}
+			catch (com.maximusflow.os.common.error.DomainRuleException ex) {
+				return "REFUSED";
+			}
+			finally {
+				SecurityContextHolder.clearContext();
+			}
+		};
+		try (var pool = Executors.newFixedThreadPool(2)) {
+			List<Future<String>> futures = List.of(pool.submit(confirm), pool.submit(confirm));
+			start.countDown();
+			List<String> outcomes = List.of(futures.get(0).get(), futures.get(1).get());
+			assertThat(outcomes).containsExactlyInAnyOrder("CONFIRMED", "REFUSED");
+		}
+		// Executed once: the task is gone, and a third confirmation is refused, not re-run as a 404.
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.tasks.get(taskId))
+			.isInstanceOf(com.maximusflow.os.common.error.NotFoundException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.pendingActions.confirm(actionId))
+			.isInstanceOf(com.maximusflow.os.common.error.DomainRuleException.class);
 		assertThat(this.pendingActions.open(conversationId)).isEmpty();
 	}
 

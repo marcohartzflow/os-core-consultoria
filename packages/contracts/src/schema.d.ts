@@ -758,7 +758,7 @@ export interface components {
             id: string;
             result: string | null;
             /** @enum {string} */
-            status: "PENDING" | "CONFIRMED" | "REJECTED" | "EXPIRED" | "FAILED";
+            status: "PENDING" | "EXECUTING" | "CONFIRMED" | "REJECTED" | "EXPIRED" | "FAILED";
             summary: string;
             tool: string;
         };

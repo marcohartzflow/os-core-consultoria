@@ -372,7 +372,7 @@
             "type" : [ "string", "null" ]
           },
           "status" : {
-            "enum" : [ "PENDING", "CONFIRMED", "REJECTED", "EXPIRED", "FAILED" ],
+            "enum" : [ "PENDING", "EXECUTING", "CONFIRMED", "REJECTED", "EXPIRED", "FAILED" ],
             "type" : "string"
           },
           "summary" : {

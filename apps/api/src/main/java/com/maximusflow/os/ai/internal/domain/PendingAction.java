@@ -24,7 +24,10 @@ public class PendingAction {
 
 	public enum Status {
 
-		PENDING, CONFIRMED, REJECTED, EXPIRED, FAILED
+		/** Waiting for the person. */
+		PENDING,
+		/** Claimed by a confirmation that is running; a crash mid-way leaves it here, never re-runnable. */
+		EXECUTING, CONFIRMED, REJECTED, EXPIRED, FAILED
 
 	}
 
