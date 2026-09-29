@@ -36,3 +36,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/web
+      - /deploy
+    schedule:
+      interval: weekly

@@ -1,6 +1,8 @@
 # Deploy de referência
 
-Um OS por cliente, em um único servidor, com Docker Compose. Tudo que a instalação precisa está em `deploy/`: `compose.yaml` (Postgres, API, web, Caddy), `Caddyfile` (TLS automático), `.env.example` (variáveis) e `backup.sh`.
+Um OS por cliente, em um único servidor, com Docker Compose. Tudo que a instalação precisa está em `deploy/`: `compose.yaml` (Postgres, API, web, Caddy), `Caddyfile` (TLS automático), `.env.example` (variáveis), `update.sh` e `backup.sh`.
+
+As imagens da API e do web são construídas no GitHub Actions do fork (`cd.yml`) e publicadas no GitHub Container Registry do fork com a tag do commit. O servidor nunca compila: ele só faz `pull` e reinicia. Isso mantém o servidor pequeno, torna cada deploy reproduzível e faz do rollback um comando.
 
 ## Requisitos do servidor
 
@@ -14,24 +16,35 @@ Um OS por cliente, em um único servidor, com Docker Compose. Tudo que a instala
 ```bash
 git clone <fork-do-cliente> /opt/os && cd /opt/os/deploy
 cp .env.example .env && chmod 600 .env
-# edite .env: OS_DOMAIN, POSTGRES_PASSWORD, ANTHROPIC_API_KEY, OS_BOOTSTRAP_* e, se houver, SMTP
-docker compose up -d --build
-docker compose logs -f api   # aguarde "Started OsApiApplication"
+# edite .env: OS_DOMAIN, POSTGRES_PASSWORD, ANTHROPIC_API_KEY, OS_MFA_ENCRYPTION_KEY, OS_BOOTSTRAP_*,
+# OS_IMAGE_REPOSITORY (ghcr.io/<owner-do-fork>) e, se houver, SMTP
+docker login ghcr.io          # token com escopo read:packages, só nesta primeira vez
+./update.sh <sha-do-commit>   # imagens publicadas pelo cd.yml; ou ./update.sh para compilar no servidor
+docker compose logs -f api    # aguarde "Started OsApiApplication"
 ```
 
 Entre em `https://<OS_DOMAIN>` com o e-mail e a senha de `OS_BOOTSTRAP_*`. O portal exige uma nova senha antes de liberar qualquer outra tela. Depois disso, remova as três variáveis `OS_BOOTSTRAP_*` do `.env` (só valem com a tabela de usuários vazia) e convide as demais pessoas em Administração > Usuários.
 
 ## Atualização (manutenção mensal)
 
+Com o workflow `cd.yml` configurado no fork, cada push na `main` constrói as imagens, publica no registry e, por SSH, roda `deploy/update.sh <sha>` no servidor (backup, pull, restart; Flyway aplica as migrações no boot da API). Configure no repositório do fork:
+
+- variáveis: `DEPLOY_HOST`, `DEPLOY_HOST_KEY` (saída de `ssh-keyscan -t ed25519 <host>`, uma linha: fixa a chave do servidor e impede um intermediário de receber a sessão SSH), `DEPLOY_USER` (padrão `deploy`), `DEPLOY_PATH` (padrão `/opt/os`);
+- secret: `DEPLOY_SSH_KEY` (chave privada de `DEPLOY_USER`, que precisa pertencer ao grupo `docker` e ter o fork clonado em `DEPLOY_PATH`).
+
+O login no registry durante o deploy usa o `GITHUB_TOKEN` do próprio workflow, passado pelo stdin da sessão SSH e descartado no fim (`docker logout`): nenhuma credencial de registry fica no servidor.
+
+À mão, o mesmo:
+
 ```bash
-cd /opt/os && git pull            # ou git merge upstream/main no fork
-deploy/update.sh                  # backup, rebuild, restart; Flyway aplica as migrações no boot da API
+cd /opt/os && git fetch && git checkout <sha>
+deploy/update.sh <sha>
 docker compose -f deploy/compose.yaml logs --tail 100 api
 ```
 
-Com o workflow `cd.yml` configurado no fork (variável `DEPLOY_HOST` e secret `DEPLOY_SSH_KEY`), o mesmo script roda sozinho a cada push na `main`. O usuário SSH precisa pertencer ao grupo `docker` e ter o repositório clonado em `DEPLOY_PATH`.
+A API reinicia em alguns segundos e o web espera o health check dela; a janela de indisponibilidade é essa. Não há compilação no servidor.
 
-Reverter: `git checkout <tag-anterior>` e `docker compose up -d --build`. Migrações do Flyway não desfazem sozinhas; se a versão anterior não conhece o schema novo, restaure o backup feito antes da atualização.
+Reverter: `deploy/update.sh $(cat deploy/.previous-tag)` (o script guarda a tag anterior) e `git checkout` do mesmo commit para manter `deploy/` coerente. Migrações do Flyway não desfazem sozinhas; se a versão anterior não conhece o schema novo, restaure o backup feito antes da atualização.
 
 ## Backup e restauração
 
@@ -68,6 +81,7 @@ browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Sprin
 | Variável | Obrigatória | Uso |
 |---|---|---|
 | `OS_DOMAIN` | sim | Domínio público; vira `OS_APP_BASE_URL=https://<domínio>` e o host do Caddy |
+| `OS_IMAGE_REPOSITORY`, `OS_IMAGE_TAG` | com `update.sh <tag>` | De onde vêm as imagens `os-api` e `os-web`; o `update.sh` grava a tag implantada |
 | `POSTGRES_PASSWORD` | sim | Senha do banco (gere com `openssl rand -base64 32`) |
 | `ANTHROPIC_API_KEY` | sim | Assistente |
 | `OS_MFA_ENCRYPTION_KEY` | sim | Cifra os segredos TOTP; gere uma vez (`openssl rand -base64 32`) e nunca troque, ou todos precisam reconfigurar o segundo fator |

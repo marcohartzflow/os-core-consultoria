@@ -27,4 +27,4 @@ Leia na ordem do seu papel. Cada documento é fonte de verdade para o seu assunt
 ## Fluxo de CI e CD
 
 - `ci.yml` roda em todo PR e push em `main` e `develop`: build e testes da API (Testcontainers), lint, tipos e build do web, build das duas imagens Docker.
-- `cd.yml` roda em push na `main` só quando a variável `DEPLOY_HOST` existe no repositório, ou seja, só em forks de cliente. Ele entra no servidor por SSH e executa `deploy/update.sh` (backup, rebuild, restart). O `os-core` não tem ambiente próprio: ele é a base, não um produto em produção.
+- `cd.yml` roda em push na `main` só quando a variável `DEPLOY_HOST` existe no repositório, ou seja, só em forks de cliente. Ele constrói as imagens, publica no GitHub Container Registry do fork com a tag do commit e, por SSH com host key fixada, executa `deploy/update.sh <sha>` no servidor (backup, pull, restart). O `os-core` não tem ambiente próprio: ele é a base, não um produto em produção.

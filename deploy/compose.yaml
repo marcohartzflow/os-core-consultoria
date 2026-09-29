@@ -1,5 +1,6 @@
 # Reference deployment of one OS instance on a single host: Postgres, API, web and Caddy (TLS).
-# Copy .env.example to .env, fill it in, then: docker compose up -d --build
+# Copy .env.example to .env, fill it in, then: deploy/update.sh <tag> (images from the registry)
+# or deploy/update.sh (build here). Image names come from OS_IMAGE_REPOSITORY and OS_IMAGE_TAG.
 name: os
 
 services:
@@ -19,6 +20,7 @@ services:
       retries: 6
 
   api:
+    image: ${OS_IMAGE_REPOSITORY:-os}/os-api:${OS_IMAGE_TAG:-latest}
     build:
       context: ../apps/api
     restart: unless-stopped
@@ -51,6 +53,7 @@ services:
       start_period: 60s
 
   web:
+    image: ${OS_IMAGE_REPOSITORY:-os}/os-web:${OS_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
