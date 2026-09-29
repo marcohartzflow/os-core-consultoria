@@ -1,3 +1,10 @@
+spring:
+  config:
+    # Secrets arrive as files (Compose secrets under /run/secrets), one per property, named after it:
+    # spring.datasource.password, spring.ai.anthropic.api-key, os.iam.mfa.encryption-key, ...
+    # https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.files.configtree
+    import: "optional:configtree:/run/secrets/"
+
 server:
   # TLS terminates at the client's reverse proxy. Tomcat's RemoteIpValve trusts X-Forwarded-* only
   # from internal (RFC 1918 / loopback) proxies, so a request that reaches Tomcat directly cannot

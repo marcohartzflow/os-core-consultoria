@@ -69,7 +69,7 @@ Toda tool call do agente de IA gera entrada na trilha, com sucesso ou erro (ver 
 
 - Criptografia em trânsito obrigatória (TLS 1.2+). Em repouso, disco criptografado no host e backup criptografado com `age` (`deploy/backup.sh`), chave privada fora do servidor.
 - Campos de alta sensibilidade (documento, dados bancários, saúde, o que o cliente classificar) recebem criptografia em nível de aplicação com AES-256-GCM via `AttributeConverter` do JPA. A chave vem de variável de ambiente ou cofre, nunca do banco nem do repositório. Rotação de chave prevista com id de chave gravado junto ao dado.
-- Segredos (`ANTHROPIC_API_KEY`, senha do banco, chave de criptografia) só por variável de ambiente. `.env`, `*.pem`, `*.key` e `application-local.yml` estão no `.gitignore`.
+- Segredos (chave da Anthropic, senha do banco, chave de MFA, senha do SMTP) nunca no repositório nem em variável de ambiente em produção: arquivos em `deploy/secrets/` montados como secrets do Compose e lidos pela API via config tree do Spring Boot. Em desenvolvimento, `application-local.yml`. `.env`, `*.pem`, `*.key` e `application-local.yml` estão no `.gitignore`.
 - Mínimo privilégio no banco: o deploy de referência usa um único role dono do schema, pois o Flyway roda no boot da API. Um fork que exija separação cria um role sem `CREATE` para a aplicação e roda as migrações com outro; a trilha de auditoria não depende disso (triggers).
 - Backups diários, testados, retidos conforme contrato; restauração documentada.
 

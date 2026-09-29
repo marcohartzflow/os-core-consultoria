@@ -17,8 +17,9 @@ As imagens da API e do web são construídas no GitHub Actions do fork (`cd.yml`
 ```bash
 git clone <fork-do-cliente> /opt/os && cd /opt/os/deploy
 cp .env.example .env && chmod 600 .env
-# edite .env: OS_DOMAIN, POSTGRES_PASSWORD, ANTHROPIC_API_KEY, OS_MFA_ENCRYPTION_KEY, OS_BOOTSTRAP_*,
-# OS_IMAGE_REPOSITORY (ghcr.io/<owner-do-fork>) e, se houver, SMTP
+# edite .env: OS_DOMAIN, OS_BOOTSTRAP_*, OS_IMAGE_REPOSITORY (ghcr.io/<owner-do-fork>), BACKUP_* e, se houver, SMTP
+./init-secrets.sh             # cria secrets/ com senha do banco e chave de MFA geradas; nunca sobrescreve
+printf '%s' 'sk-ant-...' > secrets/anthropic_api_key
 docker login ghcr.io          # token com escopo read:packages, só nesta primeira vez
 ./update.sh <sha-do-commit>   # imagens publicadas pelo cd.yml; ou ./update.sh para compilar no servidor
 docker compose logs -f api    # aguarde "Started OsApiApplication"
@@ -79,10 +80,21 @@ browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Sprin
 |---|---|---|
 | `OS_DOMAIN` | sim | Domínio público; vira `OS_APP_BASE_URL=https://<domínio>` e o host do Caddy |
 | `OS_IMAGE_REPOSITORY`, `OS_IMAGE_TAG` | com `update.sh <tag>` | De onde vêm as imagens `os-api` e `os-web`; o `update.sh` grava a tag implantada |
-| `POSTGRES_PASSWORD` | sim | Senha do banco (gere com `openssl rand -base64 32`) |
-| `ANTHROPIC_API_KEY` | sim | Assistente |
-| `OS_MFA_ENCRYPTION_KEY` | sim | Cifra os segredos TOTP; gere uma vez (`openssl rand -base64 32`) e nunca troque, ou todos precisam reconfigurar o segundo fator |
-| `OS_BOOTSTRAP_ADMIN_EMAIL`, `OS_BOOTSTRAP_ADMIN_PASSWORD`, `OS_BOOTSTRAP_ADMIN_NAME` | só na primeira subida | Primeiro administrador |
-| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `OS_MAIL_FROM`, `OS_MAIL_PORTAL_NAME` | não | E-mail de convite e reset; sem host, o link aparece para o administrador no portal |
+| `OS_BOOTSTRAP_ADMIN_EMAIL`, `OS_BOOTSTRAP_ADMIN_PASSWORD`, `OS_BOOTSTRAP_ADMIN_NAME` | só na primeira subida | Primeiro administrador; a senha precisa ser trocada no primeiro login. Remova as três depois |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `OS_MAIL_FROM`, `OS_MAIL_PORTAL_NAME` | não | E-mail de convite e reset; sem host (ou host vazio), o link aparece para o administrador no portal. Com host, `OS_MAIL_FROM` é obrigatório |
+| `BACKUP_AGE_RECIPIENT`, `BACKUP_KEEP_DAYS`, `BACKUP_UPLOAD_CMD` | recipient sim | Backup criptografado (seção acima) |
+
+### Segredos
+
+Segredos não ficam no `.env` nem em variáveis de ambiente: ficam em `deploy/secrets/` (fora do git e do contexto de build das imagens), são montados pelo Compose em `/run/secrets` e a API os lê como propriedades do Spring (config tree, `application-prod.yml`). Assim não aparecem em `docker inspect`, no ambiente do processo nem em relatórios de erro.
+
+| Arquivo em `deploy/secrets/` | Criado por `init-secrets.sh` | Uso |
+|---|---|---|
+| `db_password` | gerado | Senha do usuário `os` no Postgres; lida pelo Postgres na criação do banco e pela API |
+| `mfa_encryption_key` | gerado | Cifra os segredos TOTP. Nunca troque: todos precisariam reconfigurar o segundo fator. Guarde uma cópia com a chave privada do backup, pois o backup sem ela não restaura o MFA |
+| `anthropic_api_key` | vazio | Chave da Anthropic; preencha antes de subir |
+| `mail_password` | vazio | Senha do SMTP, se houver |
+
+O diretório fica com permissão `700` (só o dono lê no host); os arquivos com `644`, porque os containers rodam com usuários sem privilégio que não são donos deles. Trocar a senha do banco depois da criação exige `ALTER USER os PASSWORD` no Postgres e o mesmo valor em `db_password`.
 
 Qualquer propriedade do Spring pode ser sobrescrita por variável de ambiente (`spring.ai.anthropic.chat.model` vira `SPRING_AI_ANTHROPIC_CHAT_MODEL`), sem editar arquivos da imagem.

@@ -62,3 +62,4 @@ apps/api/build/spring-modulith-docs/
 # deploy
 deploy/backups/
 deploy/.previous-tag
+deploy/secrets/

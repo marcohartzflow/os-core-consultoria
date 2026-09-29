@@ -5,7 +5,7 @@ import com.maximusflow.os.common.logging.Sanitize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
@@ -17,7 +17,9 @@ import org.springframework.stereotype.Component;
  * render. Only the address is logged, never the link.
  */
 @Component
-@ConditionalOnProperty("spring.mail.host")
+// Not @ConditionalOnProperty: it treats an empty value as set, and deployments pass SPRING_MAIL_HOST=""
+// when there is no mail server. Without a real host the logging fallback must stay in charge.
+@ConditionalOnExpression("!'${spring.mail.host:}'.isBlank()")
 class MailAccountNotifier implements AccountNotifier {
 
 	private static final Logger log = LoggerFactory.getLogger(MailAccountNotifier.class);

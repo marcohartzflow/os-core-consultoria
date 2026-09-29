@@ -36,9 +36,14 @@ Revisão completa de 2026-09-29 (três frentes: auth/iam, agente de IA, web/depl
 - Verificação de senha vazada indisponível recusa a senha com mensagem clara (fail-closed); e-mail de reset sai fora da requisição.
 - `UiAction.Navigate` só aceita caminho absoluto simples; rate limiter por /64 em IPv6, poda limitada, sem perder hits.
 - Web reage a 401 e aos 403 de gate em qualquer chamada; tela de conta não dispara chamadas bloqueadas pelo gate.
+- Limite de sessões simultâneas não era aplicado (a sessão mais antiga só era marcada como expirada); agora a mais antiga recebe 401.
+- Com `SPRING_MAIL_HOST` vazio (caso do Compose sem SMTP) o notificador de e-mail era ativado sem servidor e os links de convite não chegavam a ninguém; agora vale o repasse ao administrador.
+- Editar ou excluir uma role exige ter todas as permissões dela. Cada tool call do assistente usa as permissões atuais da pessoa (revogação no meio do turno vale na próxima chamada). Hash bcrypt legado vira Argon2id no próximo login.
+- Imagens base fixadas por digest; segredos de produção como arquivos (Compose secrets + config tree), fora do ambiente.
 - CD com host key fixada, imagens construídas no CI e publicadas no registry (`update.sh <tag>`, rollback pela tag anterior); Compose sem capabilities, sem ganho de privilégio, read-only, limites de memória e processos; Caddy com limite de corpo; backup criptografado com `age` e `restore.sh`.
 
 ### Ação necessária no fork
 
 - Primeira versão; nada a migrar.
 - Deploy: defina `DEPLOY_HOST_KEY` e `OS_IMAGE_REPOSITORY`; gere um par de chaves `age` para o backup (`BACKUP_AGE_RECIPIENT`); em produção `OS_APP_BASE_URL` passa a ser obrigatório (o Compose já o define a partir de `OS_DOMAIN`).
+- Segredos saem do `.env`: rode `deploy/init-secrets.sh` e mova para `deploy/secrets/` os valores de `POSTGRES_PASSWORD` (`db_password`), `ANTHROPIC_API_KEY` (`anthropic_api_key`), `OS_MFA_ENCRYPTION_KEY` (`mfa_encryption_key`) e `SPRING_MAIL_PASSWORD` (`mail_password`), sobrescrevendo os gerados se a instância já existia.
