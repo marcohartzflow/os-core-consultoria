@@ -8,9 +8,10 @@ const PUBLIC_PREFIXES = ["/login", "/invite", "/password-reset"];
  * Two jobs on every page request:
  *
  * 1. Routing on cookie presence only. Authorization is enforced by the API on every call; this just
- *    avoids rendering the shell for someone without a session and the login page for someone who
- *    already has one. An expired cookie still reaches the shell, which then gets a 401 from
- *    /api/me and redirects to /login.
+ *    avoids rendering the shell for someone without a session. An expired cookie still reaches the
+ *    shell, which then gets a 401 from /api/me and redirects to /login. The login page is never
+ *    redirected on the cookie alone: an expired cookie would bounce between / and /login forever.
+ *    It asks /api/me itself and skips ahead only when the session is really alive.
  * 2. A per-request Content-Security-Policy with a nonce. Next.js reads the nonce from this header
  *    and stamps it on every script it emits, so no inline script without the nonce can run.
  *    Pages must render dynamically for the nonce to apply (see `dynamic` in app/layout.tsx).
@@ -24,9 +25,6 @@ export function proxy(request: NextRequest) {
     const login = new URL("/login", request.url);
     if (pathname !== "/") login.searchParams.set("next", pathname + search);
     return NextResponse.redirect(login);
-  }
-  if (pathname === "/login" && hasSession) {
-    return NextResponse.redirect(new URL("/", request.url));
   }
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");

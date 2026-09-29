@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
-import { api, errorMessage } from "@/core/api/client";
+import { Suspense, useEffect, useState } from "react";
+import { api, ApiError } from "@/core/api/client";
 import type { Me } from "@/core/api/types";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { AuthHeading } from "@/core/auth/AuthHeading";
+import { PasswordInput } from "@/core/auth/PasswordInput";
+import { fieldError, FormError } from "@/core/ui/feedback";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Only same-origin paths: rejects protocol-relative (`//evil`) and backslash tricks (open redirect). */
 function safeInternalPath(candidate: string | null): string {
@@ -24,8 +26,21 @@ function LoginForm() {
   const search = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+
+  // Someone with a live session who lands here (bookmark, back button) goes straight on. A dead
+  // cookie answers 401 and the form simply stays.
+  useEffect(() => {
+    let current = true;
+    api<Me>("/api/me").then(
+      () => current && router.replace(safeInternalPath(search.get("next"))),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [router, search]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -35,22 +50,25 @@ function LoginForm() {
       await api<Me>("/api/auth/login", { method: "POST", body: { email, password } });
       router.replace(safeInternalPath(search.get("next")));
     } catch (e) {
-      const message = errorMessage(e);
-      setError(message === "Autenticação necessária" ? "E-mail ou senha inválidos" : message);
+      // Never say which of the two was wrong (account enumeration).
+      setError(
+        e instanceof ApiError && e.status === 401
+          ? new ApiError(401, "Não foi possível entrar", "E-mail ou senha inválidos")
+          : e,
+      );
       setBusy(false);
     }
   }
+
+  const emailError = fieldError(error, "email");
+  const passwordError = fieldError(error, "password");
 
   return (
     <form onSubmit={submit}>
       <FieldGroup>
         <AuthHeading title="Entrar na sua conta" description="Informe seu e-mail e sua senha." />
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <Field>
+        <FormError error={error} />
+        <Field data-invalid={!!emailError}>
           <FieldLabel htmlFor="email">E-mail</FieldLabel>
           <Input
             id="email"
@@ -58,29 +76,36 @@ function LoginForm() {
             autoComplete="username"
             placeholder="voce@empresa.com"
             required
+            aria-invalid={!!emailError}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          {emailError && <FieldError>{emailError}</FieldError>}
         </Field>
-        <Field>
-          <FieldLabel htmlFor="password">Senha</FieldLabel>
-          <Input
+        <Field data-invalid={!!passwordError}>
+          <div className="flex items-center">
+            <FieldLabel htmlFor="password">Senha</FieldLabel>
+            <Link
+              href="/password-reset"
+              className="ml-auto text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Esqueci minha senha
+            </Link>
+          </div>
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             required
+            aria-invalid={!!passwordError}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          {passwordError && <FieldError>{passwordError}</FieldError>}
         </Field>
         <Button type="submit" className="w-full" disabled={busy}>
+          {busy && <Spinner data-icon="inline-start" />}
           {busy ? "Entrando…" : "Entrar"}
         </Button>
-        <div className="text-center text-xs">
-          <Link href="/password-reset" className="text-muted-foreground hover:underline">
-            Esqueci minha senha
-          </Link>
-        </div>
       </FieldGroup>
     </form>
   );
