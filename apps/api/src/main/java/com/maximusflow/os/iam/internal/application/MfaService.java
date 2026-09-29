@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -192,20 +193,33 @@ public class MfaService {
 		if (enrolment == null) {
 			return false;
 		}
+		// Failed codes count against the same per-account lockout as passwords, so guessing the
+		// second factor from many addresses or sessions locks the account instead of the session.
+		User user = load(userId);
+		Instant now = this.clock.instant();
+		if (user.isLocked(now)) {
+			return false;
+		}
 		long last = (enrolment.getLastUsedStep() != null) ? enrolment.getLastUsedStep() : Long.MIN_VALUE;
-		long step = Totp.matchingStep(secretOf(enrolment), normalized, this.clock.instant(), last);
+		long step = Totp.matchingStep(secretOf(enrolment), normalized, now, last);
 		if (step >= 0) {
 			enrolment.markUsed(step);
+			user.recordLoginSuccess(now);
 			return true;
 		}
 		MfaRecoveryCode recovery = this.recoveryCodes.findByUserIdAndCodeHash(userId, sha256(normalized)).orElse(null);
-		if (recovery != null && recovery.use(this.clock.instant())) {
+		if (recovery != null && recovery.use(now)) {
 			int left = this.recoveryCodes.countByUserIdAndUsedAtIsNull(userId);
-			this.audit.recordFor(userId, load(userId).getEmail(), "iam.mfa.recovery_code_used", "user", userId.toString(),
+			user.recordLoginSuccess(now);
+			this.audit.recordFor(userId, user.getEmail(), "iam.mfa.recovery_code_used", "user", userId.toString(),
 					Map.of("left", left));
 			security.warn("mfa recovery code used user={} left={}", userId, left);
 			return true;
 		}
+		var lockout = this.properties.lockout();
+		user.recordLoginFailure(now, lockout.maxAttempts(), lockout.duration());
+		this.audit.recordFor(userId, user.getEmail(), "iam.mfa.failed", "user", userId.toString(),
+				Map.of("locked", user.isLocked(now)));
 		return false;
 	}
 

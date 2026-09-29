@@ -25,6 +25,7 @@ import com.maximusflow.os.tasks.internal.persistence.TaskRepository;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class TaskService {
+
+	/** Bounds every listing, on REST and for the model: a turn never loads the whole table into the prompt. */
+	public static final int MAX_LIST = 200;
 
 	private final TaskRepository tasks;
 
@@ -52,25 +56,26 @@ public class TaskService {
 	}
 
 	@Tool(name = "tasks_list",
-			description = "Lista as tarefas da empresa com título, status (OPEN ou DONE), responsável e prazo. "
-					+ "Filtre por status e/ou por id do responsável quando o usuário pedir.")
+			description = "Lista as tarefas da empresa com título, status (OPEN ou DONE), responsável e prazo, "
+					+ "no máximo " + MAX_LIST + " por vez. Filtre por status e/ou por id do responsável quando o usuário pedir.")
 	@RequiresPermission(value = "tasks.task.read", description = "Ver tarefas")
 	@Transactional(readOnly = true)
 	public List<TaskSummary> list(
 			@ToolParam(required = false, description = "Filtra por status: OPEN ou DONE") @Nullable TaskStatus status,
 			@ToolParam(required = false, description = "Filtra por id (UUID) do responsável") @Nullable UUID assigneeId) {
+		Limit limit = Limit.of(MAX_LIST);
 		List<Task> found;
 		if (status != null && assigneeId != null) {
-			found = this.tasks.findAllByStatusAndAssigneeIdOrderByDueDateAscCreatedAtAsc(status, assigneeId);
+			found = this.tasks.findAllByStatusAndAssigneeIdOrderByDueDateAscCreatedAtAsc(status, assigneeId, limit);
 		}
 		else if (status != null) {
-			found = this.tasks.findAllByStatusOrderByDueDateAscCreatedAtAsc(status);
+			found = this.tasks.findAllByStatusOrderByDueDateAscCreatedAtAsc(status, limit);
 		}
 		else if (assigneeId != null) {
-			found = this.tasks.findAllByAssigneeIdOrderByStatusAscDueDateAscCreatedAtAsc(assigneeId);
+			found = this.tasks.findAllByAssigneeIdOrderByStatusAscDueDateAscCreatedAtAsc(assigneeId, limit);
 		}
 		else {
-			found = this.tasks.findAllByOrderByStatusAscDueDateAscCreatedAtAsc();
+			found = this.tasks.findAllByOrderByStatusAscDueDateAscCreatedAtAsc(limit);
 		}
 		Map<UUID, Optional<TaskSummary.Assignee>> names = new HashMap<>();
 		return found.stream().map((task) -> summary(task, names)).toList();

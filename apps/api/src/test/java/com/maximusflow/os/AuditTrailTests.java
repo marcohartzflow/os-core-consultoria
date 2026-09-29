@@ -8,11 +8,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -25,6 +27,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuditTrailTests {
+
+	@Autowired
+	JdbcTemplate jdbc;
+
+	@Test
+	void theTrailIsAppendOnlyAtTheDatabase() {
+		assertThatThrownBy(() -> this.jdbc.update("DELETE FROM audit_event")).hasStackTraceContaining("append-only");
+		assertThatThrownBy(() -> this.jdbc.update("UPDATE audit_event SET action = 'x'"))
+			.hasStackTraceContaining("append-only");
+		assertThatThrownBy(() -> this.jdbc.execute("TRUNCATE audit_event")).hasStackTraceContaining("append-only");
+	}
 
 	@Autowired
 	MockMvc mvc;

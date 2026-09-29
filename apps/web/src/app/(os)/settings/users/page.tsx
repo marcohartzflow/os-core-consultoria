@@ -165,21 +165,24 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
             <Alert>
               <AlertTitle>Convite criado para {result.user.email}</AlertTitle>
               <AlertDescription>
-                Se o envio de e-mail não estiver configurado, copie e entregue o link abaixo. Ele não será exibido
-                de novo.
+                {result.invitationLink
+                  ? "O envio de e-mail não está configurado: copie e entregue o link abaixo. Ele não será exibido de novo."
+                  : "O link foi enviado por e-mail para a pessoa convidada."}
               </AlertDescription>
             </Alert>
-            <div className="flex gap-2">
-              <Input readOnly value={result.invitationLink} className="font-mono text-xs" />
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Copiar link"
-                onClick={() => void navigator.clipboard.writeText(result.invitationLink)}
-              >
-                <Copy />
-              </Button>
-            </div>
+            {result.invitationLink && (
+              <div className="flex gap-2">
+                <Input readOnly value={result.invitationLink} className="font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Copiar link"
+                  onClick={() => void navigator.clipboard.writeText(result.invitationLink ?? "")}
+                >
+                  <Copy />
+                </Button>
+              </div>
+            )}
             <DialogFooter>
               <Button onClick={() => setOpen(false)}>Concluir</Button>
             </DialogFooter>

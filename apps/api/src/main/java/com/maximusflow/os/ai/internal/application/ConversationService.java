@@ -86,13 +86,19 @@ public class ConversationService {
 			.orElseThrow(() -> new NotFoundException("Conversa não encontrada"));
 	}
 
-	/** Public so the transactional proxy applies when the agent calls it outside a transaction. */
-	public void touch(Conversation conversation, String firstUserMessage) {
+	/**
+	 * Marks the owned conversation as used now and gives it a title from the first message. Loads
+	 * and changes the row inside this transaction: the agent runs outside one, and a detached entity
+	 * would never be written back.
+	 */
+	public Conversation touch(UUID conversationId, String firstUserMessage) {
+		Conversation conversation = requireOwned(conversationId);
 		conversation.touch(this.clock.instant());
 		if (conversation.getTitle().isBlank()) {
 			String title = firstUserMessage.strip();
 			conversation.retitle(title.length() > 80 ? title.substring(0, 77) + "…" : title);
 		}
+		return conversation;
 	}
 
 	/**

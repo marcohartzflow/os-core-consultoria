@@ -77,7 +77,7 @@ public class AccountRecoveryService {
 			throw new DomainRuleException("Link inválido ou expirado");
 		}
 		user.setPassword(this.passwordPolicy.validateAndHash(password));
-		this.events.publishEvent(new PasswordChanged(user.getId(), user.getEmail()));
+		this.events.publishEvent(new PasswordChanged(user.getId()));
 		this.audit.recordAnonymous("iam.password_reset.completed", user.getEmail(), "user", user.getId().toString(),
 				Map.of("via", "reset-link"));
 	}

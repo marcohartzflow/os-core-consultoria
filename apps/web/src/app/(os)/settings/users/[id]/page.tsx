@@ -102,19 +102,23 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       )}
       {invitation && (
         <Alert className="mb-4">
-          <AlertTitle>Novo link de convite gerado</AlertTitle>
+          <AlertTitle>Novo convite gerado</AlertTitle>
           <AlertDescription>
-            <div className="mt-2 flex gap-2">
-              <Input readOnly value={invitation.invitationLink} className="font-mono text-xs" />
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Copiar link"
-                onClick={() => void navigator.clipboard.writeText(invitation.invitationLink)}
-              >
-                <Copy />
-              </Button>
-            </div>
+            {invitation.invitationLink ? (
+              <div className="mt-2 flex gap-2">
+                <Input readOnly value={invitation.invitationLink} className="font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Copiar link"
+                  onClick={() => void navigator.clipboard.writeText(invitation.invitationLink ?? "")}
+                >
+                  <Copy />
+                </Button>
+              </div>
+            ) : (
+              "O link foi enviado por e-mail para a pessoa convidada."
+            )}
           </AlertDescription>
         </Alert>
       )}

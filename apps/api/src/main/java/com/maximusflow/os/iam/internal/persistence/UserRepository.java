@@ -9,6 +9,7 @@ import com.maximusflow.os.iam.internal.domain.Role;
 import com.maximusflow.os.iam.internal.domain.User;
 
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
@@ -20,7 +21,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 	Optional<User> findWithRolesById(UUID id);
 
 	@EntityGraph(attributePaths = "roles")
-	List<User> findAllByOrderByNameAsc();
+	List<User> findAllByOrderByNameAsc(Limit limit);
 
 	boolean existsByEmail(String email);
 

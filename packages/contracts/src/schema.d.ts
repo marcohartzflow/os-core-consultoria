@@ -692,7 +692,7 @@ export interface components {
             email: string;
         };
         InvitationIssued: {
-            invitationLink: string;
+            invitationLink: string | null;
             user: components["schemas"]["UserSummary"];
         };
         InviteUserRequest: {

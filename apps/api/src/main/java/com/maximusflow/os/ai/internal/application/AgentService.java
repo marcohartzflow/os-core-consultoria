@@ -7,9 +7,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.maximusflow.os.ai.internal.AiProperties;
-import com.maximusflow.os.ai.internal.domain.Conversation;
 import com.maximusflow.os.ai.internal.tools.AuditedToolCallback;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
 import com.maximusflow.os.ai.internal.tools.ContextPropagatingToolCallback;
@@ -31,7 +31,6 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One agent turn: the model receives only the tools the current person may execute, destructive
@@ -97,8 +96,7 @@ public class AgentService {
 			throw new DomainRuleException("Mensagem vazia ou longa demais");
 		}
 		OsPrincipal actor = this.currentUser.require();
-		Conversation conversation = this.conversations.requireOwned(conversationId);
-		this.conversations.touch(conversation, userMessage);
+		this.conversations.touch(conversationId, userMessage);
 		String id = conversationId.toString();
 		SecurityContext securityContext = SecurityContextHolder.getContext();
 
@@ -110,19 +108,22 @@ public class AgentService {
 		this.audit.record("ai.turn.started", "ai_conversation", id, Map.of("tools", callbacks.size()));
 
 		StringBuilder full = new StringBuilder();
-		Iterable<String> tokens = this.chatClient.prompt()
+		// Closing the stream cancels the subscription: when the caller stops consuming (client gone,
+		// timeout, error) the model call and any further tool calls stop with it.
+		try (Stream<String> tokens = this.chatClient.prompt()
 			.user(userMessage)
 			.tools(callbacks.toArray(ToolCallback[]::new))
 			.toolContext(Map.of("conversationId", id))
 			.advisors((a) -> a.param(ChatMemory.CONVERSATION_ID, id))
 			.stream()
 			.content()
-			.toIterable();
-		for (String token : tokens) {
-			if (token != null && !token.isEmpty()) {
-				full.append(token);
-				onToken.accept(token);
-			}
+			.toStream()) {
+			tokens.forEach((token) -> {
+				if (token != null && !token.isEmpty()) {
+					full.append(token);
+					onToken.accept(token);
+				}
+			});
 		}
 		return new Reply(full.toString());
 	}

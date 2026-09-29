@@ -10,4 +10,13 @@ public interface AccountNotifier {
 
 	void sendPasswordReset(String email, String name, String link);
 
+	/**
+	 * True when this notifier cannot reach the person, so the use case hands the link to the
+	 * administrator instead. Once e-mail delivery is configured the link never leaves the server:
+	 * whoever holds it can complete the invitation and act as that person.
+	 */
+	default boolean handsLinksToAdministrator() {
+		return false;
+	}
+
 }

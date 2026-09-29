@@ -31,6 +31,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UserService {
 
-	public record InvitationIssued(UserSummary user, String invitationLink) {
+	/** Bounds the listing, on REST and for the model. */
+	public static final int MAX_LIST = 200;
+
+	/** {@code invitationLink} is present only while no e-mail delivery is configured. */
+	public record InvitationIssued(UserSummary user, @Nullable String invitationLink) {
 	}
 
 	private final UserRepository users;
@@ -83,11 +88,12 @@ public class UserService {
 	}
 
 	@Tool(name = "iam_list_users",
-			description = "Lista todos os usuários do portal: id, nome, e-mail, status (INVITED, ACTIVE, DISABLED), se está bloqueado, roles e último acesso.")
+			description = "Lista os usuários do portal (até " + MAX_LIST + "): id, nome, e-mail, status (INVITED, ACTIVE, DISABLED), se está bloqueado, roles e último acesso.")
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
 	@Transactional(readOnly = true)
 	public List<UserSummary> list() {
-		return this.users.findAllByOrderByNameAsc().stream().map((u) -> UserSummary.of(u, this.clock.instant()))
+		return this.users.findAllByOrderByNameAsc(Limit.of(MAX_LIST)).stream()
+			.map((u) -> UserSummary.of(u, this.clock.instant()))
 			.toList();
 	}
 
@@ -159,7 +165,7 @@ public class UserService {
 			assertNotLastAdministrator(user);
 		}
 		user.disable();
-		this.events.publishEvent(new UserDisabled(user.getId(), user.getEmail()));
+		this.events.publishEvent(new UserDisabled(user.getId()));
 		this.audit.record("iam.user.disabled", "user", user.getId().toString(), null);
 		return UserSummary.of(user, this.clock.instant());
 	}
@@ -208,11 +214,11 @@ public class UserService {
 		}
 	}
 
-	private String issueInvitation(User user) {
+	private @Nullable String issueInvitation(User user) {
 		String raw = this.tokens.issue(user, TokenType.INVITATION, this.properties.tokens().invitationTtl());
 		String link = this.links.invitation(raw);
 		this.notifier.sendInvitation(user.getEmail(), user.getName(), link);
-		return link;
+		return this.notifier.handsLinksToAdministrator() ? link : null;
 	}
 
 	private User load(UUID id) {

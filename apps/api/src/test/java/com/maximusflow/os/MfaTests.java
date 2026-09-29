@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = "os.iam.mfa.require-for-system-role=true")
+@TestPropertySource(properties = { "os.iam.mfa.require-for-system-role=true", "os.iam.lockout.max-attempts=3" })
 class MfaTests {
 
 	@Autowired
@@ -104,15 +104,6 @@ class MfaTests {
 		this.mvc.perform(withCsrf(post("/api/auth/mfa"), fourth).contentType(MediaType.APPLICATION_JSON)
 			.content("{\"code\":\"" + recovery.getFirst() + "\"}")).andExpect(status().is(422));
 
-		// Five failures end the session.
-		for (int i = 0; i < 3; i++) {
-			this.mvc.perform(withCsrf(post("/api/auth/mfa"), fourth).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"code\":\"111111\"}")).andExpect(status().is(422));
-		}
-		this.mvc.perform(withCsrf(post("/api/auth/mfa"), fourth).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"code\":\"111111\"}")).andExpect(status().isUnauthorized());
-		this.mvc.perform(get("/api/me").cookie(fourth.cookie())).andExpect(status().isUnauthorized());
-
 		// Policy forbids the administrator from turning it off; an administrator cannot reset their own.
 		this.mvc.perform(withCsrf(post("/api/me/mfa/disable"), second).contentType(MediaType.APPLICATION_JSON)
 			.content("{\"currentPassword\":\"Admin-Password-2026\",\"code\":\"" + currentCode(secret) + "\"}"))
@@ -134,6 +125,31 @@ class MfaTests {
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.type").value("urn:os:problem:mfa-required"));
 		this.mvc.perform(get("/api/me").cookie(second.cookie())).andExpect(status().isUnauthorized());
+		Session verified = new Session(fresh, second.xsrf());
+		this.mvc.perform(withCsrf(post("/api/auth/mfa"), verified).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"code\":\"" + recovery.get(1) + "\"}")).andExpect(status().isNoContent());
+
+		// Failed codes count against the account (lockout after 3 here), not only the session: once
+		// locked, even a valid recovery code is refused and a new login is impossible for a while.
+		Session fifth = login();
+		for (int i = 0; i < 3; i++) {
+			this.mvc.perform(withCsrf(post("/api/auth/mfa"), fifth).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"code\":\"111111\"}")).andExpect(status().is(422));
+		}
+		this.mvc.perform(withCsrf(post("/api/auth/mfa"), fifth).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"code\":\"" + recovery.get(2) + "\"}")).andExpect(status().is(422));
+		// Five failures in one session end it.
+		this.mvc.perform(withCsrf(post("/api/auth/mfa"), fifth).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"code\":\"111111\"}")).andExpect(status().isUnauthorized());
+		this.mvc.perform(get("/api/me").cookie(fifth.cookie())).andExpect(status().isUnauthorized());
+		MvcResult csrf = this.mvc.perform(get("/api/auth/csrf")).andReturn();
+		Cookie xsrf = csrf.getResponse().getCookie("XSRF-TOKEN");
+		this.mvc.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+			.andExpect(status().isUnauthorized());
+		// The verified session keeps working: the lock stops new logins and code checks, not open sessions.
+		this.mvc.perform(get("/api/iam/users").cookie(fresh)).andExpect(status().isOk());
 	}
 
 	private String currentCode(byte[] secret) {

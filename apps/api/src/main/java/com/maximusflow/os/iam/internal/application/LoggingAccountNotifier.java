@@ -29,4 +29,9 @@ class LoggingAccountNotifier implements AccountNotifier {
 		log.info("Password reset for {} <{}>: {}", Sanitize.forLog(name), Sanitize.forLog(email), link);
 	}
 
+	@Override
+	public boolean handsLinksToAdministrator() {
+		return true;
+	}
+
 }
