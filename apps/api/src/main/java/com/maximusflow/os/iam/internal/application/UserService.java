@@ -118,6 +118,7 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.create", description = "Convidar usuários")
 	public InvitationIssued resendInvitation(UUID id) {
 		User user = load(id);
+		this.grantGuard.assertCanManage(user);
 		if (user.getStatus() != AccountStatus.INVITED) {
 			throw new DomainRuleException("Só é possível reenviar convite para usuário ainda não ativado");
 		}
@@ -129,6 +130,7 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.update", description = "Editar usuários e suas roles")
 	public UserSummary update(UUID id, String name, Set<UUID> roleIds) {
 		User user = load(id);
+		this.grantGuard.assertCanManage(user);
 		Set<Role> before = new HashSet<>(user.getRoles());
 		Set<Role> after = resolveRoles(roleIds);
 		Set<Role> added = after.stream().filter((r) -> !before.contains(r)).collect(Collectors.toSet());
@@ -149,6 +151,7 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.disable", description = "Desativar e reativar usuários")
 	public UserSummary disable(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
 		User user = load(id);
+		this.grantGuard.assertCanManage(user);
 		if (user.getId().equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Você não pode desativar a própria conta");
 		}
@@ -164,6 +167,7 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.disable", description = "Desativar e reativar usuários")
 	public UserSummary enable(UUID id) {
 		User user = load(id);
+		this.grantGuard.assertCanManage(user);
 		if (user.isAnonymized()) {
 			throw new DomainRuleException("Uma conta anonimizada não pode ser reativada");
 		}
@@ -179,6 +183,7 @@ public class UserService {
 	@RequiresPermission(value = "iam.user.anonymize", description = "Anonimizar dados pessoais de usuários desativados")
 	public UserSummary anonymize(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
 		User user = load(id);
+		this.grantGuard.assertCanManage(user);
 		if (user.getId().equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Você não pode anonimizar a própria conta por aqui");
 		}

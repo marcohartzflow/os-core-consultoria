@@ -7,6 +7,7 @@ import com.maximusflow.os.common.logging.Sanitize;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.internal.domain.Role;
+import com.maximusflow.os.iam.internal.domain.User;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Component;
 /**
  * No privilege escalation: an administrator can only grant permissions they hold themselves, either
  * directly on a role or through assigning a role to a user. Without this, {@code iam.user.update}
- * alone would be enough to become a system administrator.
+ * alone would be enough to become a system administrator. The same rule applies to acting on an
+ * account: whoever cannot grant what the target holds cannot edit, disable, reset or re-invite it
+ * either, otherwise a lower-privileged operator could take over an administrator.
  */
 @Component
 class GrantGuard {
@@ -40,6 +43,10 @@ class GrantGuard {
 					missing);
 			throw new AccessDeniedException("Cannot grant permissions the actor does not hold");
 		}
+	}
+
+	void assertCanManage(User target) {
+		assertCanGrantPermissions(target.permissions());
 	}
 
 	void assertCanGrantRoles(Set<Role> roles) {

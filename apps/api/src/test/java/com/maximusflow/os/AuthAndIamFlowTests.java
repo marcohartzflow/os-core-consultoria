@@ -201,7 +201,8 @@ class AuthAndIamFlowTests {
 		MvcResult manager = this.mvc
 			.perform(withCsrf(post("/api/iam/roles"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\":\"Gestor\",\"permissions\":[\"iam.user.read\",\"iam.user.update\"]}"))
+				.content("{\"name\":\"Gestor\",\"permissions\":[\"iam.user.read\",\"iam.user.update\","
+						+ "\"iam.user.create\",\"iam.user.disable\",\"iam.user.mfa.reset\"]}"))
 			.andExpect(status().isCreated())
 			.andReturn();
 		String managerRoleId = jsonValue(manager, "id");
@@ -233,6 +234,30 @@ class AuthAndIamFlowTests {
 			.content("{\"name\":\"Carol S.\",\"roleIds\":[\"" + managerRoleId + "\"]}"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.name").value("Carol S."));
+
+		// Acting on someone who holds more than Carol is refused too: re-inviting (the link would let
+		// her take the account), editing, disabling and resetting the second factor.
+		MvcResult dave = this.mvc
+			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"dave@example.com\",\"name\":\"Dave\",\"roleIds\":[\"" + adminRoleId + "\"]}"))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String daveId = jsonValue(dave, "user.id");
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/invitations"), carol.csrf()).cookie(carol.cookie()))
+			.andExpect(status().isForbidden());
+		this.mvc.perform(withCsrf(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+			.patch("/api/iam/users/" + daveId), carol.csrf()).cookie(carol.cookie())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"Dave\",\"roleIds\":[]}"))
+			.andExpect(status().isForbidden());
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/disable"), carol.csrf()).cookie(carol.cookie()))
+			.andExpect(status().isForbidden());
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/mfa/reset"), carol.csrf()).cookie(carol.cookie()))
+			.andExpect(status().isForbidden());
+		// The administrator who holds everything can still re-invite.
+		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/invitations"), admin.csrf()).cookie(admin.cookie()))
+			.andExpect(status().isOk());
 	}
 
 	@Test

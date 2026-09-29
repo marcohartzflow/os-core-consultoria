@@ -72,13 +72,15 @@ public class MfaService {
 
 	private final CurrentUser currentUser;
 
+	private final GrantGuard grantGuard;
+
 	private final Clock clock;
 
 	private final BytesEncryptor encryptor;
 
 	MfaService(UserMfaRepository enrolments, MfaRecoveryCodeRepository recoveryCodes, UserRepository users,
 			PasswordPolicy passwordPolicy, IamProperties properties, AuditRecorder audit, CurrentUser currentUser,
-			Clock clock) {
+			GrantGuard grantGuard, Clock clock) {
 		this.enrolments = enrolments;
 		this.recoveryCodes = recoveryCodes;
 		this.users = users;
@@ -86,6 +88,7 @@ public class MfaService {
 		this.properties = properties;
 		this.audit = audit;
 		this.currentUser = currentUser;
+		this.grantGuard = grantGuard;
 		this.clock = clock;
 		this.encryptor = encryptor(properties.mfa().encryptionKey());
 	}
@@ -174,7 +177,7 @@ public class MfaService {
 		if (userId.equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Use a sua própria tela de conta para gerenciar o seu segundo fator");
 		}
-		load(userId);
+		this.grantGuard.assertCanManage(load(userId));
 		remove(userId);
 		this.audit.record("iam.mfa.reset", "user", userId.toString(), null);
 	}
