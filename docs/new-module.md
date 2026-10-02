@@ -21,14 +21,14 @@ Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
 3. **Use cases** em uma classe `@Service @Transactional`. Cada método público é um caso de uso e recebe:
    - `@RequiresPermission(value = "<modulo>.<recurso>.<acao>", description = "...")`. A permissão passa a existir no catálogo por causa dessa anotação, e a role de sistema a recebe automaticamente. A descrição aparece na tela de roles. Use `reserved = true` só para permissão que decide quem acessa o quê; ela fica exclusiva da role de sistema e não pode ter `@Tool`.
    - `@Tool(name = "<modulo>_<acao>", description = "...")` se o agente deve poder executar. Escreva a descrição para o modelo: quando usar, o que devolve, como obter os ids que ele precisa. Parâmetros com `@ToolParam(description = ...)`; opcionais com `required = false` e `@Nullable`.
-   - `@Destructive("frase mostrada na confirmação")` em tudo que apaga, desativa, envia, paga ou altera em massa. Na dúvida, marque.
+   - Toda `@Tool` leva exatamente uma de duas: `@ReadOnlyTool` se só lê, ou `@RequiresConfirmation("frase mostrada na confirmação")` se altera qualquer coisa (criar, editar, concluir, apagar, enviar). Sem uma delas a aplicação não sobe. Pelo agente, a segunda só executa depois que a pessoa confirma no portal.
    - Validação de tamanho e regra de negócio dentro do método (o JSON do modelo não passa por Bean Validation). Erros de regra lançam `DomainRuleException` (422), ausência lança `NotFoundException` (404), duplicidade lança `ConflictException` (409).
    - `AuditRecorder.record("<modulo>.<recurso>.<evento>", "<entidade>", id, detalhes)` em toda ação que altera dado.
    - Retorno sempre por record de saída, nunca a entidade.
 4. **Controller** só mapeia HTTP para o use case: `@Valid` no request, `@ResponseStatus` adequado, nenhuma regra. O prefixo é `/api/<modulo>`; tudo sob `/api/**` já exige sessão.
 5. **Teste** em `src/test/java/...`: siga `TasksModuleTests`. O mínimo é provar que as tools aparecem no `ToolRegistry` com a permissão certa, que REST e tool executam o mesmo use case e que sem permissão a tool é negada.
 
-**Listagens paginadas.** Todo endpoint de lista segue o mesmo contrato: `page`, `size` (1 a 100, padrão 20) e `sort=campo,asc|desc`, convertidos por `PageQuery.of(...)` (`common.paging`) com um mapa `SORTABLE` de nomes permitidos, e a resposta é `PagedModel` (`{content, page}`). Filtros e busca viram uma `Specification` num record `XxxQuery` (veja `TaskQuery`); a busca por texto usa `PageQuery.contains`, que trata `%` e `_` como texto. Ordenar por campo fora do mapa responde 400, assim ninguém ordena por uma coluna que a lista não mostra. As tools de IA continuam com métodos de lista limitados (`MAX_LIST`).
+**Listagens paginadas.** Todo endpoint de lista segue o mesmo contrato: `page`, `size` (1 a 100, padrão 20) e `sort=campo,asc|desc`, convertidos por `PageQuery.of(...)` (`common.paging`) com um mapa `SORTABLE` de nomes permitidos, e a resposta é `PagedModel` (`{content, page}`). Filtros e busca viram uma `Specification` num record `XxxQuery` (veja `TaskQuery`); a busca por texto usa `PageQuery.contains`, que trata `%` e `_` como texto. Ordenar por campo fora do mapa responde 400, assim ninguém ordena por uma coluna que a lista não mostra. As tools de IA continuam com métodos de lista limitados (`MAX_LIST`). Tabela que só cresce (log, histórico) pagina por posição com contagem limitada, como a auditoria; índices, busca por texto e medição seguem `docs/performance.md`.
 
 ## 2. Frontend (`apps/web`)
 
@@ -45,7 +45,7 @@ Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
 ## 3. O que acontece sozinho
 
 - A permissão nova entra no catálogo (`GET /api/iam/permissions`) e na role de sistema no próximo boot.
-- O agente descobre as tools no boot e as oferece só a quem tem a permissão; tools destrutivas param para confirmação; toda chamada é auditada.
+- O agente descobre as tools no boot e as oferece só a quem tem a permissão; tools com `@RequiresConfirmation` param para confirmação; toda chamada é auditada.
 - A migração roda no boot; `ddl-auto=validate` confere o mapeamento.
 
 ## 4. O que nunca fazer

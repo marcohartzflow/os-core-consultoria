@@ -12,7 +12,7 @@ apps/web            Next.js 16 (App Router)            ->  http://localhost:3000
 packages/contracts  tipos TypeScript gerados do OpenAPI da API (consumidos pelo web)
 deploy/             Compose, Caddyfile, update, backup e restore para instalar um OS em um servidor
 docs/               documentação de arquitetura e conformidade
-.github/            CI (testes, contratos, imagens) e CD (só em forks com DEPLOY_HOST)
+.github/            CI (testes, contratos, imagens) e CD (CI + deploy, só em forks com DEPLOY_HOST)
 ```
 
 ## Requisitos

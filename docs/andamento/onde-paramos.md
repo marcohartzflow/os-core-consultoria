@@ -1,0 +1,68 @@
+# Onde paramos (2026-10-02, fim do dia)
+
+Estado do trabalho em andamento no `develop`. O que já foi feito, em detalhe, está em [`feito.md`](feito.md).
+
+## Estado do repositório
+
+- Branch `develop`, último commit `0e9613a` (tabelas paginadas no servidor). **Nada do trabalho desde então está commitado**, por decisão do usuário: os commits só saem quando ele decidir.
+- A pasta de trabalho junta seis frentes, feitas nesta ordem:
+  1. Configurações em janela (popup no estilo do Claude).
+  2. Preset do shadcn (`b5KafGdxA`, menu do usuário com cor padrão no tema claro).
+  3. Desempenho das listagens (auditoria por posição, índices, totais pré-somados, UUIDv7).
+  4. Revisão de usuários, roles, permissões e auditoria (API e web), de 2026-09-30.
+  5. Revisão de segurança de 2026-10-02 (OWASP ASVS 5.0 nível 2 e NIST SP 800-63B-4 AAL2).
+  6. Fluxo de deploy e continuidade do cliente (2026-10-02): CD que roda o CI antes, chave do CD presa a `deploy/ci-deploy.sh`, playbook Ansible da VPS, `deploy.md` e `fork.md` reescritos; depois da pesquisa de padrões: `up --wait` e conferência de `/api/health` depois do deploy, `zizmor` e Grype no CI, regra de migração em paralelo. A varredura achou CVEs críticas no Tomcat e no BouncyCastle e altas no Jackson, no OpenSSL do Temurin e no npm da imagem do web, corrigidas.
+
+## O que foi feito hoje
+
+A lista completa está no CHANGELOG, em "Revisão de 2026-10-02", com o que um fork precisa fazer em "Ação necessária no fork". O estado resultante está em `docs/security-baseline.md`. Em resumo:
+
+- Autenticação: segundo fator obrigatório para todos, com passkey ao lado do aplicativo autenticador, no modelo de multi-factor do Spring Security 7. Id de sessão com 256 bits. Cookies `__Host-` em HTTPS. Reautenticação completa (ASVS 7.5.1 e 7.5.2): mudar fatores, trocar a senha e encerrar as próprias sessões pedem um segundo fator dos últimos 15 minutos, mais a senha onde a requisição a tem. E-mail quando um fator muda. Códigos de recuperação com Argon2id, também em conta só com passkey. TOTP só no passo atual. Lockout no modelo do Keycloak, que conta também passkey recusada.
+- Logs: JSON (ECS) em produção com id da requisição e IP em cada linha; o id volta em `X-Request-Id` e é o `correlationId` da trilha. Negações com a regra que negou.
+- Assistente: falha de tool sem detalhe interno para o modelo; `@ReadOnlyTool` em transação somente leitura; ações vencidas expiram sozinhas e as resolvidas somem em 90 dias; `audit_search` sem IP.
+- LGPD: a exportação traz tarefas e ações propostas; `audit-retention.sql` para a retenção da trilha.
+- Web: reconfirmação do segundo fator em todas as ações de segurança, `base-uri 'none'`, armazenamento limpo também quando a sessão expira, erro inesperado com texto genérico.
+- Deploy: roles de banco separados, revogação de `PUBLIC`, redes Docker separadas, Caddy sem root, Postgres com sistema de arquivos somente leitura, rotação de logs, SMTP obrigatório, backup e restauração atômicos (backup truncado é recusado), `TRACE` recusado, IP real do cliente atrás de balanceador (`OS_TRUSTED_PROXIES`).
+- Segunda rodada da auditoria final, também corrigida: avisos por e-mail no uso de código de recuperação, na redefinição e na troca de senha; segundo endereço para avisos (NIST); códigos de recuperação com 15 caracteres (~74 bits); sessão encerrada na hora quando a senha é revogada; id de sessão novo a cada senha reconfirmada; limite de 20 turnos por minuto no assistente e tokens registrados (`ai.turn.ended`); argumentos de tools na trilha só como nomes e hash.
+
+Verificações que passaram:
+
+- API: 131 testes verdes (build limpo), incluindo `DatabaseRolesTests`, que roda o `postgres-roles.sh` num PostgreSQL 18.
+- Pilha inteira com `docker compose` num ambiente local de teste: `migrate` aplicou as migrations e saiu com 0; api e web saudáveis; logs ECS com IP; Caddy como uid 10001; web sem saída para a internet; cookies `__Host-`; CSP, COOP, CORP e HSTS conferidos; login pedindo o cadastro do segundo fator. Rodada antes das últimas correções de deploy (proxy confiável, `TRACE`, Postgres read-only, restore), que foram testadas uma a uma em containers.
+- Web: `check-types`, `lint` e `build` verdes.
+- Contratos (`packages/contracts`) gerados de novo a partir do OpenAPI.
+
+- Ensaio de ponta a ponta do deploy (2026-10-02), num Ubuntu 24.04 com 2 vCPU e 4 GB preparado pelo playbook, com um registry no papel do `ghcr.io` (TLS e login), o deploy disparado pela chave do CD (comando forçado) e o próprio `cd.yml` executado pelo `act`:
+  - Primeira instalação (pelo roteiro de "Entrada em produção") em 28 s; deploys seguintes em 22 a 29 s, com o portal fora de 7 a 13 s (era de 15 a 21 s, com picos de 30 s: a migração rodava de novo com a API parada e o web parava junto com ela; agora a migração roda uma vez, com a versão antiga no ar, e API e web reiniciam um de cada vez, com health check a cada segundo enquanto sobem).
+  - Migração quebrada: o deploy falha em 8 s com status 1, o Flyway desfaz a transação e o portal segue no ar na versão anterior (nenhuma falha na sonda); o `.env` continua apontando a versão que roda.
+  - Dez deploys seguidos: ficam no servidor só as imagens das três últimas versões implantadas. Rollback para versão com imagem no servidor e para versão já apagada (baixa de novo): os dois funcionam.
+  - Teste mensal de restauração: passa (21 tabelas, migração 18, 1 usuário), falha com status 1 quando o banco está parado, não deixa container para trás; a linha do cron roda como o cron roda.
+  - `/api/health`: só `{"status":"UP"}`; com o banco fora, 503 em 5 s (era 500 em 30 s); 50 chamadas seguidas viram 10 transações no banco (cache de 5 s).
+  - Reinício automático configurado (`Automatic-Reboot` às 04:00, conferido com `apt-config dump`); o reinício em si não roda num container de teste.
+  - `cd.yml` pelo `act`: rollback pelo Run workflow (CI e imagens pulados, deploy e conferência do portal verdes); SHA fora da `main`, entrada que não é SHA e host key errada recusados; portal que não responde deixa o job vermelho (em cerca de 3 min, pelas novas tentativas); CI vermelho num push não chega às imagens nem ao deploy. O job do `zizmor` rodou como no GitHub e achou falta de `cooldown` no Dependabot (corrigido); o job `deploy-scripts` (`shellcheck` e `ansible-lint`) rodou verde depois de corrigir um achado no `backup.sh`.
+  - Restauração do backup seguindo o `deploy.md`: dados iguais, login funcionando. "Entrada em produção" seguida ao pé da letra: segredos novos, login com a senha nova.
+  - Linha do cron executada como o cron executa; backup no journal. Docker reiniciado: portal de volta em 10 s. Playbook rodado de novo com o portal no ar: nada muda, portal segue no ar.
+  - Só 22, 80 e 443 escutando; containers sem root (exceto o entrypoint do Postgres), raiz somente leitura, sem novos privilégios.
+  - Carga (20 conexões, 20 s, pela cadeia inteira com TLS): `/api/health` 2.366 req/s (p99 32 ms), `/login` 476 req/s (p99 73 ms), `/api/auth/csrf` 5.191 req/s (p99 12 ms), sem erro. Login com Argon2id em 40 a 55 ms; e-mail inexistente em 66 ms. Memória: API 540 MB, web 114 MB, Postgres 40 MB, Caddy 20 MB.
+
+## O que falta
+
+1. Testar no navegador os fluxos novos:
+   - Segundo fator obrigatório para todos: cadastro no primeiro login.
+   - Passkey: cadastrar, entrar com ela e removê-la.
+   - Reconfirmação do segundo fator (step-up) nas ações de segurança: aplicativo autenticador, passkeys, senha e sessões.
+   - Redefinição do segundo fator pelo administrador: a pessoa recebe o e-mail e define a senha nova.
+   - Gerar novos códigos de recuperação.
+   - Encerrar sessões com a reconfirmação.
+   - Cookies `__Host-` em HTTPS.
+   - Segundo endereço de avisos e os e-mails de aviso.
+2. Primeiro deploy numa VPS de verdade, com domínio real, pelo caminho novo: playbook do Ansible, `cd.yml` (CI, imagens, `ci-deploy.sh`) e um rollback pelo Run workflow. O playbook e o `ci-deploy.sh` foram testados num Ubuntu 24.04 em container (duas execuções seguidas; shell, comando arbitrário, injeção, túnel, commit fora da `main` e root recusados; senha do SSH desligada); o `cd.yml` rodou pelo `act` (acima); falta a primeira execução no GitHub de verdade, com o `ghcr.io` real e o Let's Encrypt.
+   - Em container o `systemd-timesyncd` não sobe (ele se desliga em container); na VPS ele roda. Conferir com `timedatectl` no primeiro servidor.
+3. Os commits, que esperam o usuário.
+
+## Depende do usuário
+
+- A chave da API da Anthropic.
+- O e-mail real de contato de segurança no `SECURITY.md`.
+- A decisão sobre a transferência internacional de dados pessoais à Anthropic (LGPD art. 33). É contratual, do cliente; está registrada como risco aceito na seção 9 de `security-baseline.md`.
+- Os itens que dependem da infraestrutura do cliente (`security-baseline.md`, seção 9): logs num sistema separado, cofre de segredos, firewall de saída no host, destino do backup, backup e snapshot do provedor, e a resposta escrita da Hostinger sobre criptografia do disco.

@@ -110,12 +110,12 @@ O browser só conhece o domínio do Next. O `next.config.ts` reescreve `/api/*` 
 
 ## 7. Agente de IA
 
-Detalhado em `ai-agent.md`. Resumo: cada use case anotado com `@Tool` e `@RequiresPermission` vira ferramenta do agente; o agente só recebe as tools que o usuário atual pode executar; a mesma anotação bloqueia a execução se o modelo tentar chamar algo fora da lista; ações destrutivas exigem confirmação humana; toda tool call é auditada.
+Detalhado em `ai-agent.md`. Resumo: cada use case anotado com `@Tool` e `@RequiresPermission` vira ferramenta do agente; o agente só recebe as tools que o usuário atual pode executar; a mesma anotação bloqueia a execução se o modelo tentar chamar algo fora da lista; toda tool declara `@ReadOnlyTool` ou `@RequiresConfirmation`, e as que alteram dado exigem confirmação humana; toda tool call é auditada.
 
 ## 8. Fases
 
 1. Feita. Skeleton: monorepo, api gerada pelo Spring Initializr, web gerada pelo `create-next-app`, Postgres via Docker Compose, Flyway, Modulith, CI.
 2. Feita. `auth` + `iam`: login por sessão, CSRF, lockout, convite, reset de senha, roles, catálogo de permissões, `@RequiresPermission`, bootstrap do primeiro admin, `GET /api/me`, sessões, trilha de auditoria, shell web com shadcn/ui e telas de usuários, roles e conta.
-3. Feita. `ai`: registry por scan de `@Tool` + `@RequiresPermission`, filtro por permissão, enforce no use case, confirmação humana para `@Destructive`, auditoria por tool call com origem `AI_TOOL`, conversas por usuário com memória JDBC, SSE com eventos de tool e ação pendente, painel no front. Client TypeScript gerado do OpenAPI em `packages/contracts`; ações de UI (`navigate`) via `common.ui`.
-4. Feita. Módulo de exemplo `tasks`: use case anotado aparece como REST e como tool (`tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete`, `tasks_delete` destrutiva), tela em `src/modules/tasks`, entrada de menu em `src/modules/navigation.ts`. Guia passo a passo em `new-module.md`.
+3. Feita. `ai`: registry por scan de `@Tool` + `@RequiresPermission`, filtro por permissão, enforce no use case, confirmação humana para `@RequiresConfirmation` (antes `@Destructive`), auditoria por tool call com origem `AI_TOOL`, conversas por usuário com memória JDBC, SSE com eventos de tool e ação pendente, painel no front. Client TypeScript gerado do OpenAPI em `packages/contracts`; ações de UI (`navigate`) via `common.ui`.
+4. Feita. Módulo de exemplo `tasks`: use case anotado aparece como REST e como tool (`tasks_list`, `tasks_get`, `tasks_create`, `tasks_complete`, `tasks_delete`; as três que alteram pedem confirmação), tela em `src/modules/tasks`, entrada de menu em `src/modules/navigation.ts`. Guia passo a passo em `new-module.md`.
 5. Primeiro cliente: fork com remote `upstream`.

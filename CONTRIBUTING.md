@@ -25,7 +25,7 @@ Mudou controller ou record da API? Rode os testes da API (eles regravam `package
 
 1. Todo use case tem `@RequiresPermission`; controller não tem regra de negócio.
 2. Módulo core não importa módulo de cliente nem pacote `internal` de outro módulo.
-3. Migração só via Flyway, numerada em sequência; nunca editar migração já aplicada.
+3. Migração só via Flyway, numerada em sequência; nunca editar migração já aplicada. Toda migração aceita o código da versão anterior (mudança em paralelo, "expand/contract", [Martin Fowler](https://martinfowler.com/bliki/ParallelChange.html)): coluna ou tabela nova entra ao lado da antiga, o código passa a usar a nova, e remover ou renomear a antiga fica para uma versão seguinte. Assim a imagem anterior sempre roda sobre o schema novo, e o rollback do deploy é seguro.
 4. Interface só com componentes de `src/components/ui` (shadcn) e tokens semânticos.
 5. Dado pessoal novo: o módulo implementa `PersonalDataContributor` e a ação relevante gera `audit_event`.
 6. Checklist de revisão de segurança em `docs/security-baseline.md`, seção 8, aplicado a todo PR que toque autenticação, autorização, dados pessoais ou o agente.

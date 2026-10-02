@@ -46,14 +46,14 @@ Notas do Spring Boot 4 que afetam o código:
 | React | 19.2.x | https://react.dev/ |
 | TypeScript | 5.x | https://www.typescriptlang.org/docs/ |
 | Tailwind CSS | 4.x | https://tailwindcss.com/docs |
-| shadcn/ui (CLI v4, presets) | `shadcn@latest`, style `radix-luma` (preset `b5KafGdxD`), base Radix, ícones Lucide | https://ui.shadcn.com/docs/cli, https://ui.shadcn.com/docs/theming, https://ui.shadcn.com/create |
+| shadcn/ui (CLI v4, presets) | `shadcn@latest`, style `radix-luma` (preset `b5KafGdxA`), base Radix, ícones Lucide | https://ui.shadcn.com/docs/cli, https://ui.shadcn.com/docs/theming, https://ui.shadcn.com/create |
 | openapi-typescript | 7.x | https://openapi-ts.dev/ (tipos gerados em `packages/contracts` a partir do `openapi.json` que o teste `OpenApiContractTests` escreve) |
 
 ### shadcn/ui e presets
 
 Toda a interface é construída sobre componentes do shadcn/ui, e a identidade visual inteira vem de um **preset** (estilo, cor base, tema, fonte, ícones, raio). Trocar a cara de um OS de cliente é um comando, sem tocar em componente.
 
-Preset atual do `os-core`: `b5KafGdxD` (`https://ui.shadcn.com/create?preset=b5KafGdxD`): estilo `luma`, cor base `neutral`, tema e gráficos `sky`, fonte Inter, raio padrão, ícones Lucide, menus `inverted-translucent`. Aplicado em 2026-09-29 com `pnpm dlx shadcn@latest apply --preset b5KafGdxD -y`; cada componente de `src/components/ui` foi conferido depois com `pnpm dlx shadcn@latest add <componente> --dry-run --overwrite`, e todos saíram idênticos ao registry do preset. O projeto começou com `init -y -d --base radix --css-variables` (preset `b2fA`, estilo `nova`).
+Preset atual do `os-core`: `b5KafGdxA` (`https://ui.shadcn.com/create?preset=b5KafGdxA`): estilo `luma`, cor base `neutral`, tema e gráficos `sky`, fonte Inter, raio padrão, ícones Lucide, menus `default` (sólidos, seguem o tema claro/escuro). Aplicado em 2026-09-30 com `pnpm dlx shadcn@latest apply --preset b5KafGdxA -y`, trocando só a cor dos menus do preset anterior `b5KafGdxD` (menus `inverted-translucent`, escuros no tema claro); cada componente de `src/components/ui` foi conferido depois com `pnpm dlx shadcn@latest add <componente> --dry-run --overwrite`, e todos saíram idênticos ao registry do preset. O projeto começou com `init -y -d --base radix --css-variables` (preset `b2fA`, estilo `nova`).
 
 Comandos (sempre em `apps/web`):
 
