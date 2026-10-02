@@ -1,17 +1,35 @@
+# Tests, lint, build and the two Docker images. Runs on pull requests and on pushes to develop; a
+# push to main runs it through cd.yml (workflow_call), so the deploy waits for it and a main push
+# does not run it twice.
+#
+# Actions are pinned to the full commit SHA of a release, with the tag in a comment (GitHub's
+# "Security hardening for GitHub Actions": a tag can be moved to other code, a SHA cannot).
+# Dependabot (github-actions ecosystem) updates the SHA and the comment together.
+#
+# The workflows themselves are audited by zizmor (template injection, token permissions, unpinned
+# actions, credentials left in the checkout...), and the images by Grype: a critical vulnerability
+# that already has a fix fails the build. Both report in the job log: code scanning (SARIF upload)
+# needs GitHub Advanced Security on a private repository.
 name: CI
 
 on:
   pull_request:
   push:
     branches:
-      - main
       - develop
+  workflow_call:
+    inputs:
+      skip-images:
+        description: The caller builds and pushes the images itself
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A called workflow shares the caller's github.workflow, so the group names CI explicitly.
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -19,12 +37,14 @@ jobs:
     name: API (Gradle)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
       - name: Build and test
         working-directory: apps/api
         run: ./gradlew build --no-daemon
@@ -32,7 +52,7 @@ jobs:
         run: git diff --exit-code -- packages/contracts/openapi.json
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: api-test-reports
           path: apps/api/build/reports/tests/
@@ -42,9 +62,11 @@ jobs:
     name: Web (pnpm)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -53,24 +75,77 @@ jobs:
         run: pnpm contracts && git diff --exit-code -- packages/contracts/src
       - run: pnpm lint && pnpm check-types && pnpm build
 
-  images:
-    name: Docker images
+  workflows:
+    name: Workflow security (zizmor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          advanced-security: false
+          version: 1.30.1
+
+  deploy-scripts:
+    name: Deploy scripts (shellcheck, ansible-lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Shell scripts
+        run: |
+          command -v shellcheck > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+          shellcheck deploy/*.sh
+      - name: Ansible playbook
+        working-directory: deploy/ansible
+        run: |
+          pipx install --include-deps ansible-lint==26.9.0
+          bin="$(pipx environment --value PIPX_BIN_DIR)"
+          "$bin/ansible-galaxy" collection install -r requirements.yml
+          "$bin/ansible-lint" provision.yml
+
+  images:
+    name: Docker images
+    # Outside workflow_call the input is empty and the job runs.
+    if: ${{ !inputs.skip-images }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: apps/api
           push: false
+          load: true
+          tags: os-api:ci
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
       - name: Web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: apps/web/Dockerfile
           push: false
+          load: true
+          tags: os-web:ci
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
+      - name: API image vulnerabilities
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: os-api:ci
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+      - name: Web image vulnerabilities
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: os-web:ci
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table

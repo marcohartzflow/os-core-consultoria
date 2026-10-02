@@ -1,19 +1,25 @@
-# Continuous deployment of a client instance. os-core itself has nothing to deploy: this workflow
-# only runs in a fork where the repository variable DEPLOY_HOST is set.
+# Continuous deployment of a client instance: every push to main goes to production, after the CI
+# jobs pass (they run here, through workflow_call, so a red test never reaches the server).
+# os-core itself has nothing to deploy: without the repository variable DEPLOY_HOST only the CI runs.
 #
 # Images are built here and pushed to the fork's GitHub Container Registry, tagged with the commit
-# SHA. The server never builds: it pulls the two images and restarts (deploy/update.sh). Rolling
-# back is running the same script with the previous SHA.
+# SHA. The server never builds: it pulls the two images and restarts (deploy/update.sh).
 #
-# Fork setup: Settings > Secrets and variables > Actions
+# Rolling back: Actions > CD > Run workflow, with the commit SHA of an earlier deploy of main. The
+# images of that commit are already in the registry, so nothing is tested or built again.
+#
+# Fork setup (docs/deploy.md, "Deploy contínuo"): Settings > Secrets and variables > Actions
 #   variables: DEPLOY_HOST      host name or IP of the server
 #              DEPLOY_HOST_KEY  the server's SSH host public key, one line as printed by
 #                               `ssh-keyscan -t ed25519 <host>` (pins the host: no trust-on-first-use)
-#              DEPLOY_USER      SSH user allowed to run docker (default "deploy")
-#              DEPLOY_PATH      checkout of the fork on the server (default "/opt/os")
-#   secrets:   DEPLOY_SSH_KEY   private key of DEPLOY_USER
-# The server must be able to pull from the fork's registry: the workflow logs Docker in with the
-# job's GITHUB_TOKEN over the SSH session, so no long-lived registry credential lives on the host.
+#              DEPLOY_USER      SSH user of the deploy (default "deploy")
+#              DEPLOY_URL       public address of the portal (https://<OS_DOMAIN>), checked after
+#                               each deploy at /api/health
+#   secrets:   DEPLOY_SSH_KEY   private key whose public half the server accepts only for
+#                               deploy/ci-deploy.sh (authorized_keys forced command, set up by the
+#                               Ansible playbook): the key cannot open a shell on the server.
+# Repository secrets and variables, not an environment's: on GitHub Free a private repository has
+# no environment secrets nor deployment protection rules, so an environment would protect nothing.
 name: CD
 
 on:
@@ -21,33 +27,50 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA of main to deploy again (rollback). Empty builds and deploys the head of main.
+        type: string
+        default: ""
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: cd-${{ github.ref }}
+  group: cd
   cancel-in-progress: false
 
 env:
   IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}
 
 jobs:
+  ci:
+    name: CI
+    if: inputs.sha == ''
+    uses: ./.github/workflows/ci.yml
+    with:
+      skip-images: true
+
   images:
     name: Build and push images
+    needs: ci
     if: vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: apps/api
           push: true
@@ -55,7 +78,7 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
       - name: Web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: apps/web/Dockerfile
@@ -63,13 +86,44 @@ jobs:
           tags: ${{ env.IMAGE_REPOSITORY }}/os-web:${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
+      # Same gate as the CI's image job (which this workflow skips): a critical vulnerability with a
+      # fix stops the deploy. The images are already in the registry, but nothing runs them.
+      - name: API image vulnerabilities
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.IMAGE_REPOSITORY }}/os-api:${{ github.sha }}
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+      - name: Web image vulnerabilities
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.IMAGE_REPOSITORY }}/os-web:${{ github.sha }}
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
 
   deploy:
     name: Deploy to server
     needs: images
+    # A rollback skips the CI and the images (both already passed for that commit); a push deploys
+    # only what they built. Only main is deployed; the server checks the commit is on main as well.
+    if: >-
+      !cancelled() && vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/main'
+      && (needs.images.result == 'success' || (inputs.sha != '' && needs.images.result == 'skipped'))
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      contents: read
+      packages: read
     steps:
+      - name: Commit to deploy
+        id: target
+        env:
+          REQUESTED: ${{ inputs.sha }}
+        run: |
+          sha="${REQUESTED:-$GITHUB_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Give the full 40-character commit SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: Install SSH key and pinned host key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -82,15 +136,22 @@ jobs:
           printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
       - name: Update the instance
+        # The server runs deploy/ci-deploy.sh whatever command is sent (forced command); it reads the
+        # registry login from stdin and keeps it in a temporary Docker config deleted on exit.
         env:
           DEPLOY_TARGET: ${{ vars.DEPLOY_USER || 'deploy' }}@${{ vars.DEPLOY_HOST }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/os' }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_TAG: ${{ github.sha }}
+          SHA: ${{ steps.target.outputs.sha }}
         run: |
-          printf '%s' "$REGISTRY_TOKEN" | ssh -o StrictHostKeyChecking=yes "$DEPLOY_TARGET" \
-            "docker login ghcr.io -u '$REGISTRY_USER' --password-stdin \
-             && cd '$DEPLOY_PATH' && git fetch --prune && git checkout --force '$IMAGE_TAG' \
-             && OS_IMAGE_REPOSITORY='$IMAGE_REPOSITORY' deploy/update.sh '$IMAGE_TAG' \
-             && docker logout ghcr.io"
+          printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
+            | ssh -o StrictHostKeyChecking=yes -o BatchMode=yes "$DEPLOY_TARGET" "deploy $SHA"
+      # The server already waited for every container to be healthy (update.sh, `up --wait`); this
+      # checks the portal from outside, through DNS, TLS, Caddy, the Next server, the API and its
+      # database. A failure turns the run red, and GitHub notifies whoever triggered it.
+      - name: The portal answers
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+        run: |
+          test -n "$DEPLOY_URL" || { echo "Set the repository variable DEPLOY_URL (https://<OS_DOMAIN>)"; exit 1; }
+          curl -fsS --max-time 10 --retry 10 --retry-delay 6 --retry-all-errors "$DEPLOY_URL/api/health" | grep -q '"UP"'
