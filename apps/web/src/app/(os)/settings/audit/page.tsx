@@ -1,37 +1,52 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { ptBR } from "react-day-picker/locale";
 import type { LucideIcon } from "lucide-react";
-import { Bot, CalendarRange, Cog, Download, Filter, MousePointerClick, ScrollText, Search, X } from "lucide-react";
-import { toQuery, type QueryValue } from "@/core/api/query";
+import {
+  AtSign,
+  Bot,
+  CalendarRange,
+  Cog,
+  Download,
+  Filter,
+  MousePointerClick,
+  ScrollText,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
+import { api, download } from "@/core/api/client";
+import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
 import { actionLabel } from "@/core/audit/labels";
 import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
-import type { AuditEventView, AuditOrigin } from "@/core/api/types";
-import { RequirePermission } from "@/core/auth/AuthProvider";
+import type { AuditEventView, AuditOrigin, UserSummary } from "@/core/api/types";
+import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
 import {
   DataTable,
   DataTableColumnHeader,
+  DataTableCursorPagination,
   DataTableFacetedFilter,
-  DataTablePagination,
   DataTableResetFilters,
   DataTableViewOptions,
   type FacetOption,
 } from "@/core/ui/data-table/DataTable";
 import type { DataTableColumnDef } from "@/core/ui/data-table/features";
 import { useServerTable } from "@/core/ui/data-table/useServerTable";
-import { EmptyState, ErrorState, TableSkeleton } from "@/core/ui/feedback";
+import { EmptyState, ErrorState, notifyError, TableSkeleton } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { PageHeader } from "@/core/ui/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -45,7 +60,13 @@ const ORIGINS: { value: AuditOrigin; label: string; icon: LucideIcon }[] = [
 const ORIGIN_OPTIONS: FacetOption[] = ORIGINS.map(({ value, label, icon }) => ({ value, label, icon }));
 
 /** Single-value filters kept in the URL; from and to are local days (YYYY-MM-DD), to inclusive. */
-const SCALARS = ["action", "actorEmail", "entityType", "entityId", "correlationId", "from", "to"] as const;
+const SCALARS = ["action", "actorEmail", "actorId", "entityType", "entityId", "correlationId", "from", "to"] as const;
+
+/** Rows of one CSV export (AuditQueryService.EXPORT_LIMIT); the newest ones when more match. */
+const EXPORT_LIMIT = 10_000;
+
+/** Shortest "e-mail contains" text the API accepts: fewer letters cannot use its trigram index. */
+const MIN_EMAIL_TEXT = 3;
 
 const COLUMN_LABELS: Record<string, string> = { entity: "Entidade", ip: "IP" };
 
@@ -85,6 +106,7 @@ function auditParams(origins: string[], scalars: Record<string, string>): Record
     origin: origins,
     action: scalars.action?.trim() || undefined,
     actorEmail: scalars.actorEmail?.trim() || undefined,
+    actorId: scalars.actorId?.trim() || undefined,
     entityType: scalars.entityType?.trim() || undefined,
     entityId: scalars.entityId?.trim() || undefined,
     correlationId: scalars.correlationId?.trim() || undefined,
@@ -130,7 +152,9 @@ function When({ iso }: { iso: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="whitespace-nowrap">{formatRelative(iso)}</span>
+        <span tabIndex={0} className="whitespace-nowrap">
+          {formatRelative(iso)}
+        </span>
       </TooltipTrigger>
       <TooltipContent>{formatDateTime(iso)}</TooltipContent>
     </Tooltip>
@@ -146,7 +170,7 @@ export default function AuditPage() {
       {
         id: "occurredAt",
         accessorFn: (event) => event.occurredAt,
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Quando" />,
+        header: "Quando",
         cell: ({ row }) => <When iso={row.original.occurredAt} />,
         enableHiding: false,
       },
@@ -174,20 +198,20 @@ export default function AuditPage() {
         id: "action",
         accessorFn: (event) => event.action,
         enableHiding: false,
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Ação" />,
+        header: "Ação",
         cell: ({ row }) => (
-          <button
-            type="button"
-            className="grid min-w-44 gap-0.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+          <Button
+            variant="link"
+            className="grid h-auto min-w-44 justify-items-start gap-0.5 p-0 text-left font-normal whitespace-normal text-foreground"
             aria-label={`Ver detalhes de ${actionLabel(row.original.action)}`}
             onClick={(e) => {
               e.stopPropagation();
               setSelected(row.original);
             }}
           >
-            <span className="font-medium hover:underline">{actionLabel(row.original.action)}</span>
+            <span className="font-medium">{actionLabel(row.original.action)}</span>
             <span className="font-mono text-xs text-muted-foreground">{row.original.action}</span>
-          </button>
+          </Button>
         ),
       },
       {
@@ -219,6 +243,7 @@ export default function AuditPage() {
   const {
     table,
     page,
+    cursor,
     error,
     loading,
     retry,
@@ -229,13 +254,14 @@ export default function AuditPage() {
     setDraft,
     setValues,
   } = useServerTable({
-    sortable: ["occurredAt", "action"],
+    // Always newest first: the trail pages by position along that one order (see AuditQueryService).
+    sortable: [],
+    cursor: true,
     path: "/api/audit/events",
     columns,
     filters: ["origin"],
     scalars: SCALARS,
     toParams: (filters, scalars) => auditParams(filters.origin, scalars),
-    defaultSort: { id: "occurredAt", desc: true },
     pageSize: 50,
     getRowId: (event) => event.id,
   });
@@ -244,6 +270,18 @@ export default function AuditPage() {
     ? { from: fromDay(values.from), to: fromDay(values.to) ?? fromDay(values.from) }
     : undefined;
   const exportQuery = toQuery(auditParams(params.getAll("origin"), values));
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      await download(`/api/audit/events.csv${exportQuery}`, "text/csv", "auditoria.csv");
+    } catch (e) {
+      notifyError(e, "Não foi possível exportar");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <>
@@ -252,11 +290,11 @@ export default function AuditPage() {
         description="Quem fez o quê e quando, no portal e pelo assistente. Registro append-only."
         actions={
           <RequirePermission permission="audit.event.export">
-            <Button variant="outline" asChild>
-              <a href={`/api/audit/events.csv${exportQuery}`} download>
-                <Download />
-                Exportar CSV
-              </a>
+            <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
+              {exporting ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+              {cursor && !cursor.totalExact
+                ? `Exportar CSV (${EXPORT_LIMIT.toLocaleString("pt-BR")} mais recentes)`
+                : "Exportar CSV"}
             </Button>
           </RequirePermission>
         }
@@ -281,15 +319,11 @@ export default function AuditPage() {
                   onChange={(e) => setDraft("action", e.target.value)}
                 />
               </InputGroup>
-              <InputGroup className="w-full sm:w-52">
-                <InputGroupInput
-                  aria-label="E-mail de quem agiu"
-                  placeholder="Quem (e-mail)"
-                  maxLength={320}
-                  value={drafts.actorEmail ?? ""}
-                  onChange={(e) => setDraft("actorEmail", e.target.value)}
-                />
-              </InputGroup>
+              <ActorFilter
+                actorId={values.actorId}
+                actorEmail={values.actorEmail}
+                onChange={(patch) => setValues({ actorId: "", actorEmail: "", ...patch })}
+              />
               <InputGroup className="w-full sm:w-36">
                 <InputGroupInput
                   aria-label="Tipo de entidade"
@@ -357,14 +391,14 @@ export default function AuditPage() {
             />
           )}
         </CardContent>
-        {page && page.page.totalElements > 0 && !error && (
+        {cursor && cursor.total > 0 && !error && (
           <DataTableCardFooter>
-            <DataTablePagination table={table} noun={["evento", "eventos"]} />
+            <DataTableCursorPagination cursor={cursor} noun={["evento", "eventos"]} />
           </DataTableCardFooter>
         )}
       </DataTableCard>
       <span className="sr-only" aria-live="polite">
-        {page ? `${page.page.totalElements} eventos encontrados` : ""}
+        {cursor ? `${cursor.totalExact ? "" : "Mais de "}${cursor.total} eventos encontrados` : ""}
       </span>
 
       <EventSheet
@@ -376,6 +410,137 @@ export default function AuditPage() {
         }}
       />
     </>
+  );
+}
+
+/**
+ * "Who" filter. Picking a person filters by id (index on actor_id, exact: ana@ does not bring
+ * joana@). Typed text of at least 3 characters can also filter by "e-mail contains", for addresses
+ * without an account (sign-in attempts). The people list needs iam.user.read; without it only the
+ * e-mail option is offered.
+ */
+function ActorFilter({
+  actorId,
+  actorEmail,
+  onChange,
+}: {
+  actorId: string;
+  actorEmail: string;
+  onChange: (patch: { actorId?: string; actorEmail?: string }) => void;
+}) {
+  const { hasPermission } = useAuth();
+  const mayListPeople = hasPermission("iam.user.read");
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [people, setPeople] = useState<UserSummary[]>([]);
+  const [chosen, setChosen] = useState<UserSummary | null>(null);
+
+  // People matching the text, after a pause in typing; the newest answer wins.
+  useEffect(() => {
+    if (!open || !mayListPeople) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      fetchPage<UserSummary>(`/api/iam/users${toQuery({ q: text.trim() || undefined, size: 8, sort: "name" })}`).then(
+        (page) => current && setPeople(page.content),
+        () => current && setPeople([]),
+      );
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [open, text, mayListPeople]);
+
+  // A person in the URL (a link, "events of this person"): show the name, not the id.
+  useEffect(() => {
+    if (!actorId || !mayListPeople || chosen?.id === actorId) return;
+    let current = true;
+    api<UserSummary>(`/api/iam/users/${encodeURIComponent(actorId)}`).then(
+      (user) => current && setChosen(user),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [actorId, mayListPeople, chosen?.id]);
+
+  const trimmed = text.trim();
+  const label = actorId
+    ? chosen?.id === actorId
+      ? chosen.name
+      : "Pessoa escolhida"
+    : actorEmail
+      ? `E-mail contém “${actorEmail}”`
+      : "Quem";
+  const active = !!(actorId || actorEmail);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className={active ? "max-w-60 border-solid" : "border-dashed"}>
+            <UserRound data-icon="inline-start" />
+            <span className="truncate">{label}</span>
+          </Button>
+        </PopoverTrigger>
+        {active && (
+          <Button variant="ghost" size="icon-sm" aria-label="Remover filtro de quem agiu" onClick={() => onChange({})}>
+            <X />
+          </Button>
+        )}
+      </div>
+      <PopoverContent className="w-72 p-0" align="start">
+        {/* The API filters; the list shows what it answered, in its order. */}
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={mayListPeople ? "Nome ou e-mail…" : "Parte do e-mail…"}
+            value={text}
+            onValueChange={setText}
+            maxLength={320}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {trimmed.length < MIN_EMAIL_TEXT ? "Digite ao menos 3 letras." : "Ninguém encontrado."}
+            </CommandEmpty>
+            {trimmed.length >= MIN_EMAIL_TEXT && (
+              <CommandGroup heading="E-mail">
+                <CommandItem
+                  value={`email:${trimmed}`}
+                  onSelect={() => {
+                    onChange({ actorEmail: trimmed });
+                    setOpen(false);
+                  }}
+                >
+                  <AtSign />
+                  <span className="truncate">E-mail contém “{trimmed}”</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {people.length > 0 && (
+              <CommandGroup heading="Pessoas">
+                {people.map((person) => (
+                  <CommandItem
+                    key={person.id}
+                    value={`person:${person.id}`}
+                    onSelect={() => {
+                      setChosen(person);
+                      onChange({ actorId: person.id });
+                      setOpen(false);
+                    }}
+                  >
+                    <UserRound />
+                    <div className="grid min-w-0">
+                      <span className="truncate">{person.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{person.email}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -509,8 +674,15 @@ function EventSheet({
               </div>
             </div>
             <SheetFooter className="border-t">
-              {event.actorEmail && (
-                <Button variant="outline" onClick={() => onFilter({ actorEmail: event.actorEmail ?? "" })}>
+              {(event.actorId || event.actorEmail) && (
+                <Button
+                  variant="outline"
+                  // By id when the event has one: the e-mail box matches part of an address, so
+                  // ana@x.com would also bring joana@x.com. Sign-in failures of unknown addresses have no id.
+                  onClick={() =>
+                    onFilter(event.actorId ? { actorId: event.actorId } : { actorEmail: event.actorEmail ?? "" })
+                  }
+                >
                   <Filter data-icon="inline-start" />
                   Eventos desta pessoa
                 </Button>

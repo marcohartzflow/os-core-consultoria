@@ -138,10 +138,14 @@ export function TasksPage() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [searchParams, router, pathname]);
 
-  // Assignee facet: the first active people by name (the facet is a shortcut, not a directory).
-  const people = useLoad(() =>
+  // Assignee facet: the first people who can hold a task, by name (the facet is a shortcut, not a
+  // directory). Same rule as the API: anyone but disabled accounts.
+  const people = useLoad((signal) =>
     mayListUsers
-      ? fetchPage<UserSummary>(`/api/iam/users${toQuery({ state: ["ACTIVE"], size: 100, sort: "name" })}`).then(
+      ? fetchPage<UserSummary>(
+          `/api/iam/users${toQuery({ state: ["ACTIVE", "INVITED", "LOCKED"], size: 100, sort: "name" })}`,
+          signal,
+        ).then(
           (page) => page.content,
         )
       : Promise.resolve([] as UserSummary[]),
@@ -272,6 +276,7 @@ export function TasksPage() {
                 <InputGroupInput
                   aria-label="Buscar tarefas"
                   placeholder="Buscar tarefas…"
+                  maxLength={200}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />

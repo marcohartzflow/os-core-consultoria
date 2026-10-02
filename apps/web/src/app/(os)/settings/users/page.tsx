@@ -21,9 +21,10 @@ import {
 import { api } from "@/core/api/client";
 import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
 import { fetchAll } from "@/core/api/query";
-import { useLoad } from "@/core/api/useLoad";
+import { useLoad, type Loaded } from "@/core/api/useLoad";
 import type { AdministratorStatus, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
+import { MfaBadge } from "@/core/iam/MfaBadge";
 import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
 import { InvitationLinkDialog, UserActions } from "@/core/iam/UserActions";
@@ -55,7 +56,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
@@ -125,7 +126,9 @@ function RoleBadges({ user }: { user: UserSummary }) {
       {rest.length > 0 && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Badge variant="secondary">+{rest.length}</Badge>
+            <Badge variant="secondary" tabIndex={0}>
+              +{rest.length}
+            </Badge>
           </TooltipTrigger>
           <TooltipContent>{rest.map((role) => role.name).join(", ")}</TooltipContent>
         </Tooltip>
@@ -134,26 +137,14 @@ function RoleBadges({ user }: { user: UserSummary }) {
   );
 }
 
-function MfaBadge({ user }: { user: UserSummary }) {
-  return user.mfaEnabled ? (
-    <Badge variant="secondary">
-      <ShieldCheck />
-      Ativa
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="text-muted-foreground">
-      <ShieldAlert />
-      Inativa
-    </Badge>
-  );
-}
-
 function LastAccess({ iso }: { iso: string | null | undefined }) {
   if (!iso) return <span className="text-muted-foreground">Nunca</span>;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="whitespace-nowrap">{formatRelative(iso)}</span>
+        <span tabIndex={0} className="whitespace-nowrap">
+          {formatRelative(iso)}
+        </span>
       </TooltipTrigger>
       <TooltipContent>{formatDateTime(iso)}</TooltipContent>
     </Tooltip>
@@ -163,11 +154,15 @@ function LastAccess({ iso }: { iso: string | null | undefined }) {
 export default function UsersPage() {
   const router = useRouter();
   const [view, setView] = useState<"list" | "grid">("list");
-  const administrators = useLoad(() => api<AdministratorStatus>("/api/iam/users/administrators"));
+  const administrators = useLoad((signal) => api<AdministratorStatus>("/api/iam/users/administrators", { signal }));
   const { hasPermission } = useAuth();
   const mayReadRoles = hasPermission("iam.role.read");
-  // Options of the roles filter; without iam.role.read the filter is simply left out.
-  const roles = useLoad(() => (mayReadRoles ? fetchAll<RoleSummary>("/api/iam/roles") : Promise.resolve([])));
+  const mayAssignRoles = hasPermission("iam.user.roles.assign");
+  // Options of the roles filter and of the invitation's role picker; without iam.role.read the
+  // filter is simply left out (and the picker shows the API's refusal).
+  const roles = useLoad((signal) =>
+    mayReadRoles || mayAssignRoles ? fetchAll<RoleSummary>("/api/iam/roles", {}, { signal }) : Promise.resolve([]),
+  );
   // Row actions change status, sessions or MFA: reload the page of rows and the administrators count.
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);
   const onChanged = useCallback(() => refreshRef.current(), []);
@@ -199,7 +194,7 @@ export default function UsersPage() {
         accessorFn: (user) => String(user.mfaEnabled),
         enableSorting: false,
         header: "Duas etapas",
-        cell: ({ row }) => <MfaBadge user={row.original} />,
+        cell: ({ row }) => <MfaBadge enabled={row.original.mfaEnabled} />,
       },
       {
         id: "lastLoginAt",
@@ -229,7 +224,10 @@ export default function UsersPage() {
   );
 
   const users = useServerTable<UserSummary>({
-    sortable: ["name", "status", "lastLoginAt", "createdAt"],
+    // Not "status": the API orders the raw status, while the column shows the badge precedence
+    // (anonymized, locked, then status), so that order would look shuffled.
+    sortable: ["name", "lastLoginAt", "createdAt"],
+    defaultSort: { id: "name", desc: false },
     path: "/api/iam/users",
     columns,
     filters: FILTERS,
@@ -264,7 +262,7 @@ export default function UsersPage() {
         description="Quem acessa o portal, com quais roles, e como anda a segurança de cada conta."
         actions={
           <RequirePermission permission="iam.user.create">
-            <InviteDialog onInvited={onChanged} />
+            <InviteDialog roles={roles} onInvited={onChanged} />
           </RequirePermission>
         }
       />
@@ -276,8 +274,9 @@ export default function UsersPage() {
             {belowMinimum.active} de {belowMinimum.minimum} administradores ativos
           </AlertTitle>
           <AlertDescription>
-            Promova mais uma pessoa de confiança a administrador. Com um só, perder essa conta deixa ninguém capaz de
-            gerenciar acessos.
+            {belowMinimum.active <= 1
+              ? "Promova mais uma pessoa de confiança a administrador. Se a única conta de administrador for perdida, ninguém poderá gerenciar acessos."
+              : `Promova mais ${belowMinimum.minimum - belowMinimum.active} ${belowMinimum.minimum - belowMinimum.active === 1 ? "pessoa" : "pessoas"} de confiança a administrador. Se todas as contas de administrador forem perdidas, ninguém poderá gerenciar acessos.`}
           </AlertDescription>
         </Alert>
       )}
@@ -295,6 +294,7 @@ export default function UsersPage() {
                 <InputGroupInput
                   aria-label="Buscar por nome ou e-mail"
                   placeholder="Buscar por nome ou e-mail…"
+                  maxLength={200}
                   value={users.search}
                   onChange={(e) => users.setSearch(e.target.value)}
                 />
@@ -361,9 +361,10 @@ export default function UsersPage() {
           </DataTableCardFooter>
         )}
       </DataTableCard>
-      {page && users.filtered && (
-        <span className="sr-only" aria-live="polite">{`${total} usuários encontrados`}</span>
-      )}
+      {/* Always mounted: a live region announces changes only once it exists. */}
+      <span className="sr-only" aria-live="polite">
+        {page && users.filtered ? `${total} ${total === 1 ? "usuário encontrado" : "usuários encontrados"}` : ""}
+      </span>
     </>
   );
 }
@@ -395,7 +396,7 @@ function UserCard({ user, onChanged }: { user: UserSummary; onChanged: () => Pro
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5">
           <StatusBadge user={user} />
-          <MfaBadge user={user} />
+          <MfaBadge enabled={user.mfaEnabled} />
         </div>
         <RoleBadges user={user} />
       </CardContent>
@@ -406,7 +407,14 @@ function UserCard({ user, onChanged }: { user: UserSummary; onChanged: () => Pro
   );
 }
 
-function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
+function InviteDialog({
+  roles,
+  onInvited,
+}: {
+  /** The page's roles load, shared with the filter. */
+  roles: Loaded<RoleSummary[]>;
+  onInvited: () => Promise<void>;
+}) {
   const { hasPermission } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -422,7 +430,6 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
     if (requested) setOpen(true);
   }
   const [password, setPassword] = useState("");
-  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -439,14 +446,11 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
     router.replace(`/settings/users${query ? `?${query}` : ""}`, { scroll: false });
   }, [searchParams, router]);
 
-  useEffect(() => {
-    if (!open || !mayAssignRoles) return;
-    fetchAll<RoleSummary>("/api/iam/roles").then(setRoles, () => setRoles([]));
-  }, [open, mayAssignRoles]);
+  const confirmGrant = grantsAdministrator(roles.data ?? [], new Set(), selected);
 
-  const confirmGrant = grantsAdministrator(roles, new Set(), selected);
-
-  function reset() {
+  /** Closes the dialog and forgets what was typed (the grant password included). */
+  function close() {
+    setOpen(false);
     setEmail("");
     setName("");
     setSelected(new Set());
@@ -468,8 +472,7 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
           currentPassword: confirmGrant ? password : null,
         },
       });
-      setOpen(false);
-      reset();
+      close();
       if (issued.invitationLink) setLink({ link: issued.invitationLink, email: issued.user.email });
       else notifySuccess("Convite enviado", `${issued.user.email} recebeu o link por e-mail.`);
       await onInvited();
@@ -488,8 +491,8 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) reset();
+          if (next) setOpen(true);
+          else if (!busy) close();
         }}
       >
         <DialogTrigger asChild>
@@ -539,11 +542,14 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
               </Field>
               {mayAssignRoles ? (
                 <>
-                  <Field>
-                    <FieldLabel>Roles</FieldLabel>
-                    <FieldDescription>O que a pessoa pode fazer assim que entrar.</FieldDescription>
-                    <RolePicker roles={roles} selected={selected} onChange={setSelected} />
-                  </Field>
+                  <RolePicker
+                    roles={roles.data}
+                    error={roles.error}
+                    onRetry={roles.retry}
+                    description="O que a pessoa pode fazer assim que entrar."
+                    selected={selected}
+                    onChange={setSelected}
+                  />
                   {confirmGrant && <AdministratorGrantConfirmation value={password} onChange={setPassword} />}
                 </>
               ) : (
@@ -555,7 +561,7 @@ function InviteDialog({ onInvited }: { onInvited: () => Promise<void> }) {
                 </Alert>
               )}
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+                <Button type="button" variant="outline" onClick={close} disabled={busy}>
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={busy}>

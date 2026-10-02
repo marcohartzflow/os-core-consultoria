@@ -16,7 +16,7 @@ const DEFAULT_SIZE = 33;
 const WIDE_SIZE = 60;
 
 function saveLayout(layout: Layout) {
-  document.cookie = `${AGENT_LAYOUT_COOKIE}=${encodeURIComponent(JSON.stringify(layout))}; path=/; max-age=31536000; SameSite=Lax`;
+  document.cookie = `${AGENT_LAYOUT_COOKIE}=${encodeURIComponent(JSON.stringify(layout))}; path=/; max-age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
 }
 
 /**

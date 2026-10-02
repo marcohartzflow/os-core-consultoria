@@ -11,14 +11,14 @@ import { MyTasksCard } from "./MyTasksCard";
 import type { TaskSummary } from "./types";
 
 /** How many tasks match, read from the page total: the rows themselves are not needed. */
-function count(params: Record<string, string>) {
-  return fetchPage<TaskSummary>(`/api/tasks${toQuery({ ...params, size: 1 })}`).then((page) => page.page.totalElements);
+function count(params: Record<string, string>, signal: AbortSignal) {
+  return fetchPage<TaskSummary>(`/api/tasks${toQuery({ ...params, size: 1 })}`, signal).then((page) => page.page.totalElements);
 }
 
 /** Indicator of the tasks example module on the dashboard. */
 export function OpenTasksStat() {
-  const counts = useLoad(() =>
-    Promise.all([count({ status: "OPEN" }), count({ status: "OPEN", dueBefore: isoDay(new Date()) })]),
+  const counts = useLoad((signal) =>
+    Promise.all([count({ status: "OPEN" }, signal), count({ status: "OPEN", dueBefore: isoDay(new Date()) }, signal)]),
   );
   const [open, overdue] = counts.data ?? [null, 0];
   return (
@@ -38,8 +38,8 @@ export function OpenTasksStat() {
 /** "Minhas tarefas" card of the tasks example module on the dashboard. */
 export function MyTasksWidget() {
   const { me } = useAuth();
-  const mine = useLoad(() =>
-    fetchPage<TaskSummary>(`/api/tasks${toQuery({ status: "OPEN", assigneeId: me.id, size: 5 })}`),
+  const mine = useLoad((signal) =>
+    fetchPage<TaskSummary>(`/api/tasks${toQuery({ status: "OPEN", assigneeId: me.id, size: 5 })}`, signal),
   );
   return <MyTasksCard page={mine.data} meId={me.id} error={mine.error} onRetry={mine.retry} />;
 }

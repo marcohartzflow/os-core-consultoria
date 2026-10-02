@@ -66,6 +66,20 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
+/**
+ * Forgets the preferences kept in this browser (on logout). The API also answers the logout with
+ * Clear-Site-Data, but a proxy may strip that header.
+ */
+export function clearAgentPreferences() {
+  cache = null;
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    // Blocked storage: nothing was kept.
+  }
+  listeners.forEach((listener) => listener());
+}
+
 export function useAgentPreferences(): [AgentPreferences, (patch: Partial<AgentPreferences>) => void] {
   const preferences = useSyncExternalStore(subscribe, read, () => DEFAULT_PREFERENCES);
   const update = useCallback((patch: Partial<AgentPreferences>) => write({ ...read(), ...patch }), []);

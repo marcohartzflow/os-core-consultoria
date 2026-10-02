@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -22,13 +22,16 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/core/api/client";
 import { actionLabel } from "@/core/audit/labels";
-import { fetchPage, fetchAll, toQuery } from "@/core/api/query";
+import { fetchAll, fetchCursorPage, toQuery } from "@/core/api/query";
 import type { AuditEventView, InvitationIssued, RoleSummary, UserSummary } from "@/core/api/types";
-import { useLoad } from "@/core/api/useLoad";
+import { useLoad, type Loaded } from "@/core/api/useLoad";
 import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
+import { useStepUp } from "@/core/auth/StepUp";
+import { MfaBadge } from "@/core/iam/MfaBadge";
 import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
 import { InvitationLinkDialog } from "@/core/iam/UserActions";
+import { useOpenSettings } from "@/core/settings/SettingsDialog";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { EmptyState, ErrorState, fieldError, FormError, notifyError, notifySuccess } from "@/core/ui/feedback";
 import { formatDate, formatDateTime, formatRelative, initials } from "@/core/ui/format";
@@ -67,15 +70,13 @@ function BackLink() {
 
 export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data, error, refresh, retry } = useLoad(
-    () =>
-      Promise.all([
-        api<UserSummary>(`/api/iam/users/${id}`),
-        // Roles need iam.role.read; without it the page still shows the account.
-        fetchAll<RoleSummary>("/api/iam/roles").catch(() => [] as RoleSummary[]),
-      ]),
-    id,
-  );
+  const { hasPermission } = useAuth();
+  const mayReadRoles = hasPermission("iam.role.read") || hasPermission("iam.user.roles.assign");
+  const { data, error, refresh, retry } = useLoad((signal) => api<UserSummary>(`/api/iam/users/${encodeURIComponent(id)}`, { signal }), id);
+  // Options of the role picker, loaded once (not again after each action on the account). They
+  // need iam.role.read; without it the page still shows the account and its roles (and the picker,
+  // shown to those who may assign roles, shows the API's refusal).
+  const roles = useLoad((signal) => (mayReadRoles ? fetchAll<RoleSummary>("/api/iam/roles", {}, { signal }) : Promise.resolve([])));
 
   if (error) {
     return (
@@ -83,7 +84,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         <BackLink />
         <Card>
           <CardContent>
-            {error instanceof ApiError && error.status === 404 ? (
+            {/* 400: the address holds no valid id, which is the same as an account that does not exist. */}
+            {error instanceof ApiError && (error.status === 404 || error.status === 400) ? (
               <EmptyState
                 icon={UserX}
                 title="Usuário não encontrado"
@@ -120,8 +122,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const [user, roles] = data;
-  return <UserDetail key={user.id} user={user} roles={roles} refresh={refresh} />;
+  return <UserDetail key={data.id} user={data} roles={roles} refresh={refresh} />;
 }
 
 function UserDetail({
@@ -130,11 +131,13 @@ function UserDetail({
   refresh,
 }: {
   user: UserSummary;
-  roles: RoleSummary[];
+  roles: Loaded<RoleSummary[]>;
   refresh: () => Promise<void>;
 }) {
   const { me, hasPermission } = useAuth();
+  const openSettings = useOpenSettings();
   const [pending, setPending] = useState<Pending>(null);
+  const { withStepUp, stepUpDialog } = useStepUp();
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isSelf = user.id === me.id;
@@ -187,17 +190,7 @@ function UserDetail({
             <p className="truncate text-sm text-muted-foreground">{user.email}</p>
             <div className="flex flex-wrap items-center gap-1.5">
               <StatusBadge user={user} />
-              {user.mfaEnabled ? (
-                <Badge variant="secondary">
-                  <ShieldCheck />
-                  Duas etapas ativa
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground">
-                  <ShieldAlert />
-                  Duas etapas inativa
-                </Badge>
-              )}
+              <MfaBadge enabled={user.mfaEnabled} named />
               {sortedRoles.map((role) => (
                 <Badge key={role.id} variant="outline">
                   {role.name}
@@ -251,7 +244,8 @@ function UserDetail({
         <TabsContent value="geral">
           <div className="grid items-start gap-4 lg:grid-cols-3">
             <div className="grid gap-4 lg:col-span-2">
-              <ProfileCard user={user} onSaved={refresh} />
+              {/* Keyed by the name so the field starts over when the name changes elsewhere (anonymisation). */}
+              <ProfileCard key={user.name} user={user} onSaved={refresh} />
               <AccessCard user={user} roles={roles} onSaved={refresh} />
             </div>
             <AccountCard user={user} />
@@ -273,9 +267,19 @@ function UserDetail({
                     <ItemDescription>
                       {user.mfaEnabled
                         ? "Ativa. Redefinir apaga o autenticador e os códigos de recuperação; a pessoa configura de novo."
-                        : "Inativa. A pessoa ativa em Minha conta."}
+                        : isSelf
+                          ? "Inativa. Ative em Configurações › Segurança."
+                          : "Inativa. A pessoa ativa em Configurações › Segurança."}
                     </ItemDescription>
                   </ItemContent>
+                  {alive && isSelf && !user.mfaEnabled && (
+                    <ItemActions>
+                      <Button variant="outline" size="sm" onClick={() => openSettings("seguranca")}>
+                        <ShieldCheck data-icon="inline-start" />
+                        Ativar
+                      </Button>
+                    </ItemActions>
+                  )}
                   {alive && !isSelf && user.mfaEnabled && (
                     <RequirePermission permission="iam.user.mfa.reset">
                       <ItemActions>
@@ -287,22 +291,25 @@ function UserDetail({
                     </RequirePermission>
                   )}
                 </Item>
-                <RequirePermission permission="auth.session.terminate">
-                  <Item variant="outline">
-                    <ItemMedia variant="icon">
-                      <LogOut />
-                    </ItemMedia>
-                    <ItemContent>
-                      <ItemTitle>Sessões</ItemTitle>
-                      <ItemDescription>Desconecta a pessoa de todos os dispositivos agora.</ItemDescription>
-                    </ItemContent>
-                    <ItemActions>
-                      <Button variant="outline" size="sm" onClick={() => setPending("sessions")}>
-                        Encerrar sessões
-                      </Button>
-                    </ItemActions>
-                  </Item>
-                </RequirePermission>
+                {/* Own sessions are ended from Configurações › Sessões, which keeps the current one. */}
+                {alive && !isSelf && (
+                  <RequirePermission permission="auth.session.terminate">
+                    <Item variant="outline">
+                      <ItemMedia variant="icon">
+                        <LogOut />
+                      </ItemMedia>
+                      <ItemContent>
+                        <ItemTitle>Sessões</ItemTitle>
+                        <ItemDescription>Desconecta a pessoa de todos os dispositivos agora.</ItemDescription>
+                      </ItemContent>
+                      <ItemActions>
+                        <Button variant="outline" size="sm" onClick={() => setPending("sessions")}>
+                          Encerrar sessões
+                        </Button>
+                      </ItemActions>
+                    </Item>
+                  </RequirePermission>
+                )}
                 {alive && (
                   <RequirePermission permission="iam.user.disable">
                     <Item variant="outline">
@@ -386,11 +393,11 @@ function UserDetail({
         onOpenChange={(open) => !open && setPending(null)}
         destructive
         title="Redefinir verificação em duas etapas?"
-        description={`O aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer. A pessoa configura de novo no próximo acesso.`}
+        description={`A senha, o aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer e todas as sessões terminam. A pessoa recebe por e-mail um link para criar uma nova senha e configura as duas etapas de novo.`}
         confirmLabel="Redefinir"
         onConfirm={async () => {
-          await api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" });
-          notifySuccess("Duas etapas redefinidas", "A pessoa configura de novo no próximo acesso.");
+          await withStepUp(() => api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" }));
+          notifySuccess("Duas etapas redefinidas", `Enviamos para ${user.email} um link para criar uma nova senha.`);
           await refresh();
         }}
       />
@@ -432,12 +439,13 @@ function UserDetail({
         }}
       />
       <InvitationLinkDialog link={link} email={user.email} onClose={() => setLink(null)} />
+      {stepUpDialog}
     </>
   );
 }
 
 function ProfileCard({ user, onSaved }: { user: UserSummary; onSaved: () => Promise<void> }) {
-  const { hasPermission } = useAuth();
+  const { me, hasPermission, refresh: refreshMe } = useAuth();
   const mayEdit = hasPermission("iam.user.update") && !user.anonymizedAt;
   const [name, setName] = useState(user.name);
   const [error, setError] = useState<unknown>(null);
@@ -450,7 +458,8 @@ function ProfileCard({ user, onSaved }: { user: UserSummary; onSaved: () => Prom
     try {
       await api(`/api/iam/users/${user.id}`, { method: "PATCH", body: { name } });
       notifySuccess("Nome atualizado");
-      await onSaved();
+      // The own name also shows in the shell (user menu); re-read the session too.
+      await Promise.all([onSaved(), user.id === me.id ? refreshMe() : undefined]);
     } catch (e) {
       setError(e);
     } finally {
@@ -510,31 +519,46 @@ function AccessCard({
   onSaved,
 }: {
   user: UserSummary;
-  roles: RoleSummary[];
+  roles: Loaded<RoleSummary[]>;
   onSaved: () => Promise<void>;
 }) {
-  const { hasPermission } = useAuth();
+  const { me, hasPermission, refresh: refreshMe } = useAuth();
   const mayAssignRoles = hasPermission("iam.user.roles.assign") && !user.anonymizedAt;
+  const isSelf = user.id === me.id;
   const held = new Set(user.roles.map((role) => role.id));
   const [selected, setSelected] = useState<Set<string>>(held);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const confirmGrant = grantsAdministrator(roles, held, selected);
+  const [confirmingSelfDemotion, setConfirmingSelfDemotion] = useState(false);
+  const confirmGrant = grantsAdministrator(roles.data ?? [], held, selected);
   const changed = selected.size !== held.size || [...selected].some((roleId) => !held.has(roleId));
+  // Removing the system role from oneself takes away the power to give it back: ask first.
+  const dropsOwnAdministrator =
+    isSelf && (roles.data ?? []).some((role) => role.system && held.has(role.id) && !selected.has(role.id));
+
+  /** Saves the selection; throws the API's refusal (shown by the caller). */
+  async function save() {
+    await api(`/api/iam/users/${user.id}/roles`, {
+      method: "PUT",
+      body: { roleIds: [...selected], currentPassword: confirmGrant ? password : null },
+    });
+    setPassword("");
+    notifySuccess("Roles atualizadas", "As permissões mudam na próxima ação da pessoa, sem novo login.");
+    // Own roles change what this session may do: re-read it so menus and pages follow.
+    await Promise.all([onSaved(), isSelf ? refreshMe() : undefined]);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (dropsOwnAdministrator) {
+      setConfirmingSelfDemotion(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/iam/users/${user.id}/roles`, {
-        method: "PUT",
-        body: { roleIds: [...selected], currentPassword: confirmGrant ? password : null },
-      });
-      setPassword("");
-      notifySuccess("Roles atualizadas", "As permissões mudam na próxima ação da pessoa, sem novo login.");
-      await onSaved();
+      await save();
     } catch (e) {
       setError(e);
     } finally {
@@ -562,7 +586,13 @@ function AccessCard({
           <form onSubmit={submit}>
             <FieldGroup>
               <FormError error={error} />
-              <RolePicker roles={roles} selected={selected} onChange={setSelected} />
+              <RolePicker
+                roles={roles.data}
+                error={roles.error}
+                onRetry={roles.retry}
+                selected={selected}
+                onChange={setSelected}
+              />
               {confirmGrant && <AdministratorGrantConfirmation value={password} onChange={setPassword} />}
               <div className="flex gap-2">
                 <Button type="submit" disabled={busy || !changed}>
@@ -575,6 +605,7 @@ function AccessCard({
                     variant="ghost"
                     onClick={() => {
                       setSelected(held);
+                      setPassword("");
                       setError(null);
                     }}
                   >
@@ -596,6 +627,15 @@ function AccessCard({
           <p className="text-sm text-muted-foreground">Nenhuma role: a pessoa não acessa nenhuma área.</p>
         )}
       </CardContent>
+      <ConfirmDialog
+        open={confirmingSelfDemotion}
+        onOpenChange={setConfirmingSelfDemotion}
+        destructive
+        title="Deixar de ser administrador?"
+        description="Você perde o acesso total agora, inclusive para atribuir roles. Só outro administrador poderá devolvê-lo."
+        confirmLabel="Remover meu acesso"
+        onConfirm={save}
+      />
     </Card>
   );
 }
@@ -625,7 +665,9 @@ function AccountCard({ user }: { user: UserSummary }) {
                 {iso ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-sm font-medium">{value}</span>
+                      <span tabIndex={0} className="text-sm font-medium">
+                        {value}
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent>{formatDateTime(iso)}</TooltipContent>
                   </Tooltip>
@@ -644,41 +686,23 @@ function AccountCard({ user }: { user: UserSummary }) {
   );
 }
 
-const EMPTY_EVENTS: AuditEventView[] = [];
 /** Latest events of each query (about the account, by the person); the tab shows the newest 20. */
 const ACTIVITY_SIZE = 20;
 
 /** What was done to this account and what this person did, newest first. */
 function ActivityCard({ user }: { user: UserSummary }) {
-  const [events, setEvents] = useState<AuditEventView[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let current = true;
-    const about = fetchPage<AuditEventView>(
-      `/api/audit/events${toQuery({ entityId: user.id, size: ACTIVITY_SIZE, sort: "occurredAt,desc" })}`,
-    );
-    // actorEmail matches part of an address, so keep only this person's own events (by id).
-    const by = user.anonymizedAt
-      ? Promise.resolve({ content: EMPTY_EVENTS })
-      : fetchPage<AuditEventView>(
-          `/api/audit/events${toQuery({ actorEmail: user.email, size: ACTIVITY_SIZE, sort: "occurredAt,desc" })}`,
-        );
-    Promise.all([about, by]).then(
-      ([a, b]) => {
-        if (!current) return;
-        const merged = new Map<string, AuditEventView>();
-        for (const event of [...a.content, ...b.content.filter((e) => e.actorId === user.id)]) merged.set(event.id, event);
-        setEvents([...merged.values()].sort((x, y) => y.occurredAt.localeCompare(x.occurredAt)).slice(0, 20));
-        setError(null);
-      },
-      (e: unknown) => current && setError(e),
-    );
-    return () => {
-      current = false;
-    };
-  }, [user.id, user.email, user.anonymizedAt, attempt]);
+  const { data: events, error, retry } = useLoad(async (signal) => {
+    const [about, by] = await Promise.all([
+      fetchCursorPage<AuditEventView>(`/api/audit/events${toQuery({ entityId: user.id, size: ACTIVITY_SIZE })}`, signal),
+      fetchCursorPage<AuditEventView>(`/api/audit/events${toQuery({ actorId: user.id, size: ACTIVITY_SIZE })}`, signal),
+    ]);
+    const merged = new Map<string, AuditEventView>();
+    for (const event of [...about.content, ...by.content]) merged.set(event.id, event);
+    // By time, not by text: the API's instants drop zero fractions, so their strings do not sort.
+    return [...merged.values()]
+      .sort((x, y) => Date.parse(y.occurredAt) - Date.parse(x.occurredAt))
+      .slice(0, ACTIVITY_SIZE);
+  }, user.id);
 
   return (
     <Card>
@@ -687,8 +711,9 @@ function ActivityCard({ user }: { user: UserSummary }) {
         <CardDescription>Ações feitas por esta pessoa e sobre esta conta, pela trilha de auditoria.</CardDescription>
         <CardAction>
           <Button variant="ghost" size="sm" asChild>
+            {/* The trail filters one side at a time: this link shows what was done to the account. */}
             <Link href={`/settings/audit?entityId=${encodeURIComponent(user.id)}`}>
-              Ver na auditoria
+              Eventos sobre esta conta
               <ChevronRight data-icon="inline-end" />
             </Link>
           </Button>
@@ -696,14 +721,7 @@ function ActivityCard({ user }: { user: UserSummary }) {
       </CardHeader>
       <CardContent>
         {error ? (
-          <ErrorState
-            error={error}
-            onRetry={() => {
-              setError(null);
-              setEvents(null);
-              setAttempt((n) => n + 1);
-            }}
-          />
+          <ErrorState error={error} onRetry={retry} />
         ) : !events ? (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 4 }, (_, i) => (
@@ -728,7 +746,7 @@ function ActivityCard({ user }: { user: UserSummary }) {
                 <ItemActions>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-xs whitespace-nowrap text-muted-foreground">
+                      <span tabIndex={0} className="text-xs whitespace-nowrap text-muted-foreground">
                         {formatRelative(event.occurredAt)}
                       </span>
                     </TooltipTrigger>

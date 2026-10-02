@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brain, Database, Keyboard, Settings2, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { api } from "@/core/api/client";
 import type { ToolView } from "@/core/api/types";
 import { useAgentPreferences } from "./preferences";
+import { useOpenSettings } from "@/core/settings/SettingsDialog";
 import { ErrorState } from "@/core/ui/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,7 @@ export function AgentSettings({
   onDeleteAll: () => void;
 }) {
   const [preferences, update] = useAgentPreferences();
+  const openSettings = useOpenSettings();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -298,10 +299,15 @@ export function AgentSettings({
                     <ItemDescription>Inclui as conversas, junto com o resto dos seus dados (LGPD).</ItemDescription>
                   </ItemContent>
                   <ItemActions>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/account" onClick={() => onOpenChange(false)}>
-                        Abrir
-                      </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onOpenChange(false);
+                        openSettings("privacidade");
+                      }}
+                    >
+                      Abrir
                     </Button>
                   </ItemActions>
                 </Item>

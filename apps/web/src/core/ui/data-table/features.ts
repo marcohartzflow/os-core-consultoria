@@ -37,3 +37,6 @@ export type DataTableInstance<TData extends RowData> = ReactTable<DataTableFeatu
 export type DataTableColumn<TData extends RowData> = Column<DataTableFeatures, TData, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- columns of one table hold different value types
 export type DataTableColumnDef<TData extends RowData> = ColumnDef<DataTableFeatures, TData, any>;
+
+/** Rows per page the tables offer; the API accepts up to 100 (PageQuery.MAX_SIZE). */
+export const PAGE_SIZES: readonly number[] = [10, 20, 30, 50, 100];

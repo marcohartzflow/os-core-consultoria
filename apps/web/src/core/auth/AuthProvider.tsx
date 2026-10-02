@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, ApiError, setSessionHandlers } from "@/core/api/client";
+import { clearAgentPreferences } from "@/core/ai/preferences";
 import type { Me } from "@/core/api/types";
 import { ErrorState } from "@/core/ui/feedback";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +17,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Sequence of /api/me reads; there is one AuthProvider, so module scope is enough. */
+let latestMeRequest = 0;
+
 /**
  * Loads the current user once, redirects to /login whenever any API call says the session is gone,
  * and re-reads /api/me whenever a call says the session is gated so the gate effect below applies.
@@ -28,20 +32,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Reads the location at call time (not the render's pathname) so a route change does not
   // re-create the callback and re-fetch /api/me on every navigation.
+  // The session can end without a logout (expired, revoked): the assistant's remembered preferences
+  // go with it all the same.
   const toLogin = useCallback(() => {
-    const current = window.location.pathname;
-    const next = current && current !== "/" ? `?next=${encodeURIComponent(current)}` : "";
+    clearAgentPreferences();
+    const current = window.location.pathname + window.location.search;
+    const next = current !== "/" ? `?next=${encodeURIComponent(current)}` : "";
     router.replace(`/login${next}`);
   }, [router]);
 
-  const refresh = useCallback(
-    () =>
-      api<Me>("/api/me").then(setMe, (error: unknown) => {
+  // Refreshes overlap (mount, gated calls, after a mutation): only the latest one may write, or an
+  // older answer arriving last would bring back a state the session already left. Once the portal
+  // is up, a failed refresh keeps the current state instead of replacing the whole app (the error
+  // screen below only shows while there is no user yet).
+  const refresh = useCallback(() => {
+    const request = ++latestMeRequest;
+    return api<Me>("/api/me").then(
+      (value) => {
+        if (request !== latestMeRequest) return;
+        setMe(value);
+        setFailed(null);
+      },
+      (error: unknown) => {
+        if (request !== latestMeRequest) return;
         if (error instanceof ApiError && error.unauthorized) toLogin();
         else setFailed(error);
-      }),
-    [toLogin],
-  );
+      },
+    );
+  }, [toLogin]);
 
   useEffect(() => {
     void refresh();
@@ -52,22 +70,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setSessionHandlers(null);
   }, [toLogin, refresh]);
 
-  // The API gates the session until these are resolved; keep the person on the right screen.
+  // The API gates the session until the second step of the login is done; keep the person on
+  // its screen. The account gate (new password, required second factor) is drawn by the AppShell.
   useEffect(() => {
-    if (!me) return;
-    if (me.mfa.enabled && !me.mfa.verified) {
-      if (pathname !== "/mfa") router.replace("/mfa");
-      return;
-    }
-    if ((me.passwordChangeRequired || (me.mfa.required && !me.mfa.enabled)) && pathname !== "/account") {
-      router.replace("/account");
-    }
+    if (me && me.mfa.enabled && !me.mfa.verified && pathname !== "/mfa") router.replace("/mfa");
   }, [me, pathname, router]);
 
   const logout = useCallback(async () => {
     try {
       await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Already gone or offline: the session ends on this side regardless, and callers use `void logout()`.
     } finally {
+      clearAgentPreferences();
       router.replace("/login");
     }
   }, [router]);
@@ -85,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [me, refresh, logout],
   );
 
-  if (failed) {
+  if (failed && !me) {
     return (
       <main className="flex min-h-svh items-center justify-center p-6">
         <ErrorState

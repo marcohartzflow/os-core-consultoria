@@ -63,7 +63,6 @@ export function SetPasswordForm({
             autoComplete="new-password"
             required
             minLength={12}
-            maxLength={128}
             aria-invalid={!!passwordError}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

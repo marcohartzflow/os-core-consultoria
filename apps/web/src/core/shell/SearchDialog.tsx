@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
-import { Search, UserRound } from "lucide-react";
+import { Search } from "lucide-react";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { useOpenSettings } from "@/core/settings/SettingsDialog";
+import { SETTINGS_SECTIONS } from "@/core/settings/sections";
 import { navigationFor, quickCreateFor } from "./navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,20 +20,19 @@ import {
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 
-/** Jump to any screen the user may open (Cmd/Ctrl+J). Lists the same entries as the sidebar. */
+/** Jump to any screen the user may open (Cmd/Ctrl+J): the sidebar entries and the settings sections. */
 export function SearchDialog() {
   const { hasPermission } = useAuth();
   const router = useRouter();
+  const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
-  const sections = [
-    ...navigationFor(hasPermission),
-    { title: "Criar", items: quickCreateFor(hasPermission) },
-    { title: "Conta", items: [{ label: "Minha conta", href: "/account", icon: UserRound }] },
-  ].filter((section) => section.items.length > 0);
+  const sections = [...navigationFor(hasPermission), { title: "Criar", items: quickCreateFor(hasPermission) }].filter(
+    (section) => section.items.length > 0,
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "j" && (event.metaKey || event.ctrlKey)) {
+      if (event.key.toLowerCase() === "j" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         setOpen((previous) => !previous);
       }
@@ -78,6 +79,22 @@ export function SearchDialog() {
                 </CommandGroup>
               </Fragment>
             ))}
+            <CommandSeparator />
+            <CommandGroup heading="Configurações">
+              {SETTINGS_SECTIONS.map((item) => (
+                <CommandItem
+                  key={item.id}
+                  value={`Configurações ${item.label}`}
+                  onSelect={() => {
+                    setOpen(false);
+                    openSettings(item.id);
+                  }}
+                >
+                  <item.icon />
+                  {item.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
           </CommandList>
         </Command>
       </CommandDialog>

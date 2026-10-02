@@ -34,7 +34,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { api, errorMessage, mutationHeaders } from "@/core/api/client";
+import { api, errorMessage, isGated, mutationHeaders, problem, UserFacingError } from "@/core/api/client";
 import type { ChatMessage, ConversationSummary, PendingActionView } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
@@ -251,7 +251,12 @@ export function AgentPanel() {
         signal: controller.signal,
       });
       if (!response.ok || !response.body) {
-        throw new Error(
+        if (!response.ok) {
+          // Same reaction as every api() call: a lost session goes to the login, a gated one re-reads /api/me.
+          const failure = await problem(response);
+          if (failure.unauthorized || isGated(failure)) throw failure;
+        }
+        throw new UserFacingError(
           response.status === 403
             ? "Sem permissão para usar o assistente"
             : response.status === 429
@@ -275,7 +280,7 @@ export function AgentPanel() {
                 conversationId: conversationId!,
                 tool: data.tool,
                 summary: data.summary,
-                arguments: "",
+                arguments: typeof data.arguments === "string" ? data.arguments : "",
                 status: "PENDING",
                 createdAt: new Date().toISOString(),
                 expiresAt: "",
@@ -524,6 +529,7 @@ export function AgentPanel() {
                     </AlertTitle>
                     <AlertDescription>
                       <p>{action.summary}</p>
+                      <ActionArguments json={action.arguments} />
                       <div className="mt-3 flex gap-2">
                         <Button size="sm" variant="destructive" onClick={() => void resolve(action, "confirm")}>
                           Confirmar
@@ -652,6 +658,31 @@ function Welcome({ onPick, hasPermission }: { onPick: (text: string) => void; ha
         ))}
       </EmptyContent>
     </Empty>
+  );
+}
+
+/** The call exactly as the assistant made it, so the person confirms the values and not only the summary. */
+function ActionArguments({ json }: { json: string }) {
+  let entries: [string, unknown][] = [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) entries = Object.entries(parsed);
+  } catch {
+    if (json.trim()) return <p className="mt-2 font-mono text-xs break-all text-foreground">{json}</p>;
+  }
+  entries = entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
+  if (entries.length === 0) return null;
+  return (
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+      {entries.map(([key, value]) => (
+        <div key={key} className="contents">
+          <dt className="font-mono text-muted-foreground">{key}</dt>
+          <dd className="break-all whitespace-pre-wrap text-foreground">
+            {typeof value === "string" ? value : JSON.stringify(value)}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

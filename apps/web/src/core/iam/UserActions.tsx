@@ -6,6 +6,7 @@ import { Copy, LogOut, Mail, MoreHorizontal, ShieldOff, UserCheck, UserRound, Us
 import { api } from "@/core/api/client";
 import type { InvitationIssued, UserSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { useStepUp } from "@/core/auth/StepUp";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { notifyError, notifySuccess } from "@/core/ui/feedback";
 import { Button } from "@/components/ui/button";
@@ -74,12 +75,14 @@ type Pending = "sessions" | "mfa" | "disable" | null;
 export function UserActions({ user, onChanged }: { user: UserSummary; onChanged: () => Promise<unknown> | void }) {
   const { me, hasPermission } = useAuth();
   const [pending, setPending] = useState<Pending>(null);
+  const { withStepUp, stepUpDialog } = useStepUp();
   const [link, setLink] = useState<string | null>(null);
   const isSelf = user.id === me.id;
   const alive = !user.anonymizedAt;
 
   const mayResend = alive && user.status === "INVITED" && hasPermission("iam.user.create");
-  const mayEndSessions = alive && hasPermission("auth.session.terminate");
+  // Own sessions are ended from Configurações › Sessões, which keeps the current one.
+  const mayEndSessions = alive && !isSelf && hasPermission("auth.session.terminate");
   const mayResetMfa = alive && !isSelf && user.mfaEnabled && hasPermission("iam.user.mfa.reset");
   const mayDisable = alive && !isSelf && user.status !== "DISABLED" && hasPermission("iam.user.disable");
   const mayEnable = alive && user.status === "DISABLED" && hasPermission("iam.user.disable");
@@ -182,11 +185,11 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
         onOpenChange={(open) => !open && setPending(null)}
         destructive
         title="Redefinir verificação em duas etapas?"
-        description={`O aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer. A pessoa configura de novo no próximo acesso.`}
+        description={`A senha, o aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer e todas as sessões terminam. A pessoa recebe por e-mail um link para criar uma nova senha e configura as duas etapas de novo.`}
         confirmLabel="Redefinir"
         onConfirm={async () => {
-          await api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" });
-          notifySuccess("Duas etapas redefinidas", "A pessoa configura de novo no próximo acesso.");
+          await withStepUp(() => api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" }));
+          notifySuccess("Duas etapas redefinidas", `Enviamos para ${user.email} um link para criar uma nova senha.`);
           await onChanged();
         }}
       />
@@ -204,6 +207,7 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
         }}
       />
       <InvitationLinkDialog link={link} email={user.email} onClose={() => setLink(null)} />
+      {stepUpDialog}
     </>
   );
 }

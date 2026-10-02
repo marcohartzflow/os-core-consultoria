@@ -46,16 +46,12 @@ export function quickCreateFor(hasPermission: (permission: string) => boolean): 
   return items.filter((item) => !item.permission || hasPermission(item.permission));
 }
 
-/**
- * Trail for the header: section and screen from the navigation, plus "Detalhes" below a known
- * screen. Paths outside the navigation (the account page) get their own label.
- */
+/** Trail for the header: section and screen from the navigation, plus "Detalhes" below a known screen. */
 export function breadcrumbFor(
   pathname: string,
   hasPermission: (permission: string) => boolean,
 ): { label: string; href?: string }[] {
   if (pathname === "/") return [{ label: "Painel" }];
-  if (pathname === "/account") return [{ label: "Conta" }, { label: "Minha conta" }];
   for (const section of navigationFor(hasPermission)) {
     for (const item of section.items) {
       if (item.href === "/") continue;

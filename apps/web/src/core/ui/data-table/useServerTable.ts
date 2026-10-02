@@ -12,11 +12,11 @@ import {
   type Updater,
   type ColumnVisibilityState,
 } from "@tanstack/react-table";
-import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
+import { fetchCursorPage, fetchPage, toQuery, type CursorPage, type QueryValue } from "@/core/api/query";
+import type { Paged } from "@/core/api/types";
 import { useLoad } from "@/core/api/useLoad";
-import { dataTableFeatures, type DataTableColumnDef } from "./features";
+import { dataTableFeatures, PAGE_SIZES, type DataTableColumnDef } from "./features";
 
-const PAGE_SIZES = [10, 20, 30, 50, 100] as const;
 const SEARCH_DELAY_MS = 300;
 
 export interface ServerTableOptions<TData extends RowData> {
@@ -45,6 +45,12 @@ export interface ServerTableOptions<TData extends RowData> {
   /** Parameters always sent (a fixed scope of the screen). */
   fixed?: Record<string, QueryValue>;
   pageSize?: number;
+  /**
+   * Pages by position instead of page number (an API that answers {content, next, previous,
+   * total, totalExact}, such as the audit trail). Every page then costs the same however deep it
+   * is; the footer offers first, previous, next and last instead of "page X of Y".
+   */
+  cursor?: boolean;
   initialVisibility?: ColumnVisibilityState;
   getRowId: (row: TData) => string;
 }
@@ -70,9 +76,20 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
   const scalarIds = options.scalars ?? [];
 
   const q = params.get("q") ?? "";
-  const pageIndex = readInt(params.get("page"), 1, 1, 10_000) - 1;
-  const pageSize = readInt(params.get("size"), defaultSize, 1, 100);
-  const sortParam = params.get("sort");
+  const cursorMode = options.cursor ?? false;
+  // Position of a cursor-paged table: after (older), before (newer) or the oldest page.
+  const position = cursorMode
+    ? { after: params.get("after") ?? undefined, before: params.get("before") ?? undefined, oldest: params.get("oldest") === "true" || undefined }
+    : {};
+  const pageIndex = cursorMode ? 0 : readInt(params.get("page"), 1, 1, 10_000) - 1;
+  // A size the footer does not offer (an edited link) would leave its select empty: use the nearest one.
+  const requestedSize = readInt(params.get("size"), defaultSize, 1, 100);
+  const pageSize = PAGE_SIZES.reduce((best, size) =>
+    Math.abs(size - requestedSize) < Math.abs(best - requestedSize) ? size : best,
+  );
+  // A sort on a field the API does not accept (an old or edited link) would fail every request.
+  const rawSort = params.get("sort");
+  const sortParam = rawSort && options.sortable.includes(rawSort.split(",")[0]) ? rawSort : null;
   const filterValues = useMemo(
     () => Object.fromEntries(filterIds.map((id) => [id, params.getAll(id)])) as Record<string, string[]>,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterIds is a static list per screen
@@ -106,6 +123,8 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
       sort?: string | null;
       page?: number;
       size?: number;
+      /** Cursor tables: where to go; any other change goes back to the newest page. */
+      position?: { after?: string; before?: string; oldest?: boolean };
     }) => {
       const next = {
         q: patch.q ?? q,
@@ -119,7 +138,10 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
         // Keep parameters of the screen that are not table state (e.g. ?convidar).
         ...Object.fromEntries(
           [...params.keys()]
-            .filter((key) => !["q", "sort", "page", "size", ...filterIds, ...scalarIds].includes(key))
+            .filter(
+              (key) =>
+                !["q", "sort", "page", "size", "after", "before", "oldest", ...filterIds, ...scalarIds].includes(key),
+            )
             .map((key) => [key, params.getAll(key)]),
         ),
         q: next.q.trim() || undefined,
@@ -127,6 +149,7 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
         ...Object.fromEntries(scalarIds.map((id) => [id, (next.scalars[id] ?? "").trim() || undefined])),
         sort: next.sort ?? undefined,
         page: next.page > 0 ? next.page + 1 : undefined,
+        ...patch.position,
         size: next.size !== defaultSize ? next.size : undefined,
       });
       router.replace(`${pathname}${query}`, { scroll: false });
@@ -139,9 +162,10 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
   const [search, setSearch] = useState(q);
   const [shownQ, setShownQ] = useState(q);
   if (q !== shownQ) {
-    // The URL changed from outside (back button, a link): show its text.
+    // The URL changed from outside (back button, a link): show its text. The URL keeps the text
+    // trimmed, so an echo of what was typed ("foo " sent as "foo") must not eat the trailing space.
     setShownQ(q);
-    setSearch(q);
+    if (q !== search.trim()) setSearch(q);
   }
   useEffect(() => {
     if (search.trim() === q.trim()) return;
@@ -178,12 +202,38 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
     ...(options.toParams
       ? options.toParams(filterValues, scalarValues)
       : { ...filterValues, ...Object.fromEntries(scalarIds.map((id) => [id, scalarValues[id].trim() || undefined])) }),
-    sort: sortParam ?? undefined,
-    page: pageIndex,
+    ...(cursorMode ? position : { sort: sortParam ?? undefined, page: pageIndex }),
     size: pageSize,
   });
-  const loaded = useLoad(() => fetchPage<TData>(`${options.path}${apiQuery}`), apiQuery);
-  const page = loaded.data;
+  const loaded = useLoad<Paged<TData> | CursorPage<TData>>(
+    (signal) =>
+      cursorMode
+        ? fetchCursorPage<TData>(`${options.path}${apiQuery}`, signal)
+        : fetchPage<TData>(`${options.path}${apiQuery}`, signal),
+    apiQuery,
+  );
+  // Both shapes are read as a page; a cursor page is "page 1 of 1" holding its total.
+  const cursorPage = cursorMode ? (loaded.data as CursorPage<TData> | null) : null;
+  const page: Paged<TData> | null = cursorPage
+    ? {
+        content: cursorPage.content,
+        page: { size: pageSize, number: 0, totalElements: cursorPage.total, totalPages: 1 },
+      }
+    : (loaded.data as Paged<TData> | null);
+
+  // A page past the last one (an old link, or rows removed by an action) comes back empty while
+  // the search still has rows: go to the last page instead of showing "nothing found".
+  // Cursor tables: a position that no longer has rows (its entries filtered out) starts over.
+  const lastPage = page ? Math.max(0, page.page.totalPages - 1) : 0;
+  const positioned = !!(position.after || position.before || position.oldest);
+  const pastTheEnd =
+    !loaded.loading &&
+    !!page &&
+    page.content.length === 0 &&
+    (cursorMode ? positioned && page.page.totalElements > 0 : pageIndex > lastPage);
+  useEffect(() => {
+    if (pastTheEnd) navigate({ page: lastPage });
+  }, [pastTheEnd, lastPage, navigate]);
 
   const sortableColumns = useMemo(
     () => options.columns.map((column) => ({ ...column, enableSorting: options.sortable.includes(column.id ?? "") })),
@@ -203,6 +253,7 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
     initialState: { columnVisibility: options.initialVisibility ?? {} },
     state: { pagination, sorting, columnFilters },
     onPaginationChange: (updater: Updater<PaginationState>) => {
+      // Cursor tables only change the size here; moving is done through `cursor`.
       const next = functionalUpdate(updater, pagination);
       navigate({ page: next.pageSize !== pageSize ? 0 : next.pageIndex, size: next.pageSize });
     },
@@ -223,6 +274,21 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
   return {
     table,
     page,
+    /** Cursor tables: the total (exact or "at least") and the moves the footer offers. */
+    cursor: cursorPage
+      ? {
+          total: cursorPage.total,
+          totalExact: cursorPage.totalExact,
+          atNewest: !positioned || cursorPage.previous === null,
+          atOldest: cursorPage.next === null,
+          newest: () => navigate({}),
+          newer: () => cursorPage.previous && navigate({ position: { before: cursorPage.previous } }),
+          older: () => cursorPage.next && navigate({ position: { after: cursorPage.next } }),
+          oldest: () => navigate({ position: { oldest: true } }),
+          pageSize,
+          setPageSize: (size: number) => navigate({ size }),
+        }
+      : null,
     error: loaded.error,
     loading: loaded.loading,
     refresh: loaded.refresh,
@@ -261,5 +327,3 @@ export function useServerTable<TData extends RowData>(options: ServerTableOption
 }
 
 const EMPTY: never[] = [];
-
-export { PAGE_SIZES };

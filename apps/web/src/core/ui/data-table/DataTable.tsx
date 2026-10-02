@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { RowData } from "@tanstack/react-table";
-import type { DataTableColumn, DataTableInstance } from "./features";
+import { PAGE_SIZES, type DataTableColumn, type DataTableInstance } from "./features";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
@@ -329,8 +329,6 @@ export function DataTableViewOptions<TData extends RowData>({
   );
 }
 
-const PAGE_SIZES = [10, 20, 30, 50, 100];
-
 /** Footer: how many rows match, rows per page and page navigation. */
 export function DataTablePagination<TData extends RowData>({ table, noun }: { table: DataTableInstance<TData>; noun: [string, string] }) {
   const { pageIndex, pageSize } = table.state.pagination;
@@ -402,6 +400,87 @@ export function DataTablePagination<TData extends RowData>({ table, noun }: { ta
             aria-label="Última página"
             disabled={!table.getCanNextPage()}
             onClick={() => table.setPageIndex(pageCount - 1)}
+          >
+            <ChevronsRight />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Footer of a table paged by position (useServerTable with `cursor`): the total, exact or "at
+ * least", rows per page, and newest / newer / older / oldest instead of page numbers.
+ */
+export function DataTableCursorPagination({
+  cursor,
+  noun,
+}: {
+  cursor: {
+    total: number;
+    totalExact: boolean;
+    atNewest: boolean;
+    atOldest: boolean;
+    newest: () => void;
+    newer: () => void;
+    older: () => void;
+    oldest: () => void;
+    pageSize: number;
+    setPageSize: (size: number) => void;
+  };
+  noun: [string, string];
+}) {
+  const count = cursor.total.toLocaleString("pt-BR");
+  return (
+    <div className="flex w-full flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-muted-foreground tabular-nums">
+        {cursor.totalExact
+          ? `${count} ${cursor.total === 1 ? noun[0] : noun[1]}`
+          : `Mais de ${count} ${noun[1]}`}
+      </div>
+      <div className="flex flex-wrap items-center gap-4 lg:gap-6">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Por página</span>
+          <Select value={String(cursor.pageSize)} onValueChange={(value) => cursor.setPageSize(Number(value))}>
+            <SelectTrigger size="sm" className="w-18" aria-label="Linhas por página">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent side="top">
+              <SelectGroup>
+                {PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="hidden lg:flex"
+            aria-label="Página mais recente"
+            disabled={cursor.atNewest}
+            onClick={cursor.newest}
+          >
+            <ChevronsLeft />
+          </Button>
+          <Button variant="outline" size="icon-sm" aria-label="Página anterior (mais recentes)" disabled={cursor.atNewest} onClick={cursor.newer}>
+            <ChevronLeft />
+          </Button>
+          <Button variant="outline" size="icon-sm" aria-label="Próxima página (mais antigos)" disabled={cursor.atOldest} onClick={cursor.older}>
+            <ChevronRight />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="hidden lg:flex"
+            aria-label="Página mais antiga"
+            disabled={cursor.atOldest}
+            onClick={cursor.oldest}
           >
             <ChevronsRight />
           </Button>

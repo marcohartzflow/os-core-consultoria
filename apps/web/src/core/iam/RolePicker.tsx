@@ -1,20 +1,34 @@
 "use client";
 
 import type { RoleSummary } from "@/core/api/types";
+import { PasswordInput } from "@/core/auth/PasswordInput";
+import { ErrorState } from "@/core/ui/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * Checkboxes of the roles to hold, as one named group. `roles` is null while they load; a failed
+ * load shows its error and a way to try again instead of an empty list.
+ */
 export function RolePicker({
   roles,
+  error,
+  onRetry,
   selected,
   onChange,
+  legend = "Roles",
+  description,
   disabled = false,
 }: {
-  roles: RoleSummary[];
+  roles: RoleSummary[] | null;
+  error?: unknown;
+  onRetry?: () => void;
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  legend?: string;
+  description?: string;
   disabled?: boolean;
 }) {
   function toggle(id: string, checked: boolean) {
@@ -23,29 +37,49 @@ export function RolePicker({
     else next.delete(id);
     onChange(next);
   }
-  if (roles.length === 0) return <FieldDescription>Nenhuma role cadastrada.</FieldDescription>;
   return (
-    <div className="grid gap-2">
-      {roles.map((role) => (
-        <FieldLabel key={role.id} htmlFor={`role-${role.id}`} className="flex w-full items-start gap-2 rounded-xl px-2 py-1.5 font-normal">
-          <Checkbox
-            id={`role-${role.id}`}
-            checked={selected.has(role.id)}
-            disabled={disabled}
-            onCheckedChange={(checked) => toggle(role.id, checked === true)}
-          />
-          <span>
-            <span className="font-medium">{role.name}</span>
-            {role.system && (
-              <Badge variant="secondary" className="ml-2">
-                Acesso total
-              </Badge>
-            )}
-            {role.description && <span className="block text-xs text-muted-foreground">{role.description}</span>}
-          </span>
-        </FieldLabel>
-      ))}
-    </div>
+    <FieldSet className="gap-3">
+      <FieldLegend variant="label" className="mb-0">
+        {legend}
+      </FieldLegend>
+      {description && <FieldDescription>{description}</FieldDescription>}
+      {error ? (
+        <ErrorState error={error} onRetry={onRetry} className="p-4" />
+      ) : !roles ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ) : roles.length === 0 ? (
+        <FieldDescription>Nenhuma role cadastrada.</FieldDescription>
+      ) : (
+        <div className="grid gap-2">
+          {roles.map((role) => (
+            <FieldLabel
+              key={role.id}
+              htmlFor={`role-${role.id}`}
+              className="flex w-full items-start gap-2 rounded-xl px-2 py-1.5 font-normal"
+            >
+              <Checkbox
+                id={`role-${role.id}`}
+                checked={selected.has(role.id)}
+                disabled={disabled}
+                onCheckedChange={(checked) => toggle(role.id, checked === true)}
+              />
+              <span>
+                <span className="font-medium">{role.name}</span>
+                {role.system && (
+                  <Badge variant="secondary" className="ml-2">
+                    Acesso total
+                  </Badge>
+                )}
+                {role.description && <span className="block text-xs text-muted-foreground">{role.description}</span>}
+              </span>
+            </FieldLabel>
+          ))}
+        </div>
+      )}
+    </FieldSet>
   );
 }
 
@@ -65,12 +99,10 @@ export function AdministratorGrantConfirmation({
   return (
     <Field>
       <FieldLabel htmlFor="grant-password">Sua senha</FieldLabel>
-      <Input
+      <PasswordInput
         id="grant-password"
-        type="password"
         autoComplete="current-password"
         required
-        maxLength={128}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

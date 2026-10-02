@@ -9,13 +9,19 @@ import type {
   InvitationIssued,
   MeResponse,
   MfaStatus,
-  PagedModelAuditEventView,
+  NotificationEmailRequest,
+  AuditEventPage,
+  Passkey,
+  PasswordRequest,
+  RecoveryCodes,
+  PagedModelUserSummary,
   PendingActionView,
   PermissionDefinition,
   RoleRef,
   RoleSummary,
   SessionInfo,
   Setup,
+  SetupRequest,
   ToolView,
   UserSummary,
 } from "@maximusflow/contracts";
@@ -23,12 +29,17 @@ import type {
 export type {
   AdministratorStatus,
   AuditActivityDay,
+  AuditEventPage,
   AuditEventView,
   ChatMessage,
   ConversationSummary,
   InvitationIssued,
   MfaStatus,
+  NotificationEmailRequest,
+  Passkey,
+  PasswordRequest,
   PendingActionView,
+  RecoveryCodes,
   PermissionDefinition,
   RoleRef,
   RoleSummary,
@@ -39,10 +50,11 @@ export type {
 
 export type Me = MeResponse;
 export type MfaSetup = Setup;
+export type MfaSetupRequest = SetupRequest;
 export type AccountStatus = UserSummary["status"];
 export type AuditOrigin = AuditEventView["origin"];
 // Spring Data's PagedModel is not one of our records, so the document leaves its fields optional; the API always sends them.
-export type Paged<T> = { content: T[]; page: Required<NonNullable<PagedModelAuditEventView["page"]>> };
+export type Paged<T> = { content: T[]; page: Required<NonNullable<PagedModelUserSummary["page"]>> };
 
 /** RFC 9457 body of every error response. */
 export interface ProblemDetail {

@@ -14,6 +14,11 @@ export function notifySuccess(title: string, description?: string) {
   toast.success(title, { description });
 }
 
+/** Toast when something asks for attention before going on. */
+export function notifyWarning(title: string, description?: string) {
+  toast.warning(title, { description });
+}
+
 /** Toast after an action failed; the API's own title and text when it sent a problem. */
 export function notifyError(error: unknown, fallbackTitle?: string) {
   const { title, detail } = describeError(error);

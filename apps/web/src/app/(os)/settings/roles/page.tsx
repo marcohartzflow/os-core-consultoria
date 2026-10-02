@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Lock,
   MoreHorizontal,
@@ -81,6 +81,10 @@ const COLUMN_LABELS: Record<string, string> = {
 
 const EMPTY_PERMISSIONS: PermissionDefinition[] = [];
 
+function permissionCount(count: number): string {
+  return `${count} ${count === 1 ? "permissão" : "permissões"}`;
+}
+
 function groupByModule(permissions: PermissionDefinition[]): [string, PermissionDefinition[]][] {
   const byModule = new Map<string, PermissionDefinition[]>();
   for (const permission of permissions) {
@@ -95,14 +99,20 @@ export default function RolesPage() {
   const { hasPermission } = useAuth();
   const mayReadCatalog = hasPermission("iam.permission.read");
   const [editing, setEditing] = useState<RoleSummary | "new" | null>(null);
+  // The role to delete stays set while the dialog closes, so its title does not change mid-animation.
   const [deleting, setDeleting] = useState<RoleSummary | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const askDelete = useCallback((role: RoleSummary) => {
+    setDeleting(role);
+    setConfirmingDelete(true);
+  }, []);
 
   // The catalog (for the coverage bar and the dialog) and every role (for "held by" in the
   // catalog tab) come apart from the paged table.
-  const catalogLoad = useLoad(() =>
-    mayReadCatalog ? api<PermissionDefinition[]>("/api/iam/permissions") : Promise.resolve(null),
+  const catalogLoad = useLoad((signal) =>
+    mayReadCatalog ? api<PermissionDefinition[]>("/api/iam/permissions", { signal }) : Promise.resolve(null),
   );
-  const allRoles = useLoad(() => (mayReadCatalog ? fetchAll<RoleSummary>("/api/iam/roles") : Promise.resolve(null)));
+  const allRoles = useLoad((signal) => (mayReadCatalog ? fetchAll<RoleSummary>("/api/iam/roles", {}, { signal }) : Promise.resolve(null)));
   const catalog = catalogLoad.data;
 
   const columns = useMemo<DataTableColumnDef<RoleSummary>[]>(
@@ -179,12 +189,12 @@ export default function RolesPage() {
         header: () => <span className="sr-only">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-end">
-            <RoleActions role={row.original} onOpen={setEditing} onDelete={setDeleting} />
+            <RoleActions role={row.original} onOpen={setEditing} onDelete={askDelete} />
           </div>
         ),
       },
     ],
-    [catalog],
+    [catalog, askDelete],
   );
 
   const { table, page, error, loading, refresh, retry, search, setSearch, filtered, clearFilters } = useServerTable({
@@ -242,6 +252,7 @@ export default function RolesPage() {
                     <InputGroupInput
                       aria-label="Buscar roles"
                       placeholder="Buscar por nome ou descrição…"
+                      maxLength={200}
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
@@ -318,15 +329,11 @@ export default function RolesPage() {
         />
       )}
       <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
         destructive
         title={`Excluir a role ${deleting?.name ?? ""}?`}
-        description={
-          deleting && deleting.userCount > 0
-            ? `${deleting.userCount} ${deleting.userCount === 1 ? "pessoa perde" : "pessoas perdem"} as permissões desta role na próxima requisição.`
-            : "A role deixa de existir. Esta ação não pode ser desfeita."
-        }
+        description="A role deixa de existir. Esta ação não pode ser desfeita."
         confirmLabel="Excluir role"
         onConfirm={async () => {
           if (!deleting) return;
@@ -373,10 +380,17 @@ function RoleActions({
         {mayDelete && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={() => onDelete(role)}>
+            {/* The API refuses to delete a role people still hold (409); say so instead of offering it. */}
+            <DropdownMenuItem variant="destructive" disabled={role.userCount > 0} onSelect={() => onDelete(role)}>
               <Trash2 />
               Excluir
             </DropdownMenuItem>
+            {role.userCount > 0 && (
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {role.userCount === 1 ? "1 pessoa tem" : `${role.userCount} pessoas têm`} esta role. Remova antes de
+                excluir.
+              </DropdownMenuLabel>
+            )}
           </>
         )}
       </DropdownMenuContent>
@@ -510,7 +524,7 @@ function RoleDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const { hasPermission } = useAuth();
+  const { me, hasPermission, refresh: refreshMe } = useAuth();
   const readOnly = role ? role.system || !hasPermission("iam.role.update") : false;
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
@@ -537,8 +551,9 @@ function RoleDialog({
     try {
       if (role) await api(`/api/iam/roles/${role.id}`, { method: "PUT", body });
       else await api("/api/iam/roles", { method: "POST", body });
-      notifySuccess(role ? "Role atualizada" : "Role criada", `${name} tem ${selected.size} permissões.`);
-      await onSaved();
+      notifySuccess(role ? "Role atualizada" : "Role criada", `${name} tem ${permissionCount(selected.size)}.`);
+      // A role the viewer holds changes what this session may do: re-read it (me.roles holds names).
+      await Promise.all([onSaved(), role && me.roles.includes(role.name) ? refreshMe() : undefined]);
     } catch (e) {
       setError(e);
     } finally {
@@ -594,7 +609,7 @@ function RoleDialog({
             </Field>
             {groups.length === 0 ? (
               <FieldDescription>
-                {role ? `${role.permissions.length} permissões.` : "Sem acesso ao catálogo de permissões."}
+                {role ? `${permissionCount(role.permissions.length)}.` : "Sem acesso ao catálogo de permissões."}
               </FieldDescription>
             ) : (
               groups.map(([module, items]) => {

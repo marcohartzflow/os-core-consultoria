@@ -13,12 +13,14 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
-/** Only same-origin paths: rejects protocol-relative (`//evil`) and backslash tricks (open redirect). */
+/**
+ * Only same-origin paths (open redirect). The URL parser decides, not a prefix check: it drops tabs
+ * and newlines, so `/%09/evil.com` would otherwise pass as a path and resolve to `//evil.com`.
+ */
 function safeInternalPath(candidate: string | null): string {
-  if (!candidate || !candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("\\")) {
-    return "/";
-  }
-  return candidate;
+  if (!candidate?.startsWith("/") || /[\u0000-\u001F\u007F\\]/.test(candidate)) return "/";
+  const url = new URL(candidate, window.location.origin);
+  return url.origin === window.location.origin ? url.pathname + url.search + url.hash : "/";
 }
 
 function LoginForm() {

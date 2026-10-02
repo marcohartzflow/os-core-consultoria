@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const SESSION_COOKIE = "OS_SESSION";
+/** Over HTTPS the API names the session cookie with the __Host- prefix; over plain-HTTP development it has none. */
+const SESSION_COOKIES = ["__Host-OS_SESSION", "OS_SESSION"];
 const PUBLIC_PREFIXES = ["/login", "/invite", "/password-reset"];
 
 /**
@@ -18,7 +19,7 @@ const PUBLIC_PREFIXES = ["/login", "/invite", "/password-reset"];
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const hasSession = SESSION_COOKIES.some((name) => request.cookies.has(name));
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (!isPublic && !hasSession) {
@@ -29,8 +30,9 @@ export function proxy(request: NextRequest) {
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const isDev = process.env.NODE_ENV === "development";
-  // style-src needs 'unsafe-inline': Radix primitives position popovers with inline style
-  // attributes, which nonces cannot cover. Script execution stays nonce-only.
+  // style-src needs 'unsafe-inline', an accepted deviation from the Next.js CSP guide (which puts
+  // the nonce in style-src too): Radix primitives position popovers with inline style attributes,
+  // which nonces cannot cover. Script execution stays nonce-only.
   const csp = `
     default-src 'self';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""};
@@ -39,7 +41,7 @@ export function proxy(request: NextRequest) {
     font-src 'self';
     connect-src 'self';
     object-src 'none';
-    base-uri 'self';
+    base-uri 'none';
     form-action 'self';
     frame-ancestors 'none';
     ${isDev ? "" : "upgrade-insecure-requests;"}
@@ -59,8 +61,10 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Everything except the API proxy, Next internals and static assets; skip prefetches.
-      source: "/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+      // Everything except the API proxy, Next internals and the favicon; skip prefetches. No
+      // extension-based exclusion: `public/` is empty, and `/settings/users/x.png` is a page that
+      // needs its CSP like any other.
+      source: "/((?!api(?:/|$)|_next/static|_next/image|favicon.ico).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

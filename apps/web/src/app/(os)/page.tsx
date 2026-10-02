@@ -13,7 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "@/core/api/client";
-import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
+import { fetchCursorPage, fetchPage, toQuery, type QueryValue } from "@/core/api/query";
 import { useLoad } from "@/core/api/useLoad";
 import type { AdministratorStatus, AuditActivityDay, AuditEventView, UserSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -57,12 +57,15 @@ function Trend({ current, previous }: { current: number; previous: number }) {
 const RECENT_EVENTS = 6;
 
 /** How many users match: a one-row page, read for its total. */
-function countUsers(filter: Record<string, QueryValue>): Promise<number> {
-  return fetchPage<UserSummary>(`/api/iam/users${toQuery({ ...filter, size: 1 })}`).then((page) => page.page.totalElements);
+function countUsers(filter: Record<string, QueryValue>, signal: AbortSignal): Promise<number> {
+  return fetchPage<UserSummary>(`/api/iam/users${toQuery({ ...filter, size: 1 })}`, signal).then((page) => page.page.totalElements);
 }
 
 /** A load that runs only with the permission; without it resolves to `undefined` so the block hides. */
-function when<T>(allowed: boolean, load: () => Promise<T>): () => Promise<T | undefined> {
+function when<T>(
+  allowed: boolean,
+  load: (signal: AbortSignal) => Promise<T>,
+): (signal: AbortSignal) => Promise<T | undefined> {
   return allowed ? load : () => Promise.resolve(undefined);
 }
 
@@ -77,20 +80,22 @@ export default function DashboardPage() {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const activity = useLoad(
-    when(mayAudit, () => api<AuditActivityDay[]>(`/api/audit/activity?days=90&zone=${encodeURIComponent(zone)}`)),
+    when(mayAudit, (signal) =>
+      api<AuditActivityDay[]>(`/api/audit/activity?days=90&zone=${encodeURIComponent(zone)}`, { signal }),
+    ),
   );
   const events = useLoad(
-    when(mayAudit, () =>
-      fetchPage<AuditEventView>(`/api/audit/events${toQuery({ size: RECENT_EVENTS, sort: "occurredAt,desc" })}`),
+    when(mayAudit, (signal) =>
+      fetchCursorPage<AuditEventView>(`/api/audit/events${toQuery({ size: RECENT_EVENTS })}`, signal),
     ),
   );
   // Counts only: one-row pages whose totals the API computes, never the whole users list.
   const people = useLoad(
-    when(mayUsers, () =>
+    when(mayUsers, (signal) =>
       Promise.all([
-        countUsers({ state: "ACTIVE" }),
-        countUsers({ state: "ACTIVE", mfa: false }),
-        api<AdministratorStatus>("/api/iam/users/administrators"),
+        countUsers({ state: "ACTIVE" }, signal),
+        countUsers({ state: "ACTIVE", mfa: false }, signal),
+        api<AdministratorStatus>("/api/iam/users/administrators", { signal }),
       ]).then(([active, withoutMfa, administrators]) => ({ accounts: { active, withoutMfa }, administrators })),
     ),
   );
@@ -151,7 +156,7 @@ export default function DashboardPage() {
         label: "Sua verificação em duas etapas",
         value: me.mfa.enabled ? "Ativa" : "Inativa",
         badge: !me.mfa.enabled && <Badge variant="destructive">Recomendado</Badge>,
-        hint: me.mfa.enabled ? "Um código é pedido a cada login" : "Ative em Minha conta",
+        hint: me.mfa.enabled ? "Um código é pedido a cada login" : "Ative em Configurações › Segurança",
       },
       {
         key: "roles",

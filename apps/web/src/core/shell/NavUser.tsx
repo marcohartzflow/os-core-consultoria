@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { EllipsisVertical, LogOut, UserRound } from "lucide-react";
+import { EllipsisVertical, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { useOpenSettings } from "@/core/settings/SettingsDialog";
 import { initials } from "@/core/ui/format";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
@@ -33,6 +34,7 @@ function Identity({ name, email }: { name: string; email: string }) {
 export function NavUser() {
   const { me, logout } = useAuth();
   const { isMobile } = useSidebar();
+  const openSettings = useOpenSettings();
 
   return (
     <SidebarMenu>
@@ -63,11 +65,10 @@ export function NavUser() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link href="/account">
-                  <UserRound />
-                  Minha conta
-                </Link>
+              <DropdownMenuItem onSelect={() => openSettings()}>
+                <Settings />
+                Configurações
+                <DropdownMenuShortcut>⌘,</DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
