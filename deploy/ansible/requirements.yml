@@ -1,0 +1,5 @@
+# Collections the playbook uses besides ansible.builtin (community.general: ufw). Both ship with the
+# full "ansible" package; with ansible-core alone: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: community.general
+    version: ">=13.4.0,<14.0.0"

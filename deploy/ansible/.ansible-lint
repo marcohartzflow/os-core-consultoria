@@ -1,0 +1,3 @@
+skip_list:
+  # GitHub's published SSH host keys (provision.yml) are single long lines.
+  - yaml[line-length]

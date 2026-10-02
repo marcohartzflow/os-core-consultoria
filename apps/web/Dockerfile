@@ -15,7 +15,13 @@ ENV API_URL=$API_URL NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @maximusflow/web build
 
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
-RUN addgroup -S os && adduser -S os -G os
+# The portal runs with `node` alone. The package managers bundled in the official image (npm, npx,
+# corepack, yarn) are never used at runtime, and their own dependencies are where the image scan
+# (Grype, CI) finds vulnerabilities: they leave the final image (OWASP Docker Security Cheat Sheet:
+# keep only what the container needs).
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* \
+    && addgroup -S os && adduser -S os -G os
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 COPY --from=build --chown=os:os /repo/apps/web/.next/standalone ./

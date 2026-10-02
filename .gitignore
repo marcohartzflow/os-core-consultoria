@@ -62,4 +62,8 @@ apps/api/build/spring-modulith-docs/
 # deploy
 deploy/backups/
 deploy/.previous-tag
+deploy/.deployed-tags
 deploy/secrets/
+
+# client inventory of the Ansible playbook (names the server and people)
+deploy/ansible/inventory.yml

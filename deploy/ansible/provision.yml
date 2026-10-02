@@ -1,0 +1,374 @@
+# Prepares a client's server for the reference deploy (docs/deploy.md, "Preparar o servidor").
+# Safe to run again: every task declares the state it wants and changes only what differs.
+#
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook -i inventory.yml provision.yml -u root          # first run (fresh VPS)
+#   ansible-playbook -i inventory.yml provision.yml -u <admin>       # later runs (root login is off)
+#
+# What it does: administrators with SSH keys and sudo, the deploy user bound to the CD workflow's
+# key (forced command), SSH without passwords or root, firewall, Docker Engine from Docker's own
+# apt repository, automatic security updates with a night reboot when a kernel fix needs it, clock
+# synchronisation (TOTP codes depend on it), the clone of the client's repository with a read-only
+# deploy key, deploy/.env and deploy/secrets/, the daily backup and the monthly restore check. It
+# never writes a secret: deploy/init-secrets.sh generates them on the host.
+- name: Prepare the server
+  hosts: all
+  become: true
+  # Settings an inventory may change are in group_vars/all.yml: play vars would override the
+  # inventory's host variables (Ansible variable precedence), these do not.
+  vars:
+    # GitHub's SSH host keys, as published in "GitHub's SSH key fingerprints" (docs.github.com):
+    # the deploy key's git fetch trusts these and nothing learned on first connection.
+    os_github_known_hosts: |
+      github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+      github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+      github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: reloaded
+
+  tasks:
+    - name: The inventory has what the playbook needs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version in ["22.04", "24.04", "26.04"]
+          - os_repository is match('^git@github\.com:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$')
+          - os_admins | length > 0
+          - os_admins | map(attribute="ssh_keys") | map("length") | min > 0
+          - os_ci_deploy_public_key is match("^(ssh-ed25519|ecdsa-sha2-nistp256) ")
+        fail_msg: >-
+          Ubuntu 22.04, 24.04 or 26.04 (the versions Docker Engine supports), and in the inventory:
+          os_repository (git@github.com:<org>/<repo>.git), os_admins (at least one person with an SSH
+          key: root and password logins are turned off) and os_ci_deploy_public_key.
+
+    # Packages
+
+    - name: Base packages
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, git, openssl, age, ufw, unattended-upgrades, acl, cron]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Packages that conflict with Docker Engine are absent (docs.docker.com/engine/install/ubuntu)
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose, docker-compose-v2, docker-doc, docker-buildx, podman-docker, containerd, runc]
+        state: absent
+
+    - name: Directory for apt keys
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Docker's apt key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Architecture name used by apt
+      ansible.builtin.command: dpkg --print-architecture
+      register: os_dpkg_architecture
+      changed_when: false
+
+    - name: Docker's apt repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        mode: "0644"
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/ubuntu
+          Suites: {{ ansible_distribution_release }}
+          Components: stable
+          Architectures: {{ os_dpkg_architecture.stdout }}
+          Signed-By: /etc/apt/keyrings/docker.asc
+
+    - name: Docker Engine and Compose
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Docker runs at boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    # Clock: a TOTP code is accepted only in its own 30-second step (Totp.WINDOW = 0), so the
+    # server's clock must follow NTP. Ubuntu ships systemd-timesyncd; an image with chrony keeps it.
+
+    - name: Installed packages
+      ansible.builtin.package_facts:
+
+    - name: Clock synchronisation (systemd-timesyncd, unless the image uses chrony)
+      when: "'chrony' not in ansible_facts.packages"
+      block:
+        - name: Systemd-timesyncd installed
+          ansible.builtin.apt:
+            name: systemd-timesyncd
+            state: present
+        - name: Systemd-timesyncd running
+          ansible.builtin.service:
+            name: systemd-timesyncd
+            state: started
+            enabled: true
+
+    - name: Automatic security updates (Ubuntu Server guide, "Automatic updates")
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+
+    # A kernel fix is installed with the others but only runs after a reboot. unattended-upgrades
+    # reboots at this time, and only when an update asked for it (/var/run/reboot-required);
+    # Docker starts at boot and brings the services back (restart: unless-stopped).
+    - name: Reboot for updates that need it, at night
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/52unattended-upgrades-os
+        mode: "0644"
+        content: |
+          Unattended-Upgrade::Automatic-Reboot "true";
+          Unattended-Upgrade::Automatic-Reboot-Time "{{ os_reboot_time }}";
+
+    # People
+
+    - name: Administrators' group
+      ansible.builtin.group:
+        name: os-admins
+
+    - name: Administrators
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: [os-admins]
+        append: true
+        shell: /bin/bash
+        password: "!"
+        update_password: on_create
+      loop: "{{ os_admins }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Administrators' SSH directory
+      ansible.builtin.file:
+        path: "/home/{{ item.name }}/.ssh"
+        state: directory
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0700"
+      loop: "{{ os_admins }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Administrators' keys (the list in the inventory is the whole list)
+      ansible.builtin.copy:
+        dest: "/home/{{ item.name }}/.ssh/authorized_keys"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0600"
+        content: "{{ item.ssh_keys | join('\n') }}\n"
+      loop: "{{ os_admins }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # The accounts have no password (key login only), so sudo cannot ask for one; Ubuntu's cloud
+    # images do the same for their default user (/etc/sudoers.d/90-cloud-init-users).
+    - name: Administrators use sudo
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/90-os-admins
+        mode: "0440"
+        content: "%os-admins ALL=(ALL) NOPASSWD:ALL\n"
+        validate: visudo -cf %s
+
+    - name: Deploy user (runs Docker for the CD workflow; no password)
+      ansible.builtin.user:
+        name: "{{ os_deploy_user }}"
+        groups: [docker]
+        append: true
+        shell: /bin/bash
+        password: "!"
+        update_password: on_create
+
+    - name: Deploy user's SSH directory
+      ansible.builtin.file:
+        path: "/home/{{ os_deploy_user }}/.ssh"
+        state: directory
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0700"
+
+    - name: CD workflow's key, bound to deploy/ci-deploy.sh (sshd(8) forced command)
+      ansible.builtin.copy:
+        dest: "/home/{{ os_deploy_user }}/.ssh/authorized_keys"
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0600"
+        content: |
+          restrict,command="{{ os_path }}/deploy/ci-deploy.sh" {{ os_ci_deploy_public_key }}
+
+    - name: GitHub's host keys for the deploy user
+      ansible.builtin.copy:
+        dest: "/home/{{ os_deploy_user }}/.ssh/known_hosts"
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0644"
+        content: "{{ os_github_known_hosts }}"
+
+    - name: Read-only deploy key for the client's repository (generated here, never leaves the host)
+      become: true
+      become_user: "{{ os_deploy_user }}"
+      ansible.builtin.command:
+        cmd: ssh-keygen -q -t ed25519 -N "" -C "{{ inventory_hostname }} deploy key" -f /home/{{ os_deploy_user }}/.ssh/github_deploy_key
+        creates: /home/{{ os_deploy_user }}/.ssh/github_deploy_key
+
+    - name: Git uses the deploy key for github.com
+      ansible.builtin.copy:
+        dest: "/home/{{ os_deploy_user }}/.ssh/config"
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0600"
+        content: |
+          Host github.com
+            IdentityFile ~/.ssh/github_deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+
+    # SSH: keys only, no root. The drop-in is read before Ubuntu's own (sshd keeps the first value
+    # it reads, and a cloud image's 50-cloud-init.conf may turn passwords on).
+
+    - name: SSH accepts keys only, for the administrators and the deploy user
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-os.conf
+        mode: "0644"
+        content: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          X11Forwarding no
+          AllowUsers {{ (os_admins | map(attribute="name") | list + [os_deploy_user]) | join(" ") }}
+      notify: Reload sshd
+
+    - name: SSH configuration is valid
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    # Reload now, not at the end: a later failure would skip the handler, and the next run, finding
+    # the file unchanged, would not notify it again.
+    - name: SSH reloads with the new configuration
+      ansible.builtin.meta: flush_handlers
+
+    # Firewall. Ports Docker publishes skip ufw (docs.docker.com/engine/install/ubuntu); the only
+    # ones published are Caddy's 80 and 443, which are meant to be open.
+
+    - name: Firewall rules
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: "22", proto: tcp }
+        - { port: "80", proto: tcp }
+        - { port: "443", proto: tcp }
+        - { port: "443", proto: udp }
+
+    - name: Firewall on, incoming denied by default
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    # The client's repository
+
+    - name: Checkout directory
+      ansible.builtin.file:
+        path: "{{ os_path }}"
+        state: directory
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0750"
+
+    - name: Is the repository cloned?
+      ansible.builtin.stat:
+        path: "{{ os_path }}/.git"
+      register: os_checkout
+
+    - name: Deploy key to add to the repository
+      when: not os_checkout.stat.exists
+      block:
+        - name: Read the deploy key
+          ansible.builtin.slurp:
+            src: /home/{{ os_deploy_user }}/.ssh/github_deploy_key.pub
+          register: os_deploy_key
+
+        - name: Add the deploy key on GitHub
+          ansible.builtin.pause:
+            prompt: |
+              In {{ os_repository }}: Settings > Deploy keys > Add deploy key, "Allow write access" OFF:
+
+              {{ os_deploy_key.content | b64decode }}
+              Press Enter when it is added
+
+    - name: Clone (the CD workflow moves the checkout from then on; this task never does)
+      become: true
+      become_user: "{{ os_deploy_user }}"
+      ansible.builtin.git:
+        repo: "{{ os_repository }}"
+        dest: "{{ os_path }}"
+        version: main
+        update: false
+        accept_newhostkey: false
+
+    - name: Deploy .env from the example (kept once it exists)
+      ansible.builtin.copy:
+        src: "{{ os_path }}/deploy/.env.example"
+        dest: "{{ os_path }}/deploy/.env"
+        remote_src: true
+        force: false
+        owner: "{{ os_deploy_user }}"
+        group: "{{ os_deploy_user }}"
+        mode: "0600"
+
+    - name: Deploy secrets (generated on the host; existing files are never replaced)
+      become: true
+      become_user: "{{ os_deploy_user }}"
+      ansible.builtin.command:
+        cmd: "{{ os_path }}/deploy/init-secrets.sh"
+        creates: "{{ os_path }}/deploy/secrets/mfa_encryption_key"
+
+    # Backup, daily. Output goes to the journal (journalctl -t os-backup); with a heartbeat URL, a
+    # missed or failed backup shows up at the monitoring service that expects the ping.
+
+    - name: Daily backup
+      ansible.builtin.cron:
+        name: os backup
+        user: "{{ os_deploy_user }}"
+        minute: "0"
+        hour: "{{ os_backup_hour }}"
+        job: >-
+          { {{ os_path }}/deploy/backup.sh{% if os_backup_heartbeat_url %} && curl -fsS -m 10 --retry 5 -o /dev/null
+          {{ os_backup_heartbeat_url | quote }}{% endif %}; } 2>&1 | logger -t os-backup
+
+    - name: Monthly restore check (deploy/restore-check.sh; result in journalctl -t os-restore-check)
+      ansible.builtin.cron:
+        name: os restore check
+        user: "{{ os_deploy_user }}"
+        minute: "0"
+        hour: "{{ os_backup_hour + 1 }}"
+        day: "1"
+        job: >-
+          { {{ os_path }}/deploy/restore-check.sh{% if os_restore_check_heartbeat_url %} && curl -fsS -m 10 --retry 5 -o /dev/null
+          {{ os_restore_check_heartbeat_url | quote }}{% endif %}; } 2>&1 | logger -t os-restore-check
+
+    - name: Next steps
+      ansible.builtin.debug:
+        msg:
+          - "Fill {{ os_path }}/deploy/.env (OS_DOMAIN, OS_IMAGE_REPOSITORY, OS_BOOTSTRAP_*, BACKUP_AGE_RECIPIENT, SMTP)"
+          - "and deploy/secrets/anthropic_api_key, mail_password; then follow docs/deploy.md, 'Primeira instalação'."

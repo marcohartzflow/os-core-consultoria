@@ -1,0 +1,13 @@
+# Defaults of provision.yml. A host in the inventory overrides any of them (Ansible variable
+# precedence: inventory host variables win over a playbook's group_vars/all).
+os_path: /opt/os
+os_deploy_user: deploy
+# Hour (server time) of the daily backup.
+os_backup_hour: 2
+# URL pinged after each successful backup; empty pings nothing.
+os_backup_heartbeat_url: ""
+# URL pinged after each successful monthly restore check; empty pings nothing.
+os_restore_check_heartbeat_url: ""
+# Server time (UTC on most VPS images: 04:00 UTC is 01:00 in Brasília) of the automatic reboot that
+# unattended-upgrades does only when an update needs it (kernel fixes).
+os_reboot_time: "04:00"

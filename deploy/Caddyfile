@@ -1,6 +1,22 @@
 # Terminates TLS (automatic certificates via Let's Encrypt) and forwards everything to the web app,
-# which proxies /api/* to the API. Caddy sets X-Forwarded-For/Proto; Spring trusts them only from
-# internal networks (forward-headers-strategy: native), which the Compose network is.
+# which proxies /api/* to the API; the only upstream is web:3000 (compose.yaml, network frontend).
+#
+# Client IP (ASVS 15.3.4). Caddy ignores incoming X-Forwarded-* unless the connection comes from a
+# trusted proxy, and by default it trusts none (https://caddyserver.com/docs/caddyfile/options#trusted-proxies).
+# OS_TRUSTED_PROXIES (.env) lists the CIDRs of a load balancer in front of Caddy, if there is one;
+# unset, nothing is trusted and the client IP is the address that connected to Caddy. With a trusted
+# proxy, X-Forwarded-For is read right to left and the first untrusted address is the client
+# (trusted_proxies_strict: load balancers append to the right, and the left-most value is whatever
+# the browser sent). Caddy forwards only that one address ({client_ip}); the web app passes the
+# header on unchanged, and Tomcat (forward-headers-strategy: native) trusts it because it comes
+# from the web container, a private address (server.tomcat.remoteip.internal-proxies default).
+{
+	servers {
+		trusted_proxies static {$OS_TRUSTED_PROXIES}
+		trusted_proxies_strict
+	}
+}
+
 {$OS_DOMAIN} {
 	encode zstd gzip
 	# Bodies are JSON forms and short chat messages; nothing legitimate is anywhere near this.
@@ -11,5 +27,12 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
 	}
-	reverse_proxy web:3000
+	# TRACE echoes the request back (cookies included) and TRACK is its IIS twin: refused here,
+	# before anything is proxied (ASVS 13.4.4). A 405 must list the allowed methods (RFC 9110, 15.5.6).
+	@trace method TRACE TRACK
+	header @trace Allow "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+	respond @trace 405
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-For {client_ip}
+	}
 }

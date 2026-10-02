@@ -1,4 +1,4 @@
-# Reference deployment of one OS instance on a single host: Postgres, API, web and Caddy (TLS).
+# Reference deployment of one OS instance on a single host: Postgres, migrations, API, web and Caddy (TLS).
 # Copy .env.example to .env and fill it in, run deploy/init-secrets.sh and put the Anthropic key in
 # secrets/anthropic_api_key, then: deploy/update.sh <tag> (images from the registry) or
 # deploy/update.sh (build here). Image names come from OS_IMAGE_REPOSITORY and OS_IMAGE_TAG.
@@ -8,8 +8,27 @@
 # process environment or in anything a crash report captures. The API reads them as Spring
 # properties through a config tree (application-prod.yml): each file is named after its property.
 #
-# Every service drops all capabilities, cannot gain privileges, and has memory and process limits;
-# api and web run as their image's non-root user on a read-only filesystem. Only Caddy publishes ports.
+# Database roles (deploy/postgres-roles.sh): postgres (superuser, administration only), os_owner (owns
+# the schema) and os_app (the API: table privileges only, granted by the Flyway callback
+# db/migration/afterMigrate.sql). The os_owner password is mounted in postgres (read by
+# postgres-roles.sh when the volume is created) and in migrate, never in api. The API cannot alter
+# tables or disable the append-only triggers of the audit trail.
+#
+# Every service drops all capabilities and adds back only what it needs: postgres CHOWN,
+# DAC_OVERRIDE, FOWNER, SETGID and SETUID (its entrypoint starts as root to fix the volume's
+# ownership, then switches to the postgres user), caddy NET_BIND_SERVICE; migrate, api and web none.
+# No service can gain privileges; all have memory and process limits and rotated logs and run on a
+# read-only root filesystem; migrate, api, web and caddy run as a non-root user. Only Caddy
+# publishes ports.
+#
+# Networks (OWASP Docker Security Cheat Sheet, rule 5; https://docs.docker.com/engine/network/):
+# each service joins only the networks of the services it talks to, and the networks marked
+# internal have no route out of the host.
+#   edge      caddy               published ports, Let's Encrypt
+#   frontend  caddy, web          internal (Caddyfile: reverse_proxy web:3000)
+#   app       web, api            internal (the Next server rewrites /api/* to http://api:8080)
+#   database  postgres, migrate, api   internal
+#   egress    api                 Anthropic, Have I Been Pwned, SMTP
 name: os
 
 x-hardened: &hardened
@@ -18,6 +37,14 @@ x-hardened: &hardened
     - no-new-privileges:true
   cap_drop:
     - ALL
+  # The default json-file driver keeps everything forever unless told otherwise
+  # (https://docs.docker.com/engine/logging/drivers/json-file/). Shipping logs to another system
+  # (ASVS 16.4.3): see docs/deploy.md, "Logs".
+  logging:
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "5"
 
 services:
   postgres:
@@ -32,25 +59,74 @@ services:
       - SETUID
     environment:
       POSTGRES_DB: os
-      POSTGRES_USER: os
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      # POSTGRES_USER is left at its default, postgres: the superuser is not used by the services.
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_superuser_password
     secrets:
-      - db_password
+      - db_superuser_password
+      - db_owner_password
+      - db_app_password
     volumes:
       - postgres-data:/var/lib/postgresql
+      # Runs only when the volume is empty (first start or a restore into a new volume).
+      - ./postgres-roles.sh:/docker-entrypoint-initdb.d/postgres-roles.sh:ro
+    # Read-only root filesystem (OWASP Docker Security Cheat Sheet, rule 8): the server writes only
+    # to the data volume, its Unix socket and lock file go to /run/postgresql and the entrypoint's
+    # scratch files to /tmp. Checked with this image: it initialises an empty volume (initdb and
+    # postgres-roles.sh) and restarts on an existing one.
+    read_only: true
     tmpfs:
       - /tmp
       - /run/postgresql
+    networks:
+      - database
     deploy:
       resources:
         limits:
           memory: 1g
           pids: 512
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U os -d os"]
+      # Over TCP: while the init scripts run, the image's temporary server listens only on the Unix
+      # socket, and migrate (one attempt, no restart) must not connect before the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d os"]
       interval: 10s
       timeout: 5s
       retries: 6
+      # While a container starts, its check runs every second instead of every `interval`
+      # (start_interval, Docker Engine 25+): a deploy waits for the new API and web only as long as
+      # they take to start, not up to 15 s more each for the next check.
+      start_period: 60s
+      start_interval: 1s
+
+  # Applies the Flyway migrations as os_owner, re-applies os_app's privileges (afterMigrate.sql) and
+  # exits; the api starts only after it succeeded. Same image as the api, profile migrate
+  # (application-prod.yml, common/persistence/FlywayConfig): no web server, nothing but Flyway.
+  migrate:
+    <<: *hardened
+    restart: "no"
+    image: ${OS_IMAGE_REPOSITORY:-os}/os-api:${OS_IMAGE_TAG:-latest}
+    build:
+      context: ../apps/api
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod,migrate
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/os
+      SPRING_DATASOURCE_USERNAME: os_owner
+      OS_APP_BASE_URL: https://${OS_DOMAIN:?set OS_DOMAIN in .env}
+    networks:
+      - database
+    secrets:
+      - source: db_owner_password
+        target: spring.datasource.password
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
+          pids: 512
 
   api:
     <<: *hardened
@@ -63,23 +139,39 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/os
-      SPRING_DATASOURCE_USERNAME: os
+      SPRING_DATASOURCE_USERNAME: os_app
+      # The migrate service applies the migrations; os_app could not run them anyway.
+      SPRING_FLYWAY_ENABLED: "false"
       OS_APP_BASE_URL: https://${OS_DOMAIN:?set OS_DOMAIN in .env}
-      # First start only (the account must choose a new password at first login); remove afterwards.
+      # First start only (the account must choose a new password at first login); the password is
+      # the secret bootstrap_admin_password. Remove these two lines and empty that file afterwards.
       OS_BOOTSTRAP_ADMIN_EMAIL: ${OS_BOOTSTRAP_ADMIN_EMAIL:-}
-      OS_BOOTSTRAP_ADMIN_PASSWORD: ${OS_BOOTSTRAP_ADMIN_PASSWORD:-}
       OS_BOOTSTRAP_ADMIN_NAME: ${OS_BOOTSTRAP_ADMIN_NAME:-Administrador}
-      OS_MAIL_FROM: ${OS_MAIL_FROM:-}
+      # SMTP is required under the prod profile: invitations and password resets are delivered only by
+      # e-mail, which is what proves the address belongs to the person (iam ProductionMailCheck).
+      OS_MAIL_FROM: ${OS_MAIL_FROM:?set OS_MAIL_FROM in .env}
       OS_MAIL_PORTAL_NAME: ${OS_MAIL_PORTAL_NAME:-OS}
-      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:?set SPRING_MAIL_HOST in .env}
       SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      # Client IP: Tomcat keeps Spring Boot's default server.tomcat.remoteip.internal-proxies (private
+      # and loopback ranges), which covers the web container, the only one that reaches the api. Caddy
+      # sends it one address, the client's; a load balancer in front is declared to Caddy
+      # (OS_TRUSTED_PROXIES), not here (Caddyfile).
+    networks:
+      - database
+      - app
+      - egress
     secrets:
-      - source: db_password
+      - source: db_app_password
         target: spring.datasource.password
+      - source: bootstrap_admin_password
+        target: os.iam.bootstrap.admin-password
       - source: anthropic_api_key
         target: spring.ai.anthropic.api-key
       - source: mfa_encryption_key
@@ -99,6 +191,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+      start_interval: 1s
 
   web:
     <<: *hardened
@@ -112,6 +205,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # No egress: the Next server only proxies to the api (fonts are bundled at build time).
+    networks:
+      - frontend
+      - app
     deploy:
       resources:
         limits:
@@ -123,22 +220,41 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+      start_interval: 1s
 
   caddy:
     <<: *hardened
     image: caddy:2@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+    # Not root. Docker Engine 20.10+ lets unprivileged processes bind ports below 1024 inside the
+    # container (net.ipv4.ip_unprivileged_port_start=0, moby/moby#41030), but the image's binary
+    # carries the file capability cap_net_bind_service (setcap), and the kernel refuses to exec it
+    # ("operation not permitted") unless that capability is in the bounding set: hence the one
+    # cap_add. The image ships /data/caddy and /config/caddy world-writable (sticky) so any uid can
+    # use fresh volumes; volumes written by root before this change need a one-time chown
+    # (docs/deploy.md, "Atualização").
+    user: "10001:10001"
     cap_add:
       - NET_BIND_SERVICE
+    # Certificates and state go to the /data and /config volumes (XDG_DATA_HOME, XDG_CONFIG_HOME).
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     environment:
       OS_DOMAIN: ${OS_DOMAIN}
+      # CIDRs of a load balancer in front of Caddy, separated by spaces; empty = trust no proxy
+      # (Caddyfile, global option trusted_proxies).
+      OS_TRUSTED_PROXIES: ${OS_TRUSTED_PROXIES:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      - edge
+      - frontend
     deploy:
       resources:
         limits:
@@ -149,14 +265,30 @@ services:
         condition: service_healthy
 
 secrets:
-  db_password:
-    file: ./secrets/db_password
+  db_superuser_password:
+    file: ./secrets/db_superuser_password
+  db_owner_password:
+    file: ./secrets/db_owner_password
+  db_app_password:
+    file: ./secrets/db_app_password
+  bootstrap_admin_password:
+    file: ./secrets/bootstrap_admin_password
   anthropic_api_key:
     file: ./secrets/anthropic_api_key
   mfa_encryption_key:
     file: ./secrets/mfa_encryption_key
   mail_password:
     file: ./secrets/mail_password
+
+networks:
+  edge:
+  frontend:
+    internal: true
+  app:
+    internal: true
+  database:
+    internal: true
+  egress:
 
 volumes:
   postgres-data:
