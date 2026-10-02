@@ -26,4 +26,9 @@ public interface AccountTokenRepository extends JpaRepository<AccountToken, UUID
 
 	void deleteByUser(User user);
 
+	/** Used or expired links are of no further use to anyone (LGPD art. 16: kept no longer than needed). */
+	@Modifying
+	@Query("delete from AccountToken t where t.usedAt is not null or t.expiresAt < :now")
+	int deleteSpent(@Param("now") Instant now);
+
 }

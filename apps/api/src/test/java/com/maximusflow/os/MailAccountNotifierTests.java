@@ -42,4 +42,15 @@ class MailAccountNotifierTests {
 		assertThat(sent.getValue().getText()).contains("Olá, Ana.").contains("https://os.example.test/invite/abc");
 	}
 
+	@Test
+	void aSecurityNoticeCarriesNoLink() {
+		this.notifier.sendSecurityNotice("ana@example.test", "Ana", "A sua senha foi alterada.");
+
+		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(this.mailSender).send(sent.capture());
+		assertThat(sent.getValue().getTo()).containsExactly("ana@example.test");
+		assertThat(sent.getValue().getSubject()).isEqualTo("Aviso de segurança da sua conta no Portal Exemplo");
+		assertThat(sent.getValue().getText()).contains("A sua senha foi alterada.").doesNotContain("http");
+	}
+
 }

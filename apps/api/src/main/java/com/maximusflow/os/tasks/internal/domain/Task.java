@@ -10,11 +10,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.UuidGenerator;
 import org.jspecify.annotations.Nullable;
 
 @Entity
@@ -22,7 +21,9 @@ import org.jspecify.annotations.Nullable;
 public class Task extends AuditableEntity {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
+	// Time-ordered (v7): new rows land at the end of the primary key index instead of on random
+	// pages, which keeps inserts cheap and the index compact as the table grows.
+	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	private UUID id;
 
 	@Column(nullable = false, length = 200)

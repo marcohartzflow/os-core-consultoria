@@ -11,6 +11,7 @@ import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.ConflictException;
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
+import com.maximusflow.os.common.security.ReadOnlyTool;
 import com.maximusflow.os.common.security.RequiresPermission;
 import com.maximusflow.os.iam.PermissionCatalog;
 import com.maximusflow.os.iam.internal.domain.Role;
@@ -49,6 +50,7 @@ public class RoleService {
 	}
 
 	@Tool(name = "iam_list_roles", description = "Lista as roles do portal com suas permissões.")
+	@ReadOnlyTool
 	@RequiresPermission(value = "iam.role.read", description = "Ver roles")
 	@Transactional(readOnly = true)
 	public List<RoleSummary> list() {

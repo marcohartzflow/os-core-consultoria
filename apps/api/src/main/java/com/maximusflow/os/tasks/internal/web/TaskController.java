@@ -51,7 +51,8 @@ class TaskController {
 	@GetMapping
 	PagedModel<TaskSummary> search(@RequestParam(required = false) @Size(max = 200) @Nullable String q,
 			@RequestParam(required = false) @Size(max = 2) @Nullable Set<TaskStatus> status,
-			@RequestParam(required = false) @Size(max = 50) @Nullable Set<UUID> assigneeId,
+			// The screen's assignee filter offers up to 101 people (itself and the first 100 by name).
+			@RequestParam(required = false) @Size(max = 200) @Nullable Set<UUID> assigneeId,
 			@RequestParam(defaultValue = "false") boolean unassigned,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Nullable LocalDate dueBefore,
 			@RequestParam(defaultValue = "0") int page,

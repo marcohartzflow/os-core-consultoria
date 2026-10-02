@@ -15,7 +15,8 @@ import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.common.privacy.PersonalDataService;
 import com.maximusflow.os.common.security.CurrentUser;
-import com.maximusflow.os.common.security.Destructive;
+import com.maximusflow.os.common.security.ReadOnlyTool;
+import com.maximusflow.os.common.security.RequiresConfirmation;
 import com.maximusflow.os.common.security.RequiresPermission;
 import com.maximusflow.os.common.ui.UiAction;
 import com.maximusflow.os.common.ui.UiActions;
@@ -105,6 +106,7 @@ public class UserService {
 
 	@Tool(name = "iam_list_users",
 			description = "Lista os usuários do portal (até " + MAX_LIST + "): id, nome, e-mail, status (INVITED, ACTIVE, DISABLED), se está bloqueado, roles, último acesso e se tem verificação em duas etapas.")
+	@ReadOnlyTool
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
 	@Transactional(readOnly = true)
 	public List<UserSummary> list() {
@@ -132,6 +134,7 @@ public class UserService {
 	}
 
 	@Tool(name = "iam_get_user", description = "Detalha um usuário do portal pelo id.")
+	@ReadOnlyTool
 	@RequiresPermission(value = "iam.user.read", description = "Ver usuários")
 	@Transactional(readOnly = true)
 	public UserSummary get(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
@@ -223,7 +226,7 @@ public class UserService {
 
 	@Tool(name = "iam_disable_user",
 			description = "Desativa um usuário: ele perde o acesso ao portal imediatamente e suas sessões são encerradas. Exige confirmação da pessoa.")
-	@Destructive("Desativa o usuário e encerra todas as sessões dele")
+	@RequiresConfirmation("Desativa o usuário e encerra todas as sessões dele")
 	@RequiresPermission(value = "iam.user.disable", description = "Desativar e reativar usuários")
 	public UserSummary disable(@ToolParam(description = "Id (UUID) do usuário") UUID id) {
 		User user = load(id);
@@ -233,6 +236,8 @@ public class UserService {
 		}
 		this.administrators.assertCanStopBeingAdministrator(user);
 		user.disable();
+		// Pending invitation and reset links die with the access; enabling again issues new ones.
+		this.tokens.revokeAll(user);
 		this.events.publishEvent(new UserDisabled(user.getId()));
 		this.audit.record("iam.user.disabled", "user", user.getId().toString(), null);
 		return summary(user);
@@ -278,15 +283,24 @@ public class UserService {
 		}
 	}
 
+	/**
+	 * With e-mail delivery the link is issued and mailed after commit ({@link AccountLinkMailer}) and
+	 * never leaves the server. Without it (local development only: production requires SMTP) the
+	 * link is returned to the administrator at once.
+	 */
 	private @Nullable String issueInvitation(User user) {
+		if (!this.notifier.handsLinksToAdministrator()) {
+			this.events.publishEvent(new AccountLinkMailer.InvitationRequested(user.getId()));
+			return null;
+		}
 		String raw = this.tokens.issue(user, TokenType.INVITATION, this.properties.tokens().invitationTtl());
 		String link = this.links.invitation(raw);
 		this.notifier.sendInvitation(user.getEmail(), user.getName(), link);
-		return this.notifier.handsLinksToAdministrator() ? link : null;
+		return link;
 	}
 
 	private UserSummary summary(User user) {
-		return UserSummary.of(user, this.clock.instant(), this.mfa.existsByUserIdAndEnabledAtIsNotNull(user.getId()));
+		return UserSummary.of(user, this.clock.instant(), this.mfa.hasSecondFactor(user.getId()));
 	}
 
 	private User load(UUID id) {

@@ -33,6 +33,11 @@ class AccountTokens {
 		this.clock = clock;
 	}
 
+	/** Deletes every outstanding link of the user (the account lost its access). */
+	void revokeAll(User user) {
+		this.repository.deleteByUser(user);
+	}
+
 	/** Invalidates previous tokens of the same type for the user and returns a new raw token. */
 	String issue(User user, TokenType type, Duration ttl) {
 		this.repository.deleteByUserAndType(user, type);

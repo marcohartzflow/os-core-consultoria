@@ -43,7 +43,7 @@ class AuthAndIamFlowTests {
 
 	private static final String ADMIN_EMAIL = "admin@example.com";
 
-	private static final String ADMIN_PASSWORD = "Admin-Password-2026";
+	private static final String ADMIN_PASSWORD = "Bootstrap-Secret-2026";
 
 	@Autowired
 	MockMvc mvc;
@@ -114,15 +114,15 @@ class AuthAndIamFlowTests {
 			.andExpect(status().is(422));
 
 		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"token\":\"" + token + "\",\"password\":\"Ana-Password-2026\"}"))
+			.content("{\"token\":\"" + token + "\",\"password\":\"Ana-Passphrase-2026\"}"))
 			.andExpect(status().isNoContent());
 
 		// token is single use
 		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"token\":\"" + token + "\",\"password\":\"Ana-Password-2026\"}"))
+			.content("{\"token\":\"" + token + "\",\"password\":\"Ana-Passphrase-2026\"}"))
 			.andExpect(status().is(422));
 
-		Session ana = login("ana@example.com", "Ana-Password-2026");
+		Session ana = login("ana@example.com", "Ana-Passphrase-2026");
 		this.mvc.perform(get("/api/me").cookie(ana.cookie()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.permissions").isEmpty());
@@ -151,7 +151,7 @@ class AuthAndIamFlowTests {
 		String link = jsonValue(invited, "invitationLink");
 		String token = link.substring(link.lastIndexOf('/') + 1);
 		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"token\":\"" + token + "\",\"password\":\"Bob-Password-2026\"}"))
+			.content("{\"token\":\"" + token + "\",\"password\":\"Bob-Passphrase-2026\"}"))
 			.andExpect(status().isNoContent());
 
 		Csrf csrf = csrf();
@@ -161,7 +161,7 @@ class AuthAndIamFlowTests {
 		}
 		// locked: even the right password is refused, with the same generic 401
 		this.mvc.perform(withCsrf(post("/api/auth/login"), csrf).contentType(MediaType.APPLICATION_JSON)
-			.content(json("bob@example.com", "Bob-Password-2026"))).andExpect(status().isUnauthorized());
+			.content(json("bob@example.com", "Bob-Passphrase-2026"))).andExpect(status().isUnauthorized());
 
 		String bobId = jsonValue(invited, "user.id");
 		this.mvc.perform(get("/api/iam/users/" + bobId).cookie(admin.cookie()))
@@ -175,19 +175,25 @@ class AuthAndIamFlowTests {
 		Session first = login(ADMIN_EMAIL, ADMIN_PASSWORD);
 		Session second = login(ADMIN_EMAIL, ADMIN_PASSWORD);
 
-		this.mvc.perform(withCsrf(post("/api/me/password"), first.csrf()).cookie(first.cookie())
+		MvcResult changed = this.mvc.perform(withCsrf(post("/api/me/password"), first.csrf()).cookie(first.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"currentPassword\":\"" + ADMIN_PASSWORD + "\",\"newPassword\":\"Admin-Password-2027\"}"))
-			.andExpect(status().isNoContent());
+			.content("{\"currentPassword\":\"" + ADMIN_PASSWORD + "\",\"newPassword\":\"Nimda-Passphrase-2027\"}"))
+			.andExpect(status().isNoContent())
+			.andReturn();
 
+		// The session survives under a new id; the id it had before, and every other session, are gone.
+		this.mvc.perform(get("/api/me").cookie(first.cookie())).andExpect(status().isUnauthorized());
+		first = new Session(changed.getResponse().getCookie("OS_SESSION"), first.csrf());
 		this.mvc.perform(get("/api/me").cookie(first.cookie())).andExpect(status().isOk());
 		this.mvc.perform(get("/api/me").cookie(second.cookie())).andExpect(status().isUnauthorized());
 
 		// restore for other tests
-		this.mvc.perform(withCsrf(post("/api/me/password"), first.csrf()).cookie(first.cookie())
+		MvcResult restored = this.mvc.perform(withCsrf(post("/api/me/password"), first.csrf()).cookie(first.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"currentPassword\":\"Admin-Password-2027\",\"newPassword\":\"" + ADMIN_PASSWORD + "\"}"))
-			.andExpect(status().isNoContent());
+			.content("{\"currentPassword\":\"Nimda-Passphrase-2027\",\"newPassword\":\"" + ADMIN_PASSWORD + "\"}"))
+			.andExpect(status().isNoContent())
+			.andReturn();
+		first = new Session(restored.getResponse().getCookie("OS_SESSION"), first.csrf());
 		this.mvc.perform(withCsrf(delete("/api/me/sessions"), first.csrf()).cookie(first.cookie()))
 			.andExpect(status().isNoContent());
 	}
@@ -211,8 +217,8 @@ class AuthAndIamFlowTests {
 						+ "\"iam.user.create\",\"iam.user.disable\",\"iam.role.read\"]}"))
 			.andExpect(status().isCreated())
 			.andReturn(), "id");
-		String carolId = inviteAndAccept(admin, "carol@example.com", "Carol", managerRoleId, "Carol-Password-2026");
-		Session carol = login("carol@example.com", "Carol-Password-2026");
+		String carolId = inviteAndAccept(admin, "carol@example.com", "Carol", managerRoleId, "Lorac-Passphrase-2026");
+		Session carol = login("carol@example.com", "Lorac-Passphrase-2026");
 
 		// Carol invites without roles and renames; she cannot give anyone access, herself included.
 		this.mvc.perform(withCsrf(post("/api/iam/users"), carol.csrf()).cookie(carol.cookie())
@@ -248,12 +254,15 @@ class AuthAndIamFlowTests {
 			.contentType(MediaType.APPLICATION_JSON)
 			.content(daveBody + ",\"currentPassword\":\"wrong-password-value\"}"))
 			.andExpect(status().is(422));
-		String daveId = jsonValue(this.mvc
+		MvcResult daveCreated = this.mvc
 			.perform(withCsrf(post("/api/iam/users"), admin.csrf()).cookie(admin.cookie())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(daveBody + ",\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
 			.andExpect(status().isCreated())
-			.andReturn(), "user.id");
+			.andReturn();
+		String daveId = jsonValue(daveCreated, "user.id");
+		// The password typed again is a re-authentication: the session id changes (ASVS 7.2.4).
+		admin = renewed(daveCreated, admin);
 
 		// Carol cannot act on an account that holds more than she does.
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + daveId + "/invitations"), carol.csrf()).cookie(carol.cookie()))
@@ -290,11 +299,11 @@ class AuthAndIamFlowTests {
 			.andExpect(status().is(422));
 
 		// Two administrators: still the minimum, neither can be removed.
-		String eva = inviteAndAccept(admin, "eva@example.com", "Eva", null, "Eva-Password-2026");
-		this.mvc.perform(withCsrf(put("/api/iam/users/" + eva + "/roles"), admin.csrf()).cookie(admin.cookie())
+		String eva = inviteAndAccept(admin, "eva@example.com", "Eva", null, "Ave-Passphrase-2026");
+		admin = renewed(this.mvc.perform(withCsrf(put("/api/iam/users/" + eva + "/roles"), admin.csrf()).cookie(admin.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"roleIds\":[\"" + adminRoleId + "\"],\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
-			.andExpect(status().isOk());
+			.andExpect(status().isOk()).andReturn(), admin);
 		this.mvc.perform(get("/api/iam/users/administrators").cookie(admin.cookie()))
 			.andExpect(jsonPath("$.active").value(2))
 			.andExpect(jsonPath("$.belowMinimum").value(false));
@@ -302,11 +311,11 @@ class AuthAndIamFlowTests {
 			.andExpect(status().is(422));
 
 		// A third one makes room.
-		String fabio = inviteAndAccept(admin, "fabio@example.com", "Fabio", null, "Fabio-Password-2026");
-		this.mvc.perform(withCsrf(put("/api/iam/users/" + fabio + "/roles"), admin.csrf()).cookie(admin.cookie())
+		String fabio = inviteAndAccept(admin, "fabio@example.com", "Fabio", null, "Oibaf-Passphrase-2026");
+		admin = renewed(this.mvc.perform(withCsrf(put("/api/iam/users/" + fabio + "/roles"), admin.csrf()).cookie(admin.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"roleIds\":[\"" + adminRoleId + "\"],\"currentPassword\":\"" + ADMIN_PASSWORD + "\"}"))
-			.andExpect(status().isOk());
+			.andExpect(status().isOk()).andReturn(), admin);
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + eva + "/disable"), admin.csrf()).cookie(admin.cookie()))
 			.andExpect(status().isOk());
 		// Nobody disables themself.
@@ -408,6 +417,12 @@ class AuthAndIamFlowTests {
 		Cookie session = result.getResponse().getCookie("OS_SESSION");
 		assertThat(session).isNotNull();
 		return new Session(session, csrf);
+	}
+
+	/** The session after a response that renewed its id; the CSRF token is not tied to the id and stays. */
+	private static Session renewed(MvcResult result, Session before) {
+		Cookie cookie = result.getResponse().getCookie("OS_SESSION");
+		return new Session((cookie != null) ? cookie : before.cookie(), before.csrf());
 	}
 
 	private static String json(String email, String password) {

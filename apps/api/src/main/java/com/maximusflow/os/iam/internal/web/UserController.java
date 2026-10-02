@@ -35,7 +35,7 @@ class UserController {
 
 	/** {@code currentPassword} only when {@code roleIds} includes the system administrator role. */
 	record InviteUserRequest(@NotBlank @Email @Size(max = 320) String email, @NotBlank @Size(max = 200) String name,
-			@Nullable Set<UUID> roleIds, @Nullable @Size(max = 128) String currentPassword) {
+			@Nullable @Size(max = 100) Set<UUID> roleIds, @Nullable @Size(max = 512) String currentPassword) {
 	}
 
 	record RenameUserRequest(@NotBlank @Size(max = 200) String name) {
@@ -45,7 +45,7 @@ class UserController {
 	 * {@code roleIds} is the full new set; it is required so a partial payload can never wipe roles by
 	 * accident. {@code currentPassword} only when the system administrator role is being granted.
 	 */
-	record AssignRolesRequest(@NotNull Set<UUID> roleIds, @Nullable @Size(max = 128) String currentPassword) {
+	record AssignRolesRequest(@NotNull @Size(max = 100) Set<UUID> roleIds, @Nullable @Size(max = 512) String currentPassword) {
 	}
 
 	private final UserService service;

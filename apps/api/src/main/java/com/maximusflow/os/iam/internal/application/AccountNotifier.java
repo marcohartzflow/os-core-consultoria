@@ -10,6 +10,22 @@ public interface AccountNotifier {
 
 	void sendPasswordReset(String email, String name, String link);
 
+	/**
+	 * Tells the person that an administrator removed their second factor and gives them the link to
+	 * choose a new password, after which they enrol a factor again.
+	 */
+	void sendSecondFactorReset(String email, String name, String link);
+
+	/** Tells the person that one of their second factors changed ({@code change} describes it). No link. */
+	void sendSecondFactorChanged(String email, String name, String change);
+
+	/**
+	 * A security notice with no link: the password was changed or reset, a recovery code was used,
+	 * the second notification address changed ({@code notice} describes it). Sent to every address
+	 * of the account (NIST SP 800-63B-4: account recovery and changes notify the subscriber).
+	 */
+	void sendSecurityNotice(String email, String name, String notice);
+
 	/** Tells an administrator that someone else just became an administrator. No link, no secret. */
 	void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
 			String grantedByName);

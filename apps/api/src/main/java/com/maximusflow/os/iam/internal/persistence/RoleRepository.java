@@ -7,7 +7,10 @@ import java.util.UUID;
 import com.maximusflow.os.iam.internal.domain.Role;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface RoleRepository extends JpaRepository<Role, UUID>, JpaSpecificationExecutor<Role> {
@@ -15,6 +18,14 @@ public interface RoleRepository extends JpaRepository<Role, UUID>, JpaSpecificat
 	Optional<Role> findByName(String name);
 
 	Optional<Role> findFirstBySystemTrue();
+
+	/**
+	 * The system role locked until the transaction ends. Changes that can lower the number of
+	 * administrators take it first, so two of them cannot both pass the minimum check at once.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select r from Role r where r.system = true order by r.id limit 1")
+	Optional<Role> lockSystemRole();
 
 	List<Role> findAllByOrderByNameAsc();
 

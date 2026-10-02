@@ -62,7 +62,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["delete_2"];
+        delete: operations["delete_3"];
         options?: never;
         head?: never;
         patch?: never;
@@ -212,6 +212,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mfa/passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/passkey/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["authenticationOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/iam/invitations/accept": {
         parameters: {
             query?: never;
@@ -267,7 +299,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["list_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -548,6 +580,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["regenerateRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/mfa/setup": {
         parameters: {
             query?: never;
@@ -559,6 +607,70 @@ export interface paths {
         put?: never;
         post: operations["setup"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notification-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeNotificationEmail"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/passkeys/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["registrationOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_2"];
         options?: never;
         head?: never;
         patch?: never;
@@ -710,6 +822,16 @@ export interface components {
             /** Format: int64 */
             system: number;
         };
+        AuditEventPage: {
+            content: components["schemas"]["AuditEventView"][];
+            /** @description Position of the older page; null on the oldest page */
+            next: string | null;
+            /** @description Position of the newer page; null on the newest page */
+            previous: string | null;
+            /** Format: int64 */
+            total: number;
+            totalExact: boolean;
+        };
         AuditEventView: {
             action: string;
             actorEmail: string | null;
@@ -757,7 +879,6 @@ export interface components {
             token?: string;
         };
         DisableRequest: {
-            code: string;
             currentPassword: string;
         };
         EmailRequest: {
@@ -785,6 +906,7 @@ export interface components {
             id: string;
             mfa: components["schemas"]["Mfa"];
             name: string;
+            notificationEmail: string | null;
             passwordChangeRequired: boolean;
             permissions: string[];
             roles: string[];
@@ -803,8 +925,16 @@ export interface components {
         MfaStatus: {
             enabled: boolean;
             /** Format: int32 */
+            passkeys: number;
+            /** Format: int32 */
             recoveryCodesLeft: number;
             required: boolean;
+            totp: boolean;
+        };
+        NotificationEmailRequest: {
+            currentPassword: string;
+            /** Format: email */
+            notificationEmail: string | null;
         };
         PageMetadata: {
             /** Format: int64 */
@@ -815,10 +945,6 @@ export interface components {
             totalElements?: number;
             /** Format: int64 */
             totalPages?: number;
-        };
-        PagedModelAuditEventView: {
-            content?: components["schemas"]["AuditEventView"][];
-            page?: components["schemas"]["PageMetadata"];
         };
         PagedModelRoleSummary: {
             content?: components["schemas"]["RoleSummary"][];
@@ -831,6 +957,17 @@ export interface components {
         PagedModelUserSummary: {
             content?: components["schemas"]["UserSummary"][];
             page?: components["schemas"]["PageMetadata"];
+        };
+        Passkey: {
+            /** Format: date-time */
+            createdAt: string | null;
+            id: string;
+            label: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+        };
+        PasswordRequest: {
+            currentPassword: string;
         };
         PendingActionView: {
             arguments: string;
@@ -891,6 +1028,9 @@ export interface components {
         Setup: {
             otpauthUri: string;
             secret: string;
+        };
+        SetupRequest: {
+            currentPassword: string;
         };
         SseEmitter: {
             /** Format: int64 */
@@ -958,6 +1098,7 @@ export type AdministratorStatus = components['schemas']['AdministratorStatus'];
 export type AssignRolesRequest = components['schemas']['AssignRolesRequest'];
 export type Assignee = components['schemas']['Assignee'];
 export type AuditActivityDay = components['schemas']['AuditActivityDay'];
+export type AuditEventPage = components['schemas']['AuditEventPage'];
 export type AuditEventView = components['schemas']['AuditEventView'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type ChatMessage = components['schemas']['ChatMessage'];
@@ -975,11 +1116,13 @@ export type MessageRequest = components['schemas']['MessageRequest'];
 export type Mfa = components['schemas']['Mfa'];
 export type MfaRequest = components['schemas']['MfaRequest'];
 export type MfaStatus = components['schemas']['MfaStatus'];
+export type NotificationEmailRequest = components['schemas']['NotificationEmailRequest'];
 export type PageMetadata = components['schemas']['PageMetadata'];
-export type PagedModelAuditEventView = components['schemas']['PagedModelAuditEventView'];
 export type PagedModelRoleSummary = components['schemas']['PagedModelRoleSummary'];
 export type PagedModelTaskSummary = components['schemas']['PagedModelTaskSummary'];
 export type PagedModelUserSummary = components['schemas']['PagedModelUserSummary'];
+export type Passkey = components['schemas']['Passkey'];
+export type PasswordRequest = components['schemas']['PasswordRequest'];
 export type PendingActionView = components['schemas']['PendingActionView'];
 export type PermissionDefinition = components['schemas']['PermissionDefinition'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
@@ -989,6 +1132,7 @@ export type RoleRequest = components['schemas']['RoleRequest'];
 export type RoleSummary = components['schemas']['RoleSummary'];
 export type SessionInfo = components['schemas']['SessionInfo'];
 export type Setup = components['schemas']['Setup'];
+export type SetupRequest = components['schemas']['SetupRequest'];
 export type SseEmitter = components['schemas']['SseEmitter'];
 export type TaskRequest = components['schemas']['TaskRequest'];
 export type TaskSummary = components['schemas']['TaskSummary'];
@@ -1085,7 +1229,7 @@ export interface operations {
             };
         };
     };
-    delete_2: {
+    delete_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -1222,6 +1366,7 @@ export interface operations {
         parameters: {
             query?: {
                 actorEmail?: string;
+                actorId?: string;
                 action?: string;
                 entityType?: string;
                 entityId?: string;
@@ -1229,9 +1374,10 @@ export interface operations {
                 to?: string;
                 origin?: ("REST" | "AI_TOOL" | "SYSTEM")[];
                 correlationId?: string;
-                page?: number;
+                after?: string;
+                before?: string;
+                oldest?: boolean;
                 size?: number;
-                sort?: string;
             };
             header?: never;
             path?: never;
@@ -1245,7 +1391,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["PagedModelAuditEventView"];
+                    "*/*": components["schemas"]["AuditEventPage"];
                 };
             };
         };
@@ -1254,6 +1400,7 @@ export interface operations {
         parameters: {
             query?: {
                 actorEmail?: string;
+                actorId?: string;
                 action?: string;
                 entityType?: string;
                 entityId?: string;
@@ -1343,6 +1490,48 @@ export interface operations {
             };
         };
     };
+    verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": string;
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    authenticationOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
     acceptInvitation: {
         parameters: {
             query?: never;
@@ -1409,7 +1598,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -1929,7 +2118,79 @@ export interface operations {
             };
         };
     };
+    regenerateRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RecoveryCodes"];
+                };
+            };
+        };
+    };
     setup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Setup"];
+                };
+            };
+        };
+    };
+    changeNotificationEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MeResponse"];
+                };
+            };
+        };
+    };
+    list: {
         parameters: {
             query?: never;
             header?: never;
@@ -1944,8 +2205,80 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["Setup"];
+                    "*/*": components["schemas"]["Passkey"][];
                 };
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RecoveryCodes"];
+                };
+            };
+        };
+    };
+    registrationOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    delete_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

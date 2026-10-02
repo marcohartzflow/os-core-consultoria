@@ -77,7 +77,7 @@ class OpenApiContractTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		return login.getResponse().getCookie("OS_SESSION");

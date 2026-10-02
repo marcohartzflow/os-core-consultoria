@@ -19,7 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/iam")
 class AccountRecoveryController {
 
-	record TokenAndPassword(@NotBlank @Size(max = 200) String token, @NotBlank @Size(max = 128) String password) {
+	// Password fields: 512 UTF-16 units (4 × 128), so the password policy's 128 code points is the limit.
+	record TokenAndPassword(@NotBlank @Size(max = 200) String token, @NotBlank @Size(max = 512) String password) {
 	}
 
 	record EmailRequest(@NotBlank @Email @Size(max = 320) String email) {

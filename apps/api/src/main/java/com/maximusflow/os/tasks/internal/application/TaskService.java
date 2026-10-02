@@ -2,16 +2,17 @@ package com.maximusflow.os.tasks.internal.application;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.common.error.NotFoundException;
-import com.maximusflow.os.common.security.Destructive;
+import com.maximusflow.os.common.security.ReadOnlyTool;
+import com.maximusflow.os.common.security.RequiresConfirmation;
 import com.maximusflow.os.common.security.RequiresPermission;
 import com.maximusflow.os.common.ui.UiAction;
 import com.maximusflow.os.common.ui.UiActions;
@@ -61,6 +62,7 @@ public class TaskService {
 	@Tool(name = "tasks_list",
 			description = "Lista as tarefas da empresa com título, status (OPEN ou DONE), responsável e prazo, "
 					+ "no máximo " + MAX_LIST + " por vez. Filtre por status e/ou por id do responsável quando o usuário pedir.")
+	@ReadOnlyTool
 	@RequiresPermission(value = "tasks.task.read", description = "Ver tarefas")
 	@Transactional(readOnly = true)
 	public List<TaskSummary> list(
@@ -80,7 +82,7 @@ public class TaskService {
 		else {
 			found = this.tasks.findAllByOrderByStatusAscDueDateAscCreatedAtAsc(limit);
 		}
-		Map<UUID, Optional<TaskSummary.Assignee>> names = new HashMap<>();
+		Map<UUID, String> names = assigneeNames(found);
 		return found.stream().map((task) -> summary(task, names)).toList();
 	}
 
@@ -96,20 +98,24 @@ public class TaskService {
 	@RequiresPermission(value = "tasks.task.read", description = "Ver tarefas")
 	@Transactional(readOnly = true)
 	public Page<TaskSummary> search(TaskQuery query, Pageable pageable) {
-		Map<UUID, Optional<TaskSummary.Assignee>> names = new HashMap<>();
-		return this.tasks.findAll(query.toSpecification(), pageable).map((task) -> summary(task, names));
+		Page<Task> page = this.tasks.findAll(query.toSpecification(), pageable);
+		Map<UUID, String> names = assigneeNames(page.getContent());
+		return page.map((task) -> summary(task, names));
 	}
 
 	@Tool(name = "tasks_get", description = "Detalha uma tarefa pelo id.")
+	@ReadOnlyTool
 	@RequiresPermission(value = "tasks.task.read", description = "Ver tarefas")
 	@Transactional(readOnly = true)
 	public TaskSummary get(@ToolParam(description = "Id (UUID) da tarefa") UUID id) {
-		return summary(load(id), new HashMap<>());
+		return summary(load(id));
 	}
 
 	@Tool(name = "tasks_create",
 			description = "Cria uma tarefa. Use quando o usuário pedir para anotar, criar ou delegar algo a fazer. "
-					+ "O responsável é opcional e deve ser o id de um usuário ativo do portal (obtenha com iam_list_users).")
+					+ "O responsável é opcional e deve ser o id de um usuário ativo do portal (obtenha com iam_list_users). "
+					+ "Exige confirmação da pessoa.")
+	@RequiresConfirmation("Cria uma tarefa com os dados abaixo")
 	@RequiresPermission(value = "tasks.task.create", description = "Criar tarefas")
 	public TaskSummary create(@ToolParam(description = "Título curto da tarefa") String title,
 			@ToolParam(required = false, description = "Detalhes da tarefa") @Nullable String description,
@@ -120,7 +126,7 @@ public class TaskService {
 		this.audit.record("tasks.task.created", "task", task.getId().toString(),
 				Map.of("title", task.getTitle(), "assigneeId", String.valueOf(task.getAssigneeId())));
 		UiActions.publish(new UiAction.Navigate("/tasks", "Ver tarefas"));
-		return summary(task, new HashMap<>());
+		return summary(task);
 	}
 
 	@RequiresPermission(value = "tasks.task.update", description = "Editar tarefas")
@@ -131,10 +137,12 @@ public class TaskService {
 		task.update(title, description, activeAssignee(assigneeId), dueDate);
 		this.audit.record("tasks.task.updated", "task", task.getId().toString(),
 				Map.of("title", task.getTitle(), "assigneeId", String.valueOf(task.getAssigneeId())));
-		return summary(task, new HashMap<>());
+		return summary(task);
 	}
 
-	@Tool(name = "tasks_complete", description = "Marca uma tarefa como concluída (status DONE).")
+	@Tool(name = "tasks_complete",
+			description = "Marca uma tarefa como concluída (status DONE). Exige confirmação da pessoa.")
+	@RequiresConfirmation("Marca a tarefa como concluída")
 	@RequiresPermission(value = "tasks.task.update", description = "Editar tarefas")
 	public TaskSummary complete(@ToolParam(description = "Id (UUID) da tarefa") UUID id) {
 		Task task = load(id);
@@ -142,7 +150,7 @@ public class TaskService {
 			throw new DomainRuleException("A tarefa já está concluída");
 		}
 		this.audit.record("tasks.task.completed", "task", task.getId().toString(), null);
-		return summary(task, new HashMap<>());
+		return summary(task);
 	}
 
 	@RequiresPermission(value = "tasks.task.update", description = "Editar tarefas")
@@ -150,11 +158,11 @@ public class TaskService {
 		Task task = load(id);
 		task.reopen();
 		this.audit.record("tasks.task.reopened", "task", task.getId().toString(), null);
-		return summary(task, new HashMap<>());
+		return summary(task);
 	}
 
 	@Tool(name = "tasks_delete", description = "Exclui uma tarefa definitivamente. Exige confirmação da pessoa.")
-	@Destructive("Exclui a tarefa definitivamente")
+	@RequiresConfirmation("Exclui a tarefa definitivamente")
 	@RequiresPermission(value = "tasks.task.delete", description = "Excluir tarefas")
 	public void delete(@ToolParam(description = "Id (UUID) da tarefa") UUID id) {
 		Task task = load(id);
@@ -189,14 +197,20 @@ public class TaskService {
 		return account.id();
 	}
 
-	private TaskSummary summary(Task task, Map<UUID, Optional<TaskSummary.Assignee>> cache) {
+	/** Names of the assignees of {@code tasks}, in one query however many tasks there are. */
+	private Map<UUID, String> assigneeNames(List<Task> tasks) {
+		return this.users.namesByIds(
+				tasks.stream().map(Task::getAssigneeId).filter(Objects::nonNull).collect(Collectors.toSet()));
+	}
+
+	private TaskSummary summary(Task task) {
+		return summary(task, assigneeNames(List.of(task)));
+	}
+
+	private TaskSummary summary(Task task, Map<UUID, String> names) {
 		UUID assigneeId = task.getAssigneeId();
-		if (assigneeId == null) {
-			return TaskSummary.of(task, null);
-		}
-		Optional<TaskSummary.Assignee> assignee = cache.computeIfAbsent(assigneeId, (id) -> this.users.findById(id)
-			.map((account) -> new TaskSummary.Assignee(account.id(), account.name())));
-		return TaskSummary.of(task, assignee.orElse(null));
+		String name = (assigneeId != null) ? names.get(assigneeId) : null;
+		return TaskSummary.of(task, (name != null) ? new TaskSummary.Assignee(assigneeId, name) : null);
 	}
 
 }

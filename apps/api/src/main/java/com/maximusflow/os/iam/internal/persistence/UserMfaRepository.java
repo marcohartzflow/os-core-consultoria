@@ -15,12 +15,22 @@ public interface UserMfaRepository extends JpaRepository<UserMfa, UUID> {
 
 	boolean existsByUserIdAndEnabledAtIsNotNull(UUID userId);
 
-	/** Users with a confirmed second factor; the user list shows it without one query per row. */
-	@Query("select m.userId from UserMfa m where m.enabledAt is not null")
+	/**
+	 * Users with a second factor: a confirmed authenticator app or at least one passkey. The user list
+	 * shows it without one query per row.
+	 */
+	@Query("select u.id from User u where " + HAS_SECOND_FACTOR)
 	Set<UUID> findUserIdsWithMfaEnabled();
 
-	@Query("select m.userId from UserMfa m where m.enabledAt is not null and m.userId in :ids")
+	@Query("select u.id from User u where u.id in :ids and (" + HAS_SECOND_FACTOR + ")")
 	Set<UUID> findUserIdsWithMfaEnabled(@Param("ids") Collection<UUID> ids);
+
+	@Query("select count(u) > 0 from User u where u.id = :userId and (" + HAS_SECOND_FACTOR + ")")
+	boolean hasSecondFactor(@Param("userId") UUID userId);
+
+	/** JPQL condition on {@code u} (a User): authenticator app confirmed, or a passkey registered. */
+	String HAS_SECOND_FACTOR = "exists (select 1 from UserMfa m where m.userId = u.id and m.enabledAt is not null)"
+			+ " or exists (select 1 from UserPasskey p where p.userId = u.id)";
 
 	/**
 	 * Records the TOTP step that was just accepted, only if it is newer than the last one: two

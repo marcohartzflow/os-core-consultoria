@@ -66,7 +66,11 @@ class TasksModuleTests {
 	void useCasesAreExposedAsToolsWithTheirPermissions() {
 		assertThat(this.registry.all()).extracting(RegisteredTool::name).contains("tasks_list", "tasks_get",
 				"tasks_create", "tasks_complete", "tasks_delete");
-		assertThat(this.registry.find("tasks_delete")).get().extracting(RegisteredTool::destructive).isEqualTo(true);
+		// Everything that writes waits for the person's confirmation; only reads run directly.
+		assertThat(this.registry.all()).filteredOn((tool) -> tool.name().startsWith("tasks_"))
+			.filteredOn(RegisteredTool::requiresConfirmation)
+			.extracting(RegisteredTool::name)
+			.containsExactlyInAnyOrder("tasks_create", "tasks_complete", "tasks_delete");
 		assertThat(this.registry.forPermissions(Set.of("tasks.task.read"))).extracting(RegisteredTool::name)
 			.containsExactly("tasks_get", "tasks_list");
 	}
@@ -141,7 +145,7 @@ class TasksModuleTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		return new Session(login.getResponse().getCookie("OS_SESSION"), xsrf);

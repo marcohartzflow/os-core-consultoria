@@ -2,11 +2,14 @@ package com.maximusflow.os.ai.internal.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.maximusflow.os.ai.internal.domain.Conversation;
 import com.maximusflow.os.ai.internal.persistence.ConversationRepository;
+import com.maximusflow.os.ai.internal.persistence.PendingActionRepository;
 import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.RequiresPermission;
@@ -33,15 +36,18 @@ public class ConversationService {
 
 	private final ConversationRepository conversations;
 
+	private final PendingActionRepository actions;
+
 	private final ChatMemory chatMemory;
 
 	private final CurrentUser currentUser;
 
 	private final Clock clock;
 
-	ConversationService(ConversationRepository conversations, ChatMemory chatMemory, CurrentUser currentUser,
-			Clock clock) {
+	ConversationService(ConversationRepository conversations, PendingActionRepository actions, ChatMemory chatMemory,
+			CurrentUser currentUser, Clock clock) {
 		this.conversations = conversations;
+		this.actions = actions;
 		this.chatMemory = chatMemory;
 		this.currentUser = currentUser;
 		this.clock = clock;
@@ -65,10 +71,9 @@ public class ConversationService {
 	@Transactional(readOnly = true)
 	public List<ChatMessage> messages(UUID conversationId) {
 		requireOwned(conversationId);
-		return this.chatMemory.get(conversationId.toString()).stream()
-			.filter((m) -> m.getMessageType() == MessageType.USER || m.getMessageType() == MessageType.ASSISTANT)
-			.filter((m) -> !isPortalNote(m))
-			.map((m) -> new ChatMessage(m.getMessageType().getValue(), textOf(m)))
+		return visible(this.chatMemory.get(conversationId.toString()),
+				this.actions.findNotesByConversationId(conversationId))
+			.stream()
 			.filter((m) -> !m.text().isBlank())
 			.toList();
 	}
@@ -102,15 +107,19 @@ public class ConversationService {
 	}
 
 	/**
-	 * Prefix of the notes the portal itself adds to a conversation (confirmation outcomes). They are
-	 * plain user-role messages, never system messages, so data can never gain system-prompt
-	 * authority; the prefix keeps them out of what people see and export.
+	 * What the person sees and exports: their messages and the assistant's, without the notes the
+	 * portal itself added (confirmation outcomes). Those notes are plain user-role messages, never
+	 * system messages, so data can never gain system-prompt authority. Spring AI's JDBC chat memory
+	 * persists only text, type and time, so a note is recognised by its exact text as recorded on the
+	 * pending action, never by a prefix the person could type.
 	 */
-	public static final String PORTAL_NOTE = "[portal] ";
-
-	public static boolean isPortalNote(Message message) {
-		String text = message.getText();
-		return message.getMessageType() == MessageType.USER && text != null && text.startsWith(PORTAL_NOTE);
+	static List<ChatMessage> visible(List<Message> memory, Collection<String> notes) {
+		Set<String> portalNotes = Set.copyOf(notes);
+		return memory.stream()
+			.filter((m) -> m.getMessageType() == MessageType.USER || m.getMessageType() == MessageType.ASSISTANT)
+			.filter((m) -> m.getMessageType() != MessageType.USER || !portalNotes.contains(textOf(m)))
+			.map((m) -> new ChatMessage(m.getMessageType().getValue(), textOf(m)))
+			.toList();
 	}
 
 	static String textOf(Message message) {

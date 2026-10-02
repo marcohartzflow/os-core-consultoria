@@ -1,4 +1,4 @@
-package com.maximusflow.os.auth.internal;
+package com.maximusflow.os.common;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -9,11 +9,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Sliding-window limiter keyed by an arbitrary string (client address). In-memory on purpose: one
- * instance per client deployment. Memory stays bounded: idle windows are pruned at most once per
+ * Sliding-window limiter keyed by an arbitrary string (a client address for the auth endpoints, a
+ * user id for the assistant's turns). In-memory on purpose: one instance per client deployment. Memory stays bounded: idle windows are pruned at most once per
  * period, and IPv6 clients are keyed by their /64 so one subscriber cannot mint unlimited keys.
  */
-final class RateLimiter {
+public final class RateLimiter {
 
 	private final int limit;
 
@@ -25,14 +25,14 @@ final class RateLimiter {
 
 	private final AtomicReference<Instant> lastPrune = new AtomicReference<>(Instant.MIN);
 
-	RateLimiter(int limit, Duration period, Clock clock) {
+	public RateLimiter(int limit, Duration period, Clock clock) {
 		this.limit = limit;
 		this.period = period;
 		this.clock = clock;
 	}
 
 	/** Returns true and records the hit when the key is under the limit. */
-	boolean tryAcquire(String rawKey) {
+	public boolean tryAcquire(String rawKey) {
 		String key = normalize(rawKey);
 		Instant now = this.clock.instant();
 		Instant cutoff = now.minus(this.period);

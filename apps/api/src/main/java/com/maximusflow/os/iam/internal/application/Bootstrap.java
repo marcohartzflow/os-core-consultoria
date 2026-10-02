@@ -2,6 +2,7 @@ package com.maximusflow.os.iam.internal.application;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.iam.PermissionCatalog;
@@ -65,6 +66,7 @@ class Bootstrap implements ApplicationRunner {
 			return created;
 		});
 		admin.grantAll(this.catalog.keys());
+		revokeReservedFromCustomRoles();
 
 		if (this.users.count() > 0) {
 			return;
@@ -79,7 +81,7 @@ class Bootstrap implements ApplicationRunner {
 		}
 		String hash;
 		try {
-			hash = this.passwordPolicy.validateAndHash(password);
+			hash = this.passwordPolicy.validateAndHash(password, email);
 		}
 		catch (RuntimeException ex) {
 			log.error("Bootstrap password rejected, first administrator not created: {}", ex.getMessage());
@@ -91,6 +93,28 @@ class Bootstrap implements ApplicationRunner {
 				Map.of("email", user.getEmail()));
 		log.warn("First administrator created: {}. Change the bootstrap password after the first login.",
 				user.getEmail());
+	}
+
+
+	/**
+	 * Only the system role holds reserved permissions. A release can mark an existing permission as
+	 * reserved; custom roles that already held it lose it here, at the first start with that release,
+	 * instead of keeping it until someone edits the role.
+	 */
+	private void revokeReservedFromCustomRoles() {
+		Set<String> reserved = this.catalog.keys().stream().filter(this.catalog::isReserved)
+			.collect(Collectors.toSet());
+		for (Role role : this.roles.findAll()) {
+			if (role.isSystem()) {
+				continue;
+			}
+			Set<String> removed = role.revoke(reserved);
+			if (!removed.isEmpty()) {
+				log.warn("Reserved permissions removed from role {}: {}", role.getName(), removed);
+				this.audit.recordSystem("iam.role.reserved_revoked", "role", role.getId().toString(),
+						Map.of("name", role.getName(), "permissions", removed));
+			}
+		}
 	}
 
 }

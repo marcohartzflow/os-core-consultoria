@@ -1,7 +1,7 @@
 package com.maximusflow.os.iam.internal.persistence;
 
 import java.time.Instant;
-import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import com.maximusflow.os.iam.internal.domain.MfaRecoveryCode;
@@ -13,7 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface MfaRecoveryCodeRepository extends JpaRepository<MfaRecoveryCode, UUID> {
 
-	Optional<MfaRecoveryCode> findByUserIdAndCodeHash(UUID userId, String codeHash);
+	List<MfaRecoveryCode> findByUserIdAndUsedAtIsNull(UUID userId);
 
 	int countByUserIdAndUsedAtIsNull(UUID userId);
 

@@ -15,7 +15,7 @@ import jakarta.persistence.Table;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A destructive tool call the agent wanted to make. It only runs after the owner confirms it, and only
+ * A state-changing tool call the agent wanted to make. It only runs after the owner confirms it, and only
  * until it expires.
  */
 @Entity
@@ -66,6 +66,10 @@ public class PendingAction {
 	@Column(columnDefinition = "text")
 	private @Nullable String result;
 
+	/** The sentence added to the conversation about the outcome; hidden from the person and the export. */
+	@Column(columnDefinition = "text")
+	private @Nullable String note;
+
 	protected PendingAction() {
 	}
 
@@ -85,9 +89,10 @@ public class PendingAction {
 		return this.status == Status.PENDING && this.expiresAt.isAfter(now);
 	}
 
-	public void resolve(Status status, @Nullable String result, Instant now) {
+	public void resolve(Status status, @Nullable String result, @Nullable String note, Instant now) {
 		this.status = status;
 		this.result = result;
+		this.note = note;
 		this.resolvedAt = now;
 	}
 
@@ -133,6 +138,10 @@ public class PendingAction {
 
 	public @Nullable String getResult() {
 		return this.result;
+	}
+
+	public @Nullable String getNote() {
+		return this.note;
 	}
 
 }

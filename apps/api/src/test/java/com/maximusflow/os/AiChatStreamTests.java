@@ -10,6 +10,8 @@ import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -93,13 +95,19 @@ class AiChatStreamTests {
 					if (text.contains("devagar")) {
 						return Flux.interval(Duration.ofMillis(300)).take(5).map((i) -> response("."));
 					}
-					return Flux.just(response("Olá"), response(", tudo certo."));
+					// Like Anthropic: the usage arrives on the last event of the call, with no text.
+					return Flux.just(response("Olá"), response(", tudo certo."), usage(120, 8));
 				}
 			};
 		}
 
 		private static ChatResponse response(String text) {
 			return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
+		}
+
+		private static ChatResponse usage(int prompt, int completion) {
+			return new ChatResponse(List.of(new Generation(new AssistantMessage(""))),
+					ChatResponseMetadata.builder().usage(new DefaultUsage(prompt, completion)).build());
 		}
 
 	}
@@ -120,7 +128,7 @@ class AiChatStreamTests {
 				anonymous())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"text\":\"oi\"}")).andExpect(status().isUnauthorized());
-		Session admin = login("admin@example.com", "Admin-Password-2026");
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
 		String conversation = newConversation(admin);
 		this.mvc.perform(post("/api/ai/conversations/" + conversation + "/messages").cookie(admin.cookie())
 			.contentType(MediaType.APPLICATION_JSON)
@@ -129,7 +137,7 @@ class AiChatStreamTests {
 
 	@Test
 	void tokensStreamThenDoneAndTheConversationIsKept() throws Exception {
-		Session admin = login("admin@example.com", "Admin-Password-2026");
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
 		String conversation = newConversation(admin);
 		String events = send(admin, conversation, "Primeira pergunta");
 		assertThat(events).contains("event:token", "\"text\":\"Olá\"", "event:done", "Olá, tudo certo.");
@@ -143,20 +151,47 @@ class AiChatStreamTests {
 			.andExpect(jsonPath("$[?(@.id == '" + conversation + "')].title").value("Primeira pergunta"));
 	}
 
+	/**
+	 * The turn runs on another thread, yet its rows say who, from where and which request (ASVS 16.2.1),
+	 * and the end of the turn records the tokens the model reported (OWASP LLM10).
+	 */
+	@Test
+	void theTurnIsAuditedWithTheRequestsOriginAddressAndIdAndItsTokenUsage() throws Exception {
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
+		String conversation = newConversation(admin);
+		MvcResult result = start(admin, conversation, "Quanto custa?");
+		assertThat(awaitEnd(result)).contains("event:done", "Olá, tudo certo.");
+		String requestId = result.getResponse().getHeader("X-Request-Id");
+		assertThat(requestId).isNotBlank();
+
+		assertThat(this.jdbc.queryForMap("SELECT origin, ip, correlation_id, actor_email FROM audit_event"
+				+ " WHERE action = 'ai.turn.started' AND entity_id = ?", conversation))
+			.containsEntry("origin", "REST")
+			.containsEntry("ip", "127.0.0.1")
+			.containsEntry("correlation_id", requestId)
+			.containsEntry("actor_email", "admin@example.com");
+		String ended = this.jdbc.queryForObject("SELECT details::text FROM audit_event"
+				+ " WHERE action = 'ai.turn.ended' AND entity_id = ? AND correlation_id = ?", String.class,
+				conversation, requestId);
+		assertThat(ended).contains("\"outcome\": \"completed\"", "\"promptTokens\": 120",
+				"\"completionTokens\": 8", "\"totalTokens\": 128");
+	}
+
 	@Test
 	void aToolRunsOnTheModelsThreadWithThePersonsAuthorityAndIsAudited() throws Exception {
-		Session admin = login("admin@example.com", "Admin-Password-2026");
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
 		String conversation = newConversation(admin);
 		String events = send(admin, conversation, "quais usuarios existem?");
 		assertThat(events).contains("event:tool_call", "iam_list_users", "Encontrei o administrador.");
 		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM audit_event WHERE action = 'ai.tool.executed'"
-				+ " AND entity_id = 'iam_list_users' AND origin = 'AI_TOOL' AND correlation_id = ?", Integer.class,
-				conversation)).isEqualTo(1);
+				+ " AND entity_id = 'iam_list_users' AND origin = 'AI_TOOL' AND correlation_id = ?"
+				+ " AND ip = '127.0.0.1' AND details->>'argumentsSha256' IS NOT NULL AND details->>'arguments' IS NULL",
+				Integer.class, conversation)).isEqualTo(1);
 	}
 
 	@Test
 	void theModelIsOfferedOnlyTheToolsThePersonMayUse() throws Exception {
-		Session admin = login("admin@example.com", "Admin-Password-2026");
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
 		String readerRole = firstMatch(this.mvc
 			.perform(withCsrf(post("/api/iam/roles"), admin).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Leitor de tarefas\",\"permissions\":[\"ai.chat.use\",\"tasks.task.read\"]}"))
@@ -170,9 +205,9 @@ class AiChatStreamTests {
 		Session anonymous = anonymous();
 		this.mvc.perform(withCsrf(post("/api/iam/invitations/accept"), anonymous).contentType(MediaType.APPLICATION_JSON)
 			.content("{\"token\":\"" + link.substring(link.lastIndexOf('/') + 1)
-					+ "\",\"password\":\"Leo-Password-2026\"}"))
+					+ "\",\"password\":\"Oel-Passphrase-2026\"}"))
 			.andExpect(status().isNoContent());
-		Session leo = login("leo@example.com", "Leo-Password-2026");
+		Session leo = login("leo@example.com", "Oel-Passphrase-2026");
 
 		send(leo, newConversation(leo), "oi");
 		assertThat(ScriptedModel.OFFERED.getLast()).containsExactly("tasks_get", "tasks_list");
@@ -185,7 +220,7 @@ class AiChatStreamTests {
 
 	@Test
 	void onePersonRunsAtMostTwoTurnsAtATime() throws Exception {
-		Session admin = login("admin@example.com", "Admin-Password-2026");
+		Session admin = login("admin@example.com", "Bootstrap-Secret-2026");
 		String conversation = newConversation(admin);
 		MvcResult first = start(admin, conversation, "devagar");
 		MvcResult second = start(admin, conversation, "devagar");

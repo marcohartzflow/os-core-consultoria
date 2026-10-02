@@ -28,7 +28,8 @@ public class PersonalDataService {
 		this.audit = audit;
 	}
 
-	@Transactional(readOnly = true)
+	// Read-write: the audit row joins this transaction, and a read-only one would never flush it.
+	@Transactional
 	public Map<String, Object> export(UUID userId, String email) {
 		Map<String, Object> sections = new LinkedHashMap<>();
 		for (PersonalDataContributor contributor : this.contributors) {

@@ -3,6 +3,7 @@ package com.maximusflow.os.iam.internal.domain;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -15,22 +16,29 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.UuidGenerator;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Updates write only the columns that changed: a login (counters, last login) running at the same
+ * time as an administrator's change (status, password) must not write the old values back.
+ */
 @Entity
 @Table(name = "users")
+@DynamicUpdate
 public class User extends AuditableEntity {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
+	// Time-ordered (v7): new rows land at the end of the primary key index instead of on random
+	// pages, which keeps inserts cheap and the index compact as the table grows.
+	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	private UUID id;
 
 	@Column(nullable = false, unique = true, length = 320)
@@ -52,6 +60,12 @@ public class User extends AuditableEntity {
 	@Column(name = "locked_until")
 	private @Nullable Instant lockedUntil;
 
+	@Column(name = "last_failed_login_at")
+	private @Nullable Instant lastFailedLoginAt;
+
+	@Column(name = "locked_permanently", nullable = false)
+	private boolean lockedPermanently;
+
 	@Column(name = "last_login_at")
 	private @Nullable Instant lastLoginAt;
 
@@ -61,6 +75,13 @@ public class User extends AuditableEntity {
 
 	@Column(name = "anonymized_at")
 	private @Nullable Instant anonymizedAt;
+
+	/**
+	 * Optional second address for security notices (NIST SP 800-63B-4: at least two notification
+	 * addresses per account). Links never go here, only to the login e-mail.
+	 */
+	@Column(name = "notification_email", length = 320)
+	private @Nullable String notificationEmail;
 
 	@ManyToMany
 	@JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"),
@@ -107,12 +128,19 @@ public class User extends AuditableEntity {
 		this.passwordHash = passwordHash;
 	}
 
+	/**
+	 * The password stops working (second factor reset by an administrator): the person proves the
+	 * e-mail again through a reset link before choosing a new one.
+	 */
+	public void revokePassword() {
+		this.passwordHash = null;
+	}
+
 	/** Completes an invitation or a password reset. Unlocks the account. */
 	public void setPassword(String passwordHash) {
 		this.passwordHash = passwordHash;
 		this.passwordChangeRequired = false;
-		this.failedLoginAttempts = 0;
-		this.lockedUntil = null;
+		clearLockout();
 		if (this.status == AccountStatus.INVITED) {
 			this.status = AccountStatus.ACTIVE;
 		}
@@ -125,11 +153,26 @@ public class User extends AuditableEntity {
 	public void anonymize(Instant now) {
 		this.email = "anonymized-" + this.id + "@invalid";
 		this.name = "Titular removido";
+		this.notificationEmail = null;
 		this.passwordHash = null;
 		this.passwordChangeRequired = false;
 		this.roles = new HashSet<>();
 		this.status = AccountStatus.DISABLED;
 		this.anonymizedAt = now;
+	}
+
+	/** Sets (normalized) or clears the second notification address; the caller checks it is not the login e-mail. */
+	public void changeNotificationEmail(@Nullable String email) {
+		this.notificationEmail = (email != null) ? normalizeEmail(email) : null;
+	}
+
+	public @Nullable String getNotificationEmail() {
+		return this.notificationEmail;
+	}
+
+	/** Where security notices go: the login e-mail, then the second address when there is one. */
+	public List<String> noticeAddresses() {
+		return (this.notificationEmail != null) ? List.of(this.email, this.notificationEmail) : List.of(this.email);
 	}
 
 	public boolean isAnonymized() {
@@ -144,26 +187,54 @@ public class User extends AuditableEntity {
 		this.status = AccountStatus.DISABLED;
 	}
 
+	/** Re-enabling is an administrator's decision about the account, so it lifts any lockout too. */
 	public void enable() {
+		clearLockout();
 		this.status = (this.passwordHash != null) ? AccountStatus.ACTIVE : AccountStatus.INVITED;
 	}
 
-	public void recordLoginFailure(Instant now, int maxAttempts, Duration lockDuration) {
-		this.failedLoginAttempts++;
-		if (this.failedLoginAttempts >= maxAttempts) {
-			this.lockedUntil = now.plus(lockDuration);
+	/**
+	 * Counts one failed login, following Keycloak's brute-force detection ("by multiples"): every
+	 * {@code policy.maxAttempts()} consecutive failures lock the account for a wait that grows by
+	 * {@code policy.waitIncrement()} each time, up to {@code policy.maxWait()}. The count survives the
+	 * locks and starts over only after a success or {@code policy.failureReset()} without failures.
+	 * At {@code policy.permanentAfter()} consecutive failures (NIST SP 800-63B-4 allows at most 100)
+	 * the account stays locked until the password is reset or an administrator re-enables it.
+	 */
+	public void recordLoginFailure(Instant now, LockoutPolicy policy) {
+		if (this.lastFailedLoginAt != null
+				&& Duration.between(this.lastFailedLoginAt, now).compareTo(policy.failureReset()) > 0) {
 			this.failedLoginAttempts = 0;
+		}
+		this.failedLoginAttempts++;
+		this.lastFailedLoginAt = now;
+		if (this.failedLoginAttempts >= policy.permanentAfter()) {
+			this.lockedPermanently = true;
+		}
+		else if (this.failedLoginAttempts % policy.maxAttempts() == 0) {
+			Duration wait = policy.waitIncrement().multipliedBy(this.failedLoginAttempts / policy.maxAttempts());
+			this.lockedUntil = now.plus((wait.compareTo(policy.maxWait()) > 0) ? policy.maxWait() : wait);
 		}
 	}
 
 	public void recordLoginSuccess(Instant now) {
-		this.failedLoginAttempts = 0;
-		this.lockedUntil = null;
+		clearLockout();
 		this.lastLoginAt = now;
 	}
 
+	private void clearLockout() {
+		this.failedLoginAttempts = 0;
+		this.lastFailedLoginAt = null;
+		this.lockedUntil = null;
+		this.lockedPermanently = false;
+	}
+
 	public boolean isLocked(Instant now) {
-		return this.lockedUntil != null && this.lockedUntil.isAfter(now);
+		return this.lockedPermanently || (this.lockedUntil != null && this.lockedUntil.isAfter(now));
+	}
+
+	public boolean isLockedPermanently() {
+		return this.lockedPermanently;
 	}
 
 	public Set<String> permissions() {

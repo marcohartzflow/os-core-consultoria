@@ -21,7 +21,7 @@ public record RoleQuery(@Nullable String q, @Nullable Boolean system) {
 			if (StringUtils.hasText(this.q)) {
 				String pattern = PageQuery.contains(this.q);
 				predicates.add(cb.or(cb.like(cb.lower(root.get("name")), pattern, PageQuery.LIKE_ESCAPE),
-						cb.like(cb.lower(cb.coalesce(root.get("description"), "")), pattern, PageQuery.LIKE_ESCAPE)));
+						cb.like(cb.lower(root.get("description")), pattern, PageQuery.LIKE_ESCAPE)));
 			}
 			if (this.system != null) {
 				predicates.add(cb.equal(root.get("system"), this.system));

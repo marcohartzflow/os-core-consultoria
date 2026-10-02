@@ -6,9 +6,7 @@ import java.util.UUID;
 
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.DomainRuleException;
-import com.maximusflow.os.common.logging.Sanitize;
 import com.maximusflow.os.common.security.CurrentUser;
-import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.internal.IamProperties;
 import com.maximusflow.os.iam.internal.domain.Role;
@@ -47,7 +45,7 @@ class AdministratorPolicy {
 
 	private final RoleRepository roles;
 
-	private final PasswordPolicy passwordPolicy;
+	private final LoginAttempts attempts;
 
 	private final CurrentUser currentUser;
 
@@ -59,12 +57,12 @@ class AdministratorPolicy {
 
 	private final int minimum;
 
-	AdministratorPolicy(UserRepository users, RoleRepository roles, PasswordPolicy passwordPolicy,
+	AdministratorPolicy(UserRepository users, RoleRepository roles, LoginAttempts attempts,
 			CurrentUser currentUser, AccountNotifier notifier, AuditRecorder audit, ApplicationEventPublisher events,
 			IamProperties properties) {
 		this.users = users;
 		this.roles = roles;
-		this.passwordPolicy = passwordPolicy;
+		this.attempts = attempts;
 		this.currentUser = currentUser;
 		this.notifier = notifier;
 		this.audit = audit;
@@ -78,7 +76,8 @@ class AdministratorPolicy {
 
 	/** Called before the user loses the system role or stops being active. */
 	void assertCanStopBeingAdministrator(User user) {
-		Role system = systemRole();
+		// Locked, so a second change running at the same time waits here and counts after this one.
+		Role system = this.roles.lockSystemRole().orElseThrow();
 		boolean counts = user.getStatus() == AccountStatus.ACTIVE && user.getRoles().contains(system);
 		if (counts && activeAdministrators() - 1 < this.minimum) {
 			throw new DomainRuleException("O portal precisa manter pelo menos " + this.minimum
@@ -94,14 +93,9 @@ class AdministratorPolicy {
 		if (added.stream().noneMatch(Role::isSystem)) {
 			return;
 		}
-		OsPrincipal actor = this.currentUser.require();
-		String hash = this.users.findById(actor.getId()).map(User::getPasswordHash).orElse(null);
-		if (currentPassword == null || currentPassword.isEmpty() || hash == null
-				|| !this.passwordPolicy.matches(currentPassword, hash)) {
-			security.warn("administrator grant without valid password confirmation user={}",
-					Sanitize.forLog(actor.getEmail()));
-			throw new DomainRuleException("Confirme com a sua senha para conceder acesso de administrador");
-		}
+		User actor = this.users.findById(this.currentUser.require().getId()).orElseThrow();
+		this.attempts.confirmPassword(actor, currentPassword,
+				"Confirme com a sua senha para conceder acesso de administrador");
 	}
 
 	/** Called after the system role was granted; notification happens after commit. */
@@ -122,8 +116,11 @@ class AdministratorPolicy {
 		int notified = 0;
 		for (User admin : this.users.findAllByStatusAndRolesContaining(AccountStatus.ACTIVE, system)) {
 			if (!admin.getId().equals(grantee.getId())) {
-				this.notifier.sendAdministratorGranted(admin.getEmail(), admin.getName(), grantee.getName(),
-						grantee.getEmail(), grantedBy);
+				// Every notification address of the administrator, the second one too.
+				for (String address : admin.noticeAddresses()) {
+					this.notifier.sendAdministratorGranted(address, admin.getName(), grantee.getName(),
+							grantee.getEmail(), grantedBy);
+				}
 				notified++;
 			}
 		}

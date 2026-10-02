@@ -1,12 +1,19 @@
 package com.maximusflow.os.iam.internal.application;
 
+import java.time.Duration;
+import java.util.Locale;
+import java.util.stream.Stream;
+
 import com.maximusflow.os.common.error.DomainRuleException;
 import com.maximusflow.os.iam.internal.IamProperties;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
 /**
  * Validates and hashes passwords. The compromised-password check runs only when a password is set
@@ -23,26 +30,60 @@ public class PasswordPolicy {
 
 	private final CompromisedPasswordChecker compromisedChecker;
 
-	PasswordPolicy(IamProperties properties, PasswordEncoder encoder) {
+	private final String serviceName;
+
+	PasswordPolicy(IamProperties properties, PasswordEncoder encoder,
+			@Value("${os.mail.portal-name:OS}") String serviceName) {
 		this.properties = properties.password();
 		this.encoder = encoder;
-		this.compromisedChecker = new HaveIBeenPwnedRestApiPasswordChecker();
+		this.serviceName = serviceName;
+		// Bounded waits: the check runs inside a transaction (a consumed invitation link holds a row
+		// lock), and a slow breach service must not pin database connections. A timeout fails closed.
+		var requests = new SimpleClientHttpRequestFactory();
+		requests.setConnectTimeout(Duration.ofSeconds(3));
+		requests.setReadTimeout(Duration.ofSeconds(5));
+		var checker = new HaveIBeenPwnedRestApiPasswordChecker();
+		checker.setRestClient(
+				RestClient.builder().baseUrl("https://api.pwnedpasswords.com/range/").requestFactory(requests).build());
+		this.compromisedChecker = checker;
 	}
 
-	/** Validates the raw password against the policy and returns its hash. */
-	public String validateAndHash(String rawPassword) {
-		if (rawPassword.length() < this.properties.minLength()) {
+	/**
+	 * Validates the raw password of the account {@code email} against the policy and returns its
+	 * hash. Length counts Unicode code points, as NIST SP 800-63B-4 requires.
+	 */
+	public String validateAndHash(String rawPassword, String email) {
+		int length = rawPassword.codePointCount(0, rawPassword.length());
+		if (length < this.properties.minLength()) {
 			throw new DomainRuleException(
 					"A senha precisa ter no mínimo " + this.properties.minLength() + " caracteres");
 		}
-		if (rawPassword.length() > this.properties.maxLength()) {
+		if (length > this.properties.maxLength()) {
 			throw new DomainRuleException(
 					"A senha pode ter no máximo " + this.properties.maxLength() + " caracteres");
+		}
+		if (containsContextWord(rawPassword, email)) {
+			throw new DomainRuleException("A senha não pode conter o seu e-mail nem o nome do portal");
 		}
 		if (this.properties.checkCompromised() && isCompromised(rawPassword)) {
 			throw new DomainRuleException("Esta senha apareceu em vazamentos de dados. Escolha outra");
 		}
 		return this.encoder.encode(rawPassword);
+	}
+
+	/**
+	 * Context-specific words (NIST SP 800-63B-4: "the name of the service, the username, and
+	 * derivatives thereof"; OWASP ASVS 5.0 6.2.11): the portal name and the e-mail, whole or its part
+	 * before the @. Parts shorter than four characters are ignored; they would reject innocent passwords.
+	 */
+	private boolean containsContextWord(String rawPassword, String email) {
+		String password = rawPassword.toLowerCase(Locale.ROOT);
+		String address = email.strip().toLowerCase(Locale.ROOT);
+		int at = address.indexOf('@');
+		return Stream.of(this.serviceName.strip().toLowerCase(Locale.ROOT), address,
+				(at > 0) ? address.substring(0, at) : address)
+			.filter((word) -> word.length() >= 4)
+			.anyMatch(password::contains);
 	}
 
 	/**

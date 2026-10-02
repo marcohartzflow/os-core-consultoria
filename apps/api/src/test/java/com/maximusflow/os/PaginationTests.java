@@ -40,7 +40,9 @@ class PaginationTests {
 	@Test
 	void everyListingSharesTheSamePageContract() throws Exception {
 		Session admin = login();
-		for (String path : new String[] { "/api/iam/users", "/api/iam/roles", "/api/tasks", "/api/audit/events" }) {
+		// Test methods run in no fixed order: make sure every listing has a row.
+		createTask(admin, "Pagination contract", "null", LocalDate.now().toString());
+		for (String path : new String[] { "/api/iam/users", "/api/iam/roles", "/api/tasks" }) {
 			this.mvc.perform(get(path).cookie(admin.cookie()).param("size", "1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.content.length()").value(1))
@@ -52,6 +54,14 @@ class PaginationTests {
 			this.mvc.perform(get(path).cookie(admin.cookie()).param("size", "0")).andExpect(status().isBadRequest());
 			this.mvc.perform(get(path).cookie(admin.cookie()).param("page", "-1")).andExpect(status().isBadRequest());
 		}
+		// The audit trail pages by position (see AuditTrailTests), with the same size bounds.
+		this.mvc.perform(get("/api/audit/events").cookie(admin.cookie()).param("size", "1"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.total").value(greaterThanOrEqualTo(1)))
+			.andExpect(jsonPath("$.next").isNotEmpty());
+		this.mvc.perform(get("/api/audit/events").cookie(admin.cookie()).param("size", "101"))
+			.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -61,8 +71,6 @@ class PaginationTests {
 		this.mvc.perform(get("/api/iam/users").cookie(admin.cookie()).param("sort", "passwordHash"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.title").value("Parâmetros inválidos"));
-		this.mvc.perform(get("/api/audit/events").cookie(admin.cookie()).param("sort", "ip,desc"))
-			.andExpect(status().isBadRequest());
 		this.mvc.perform(get("/api/iam/users").cookie(admin.cookie()).param("sort", "email,sideways"))
 			.andExpect(status().isBadRequest());
 		this.mvc.perform(get("/api/iam/users").cookie(admin.cookie()).param("sort", "email,desc"))
@@ -144,7 +152,7 @@ class PaginationTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		return new Session(login.getResponse().getCookie("OS_SESSION"), xsrf);

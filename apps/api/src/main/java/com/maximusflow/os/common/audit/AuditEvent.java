@@ -7,12 +7,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.Immutable;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
 import org.jspecify.annotations.Nullable;
 
@@ -22,11 +22,15 @@ import org.jspecify.annotations.Nullable;
  * table.
  */
 @Entity
+// Append-only: Hibernate keeps no snapshot for dirty checking and never issues an UPDATE.
+@Immutable
 @Table(name = "audit_event")
 public class AuditEvent {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
+	// Time-ordered (v7): new rows land at the end of the primary key index instead of on random
+	// pages, which keeps inserts cheap and the index compact as the table grows.
+	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	private UUID id;
 
 	@Column(name = "occurred_at", nullable = false, updatable = false)

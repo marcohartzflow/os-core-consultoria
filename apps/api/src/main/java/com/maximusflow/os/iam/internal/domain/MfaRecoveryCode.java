@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 
 import org.jspecify.annotations.Nullable;
 
-/** One single-use recovery code, stored as a SHA-256 hash. */
+/** One single-use recovery code, stored as a salted password hash (Argon2id). */
 @Entity
 @Table(name = "user_mfa_recovery_code")
 public class MfaRecoveryCode {
@@ -24,7 +24,7 @@ public class MfaRecoveryCode {
 	@Column(name = "user_id", nullable = false, updatable = false)
 	private UUID userId;
 
-	@Column(name = "code_hash", nullable = false, updatable = false, length = 64)
+	@Column(name = "code_hash", nullable = false, updatable = false)
 	private String codeHash;
 
 	@Column(name = "used_at")
@@ -56,6 +56,10 @@ public class MfaRecoveryCode {
 
 	public UUID getId() {
 		return this.id;
+	}
+
+	public String getCodeHash() {
+		return this.codeHash;
 	}
 
 	public UUID getUserId() {

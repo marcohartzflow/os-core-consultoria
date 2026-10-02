@@ -28,9 +28,10 @@ public record TaskQuery(@Nullable String q, Set<TaskStatus> statuses, Set<UUID> 
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
 			if (StringUtils.hasText(this.q)) {
+				// lower(column) exactly as indexed (tasks_*_trgm_idx); a null description is simply no match.
 				String pattern = PageQuery.contains(this.q);
 				predicates.add(cb.or(cb.like(cb.lower(root.get("title")), pattern, PageQuery.LIKE_ESCAPE),
-						cb.like(cb.lower(cb.coalesce(root.get("description"), "")), pattern, PageQuery.LIKE_ESCAPE)));
+						cb.like(cb.lower(root.get("description")), pattern, PageQuery.LIKE_ESCAPE)));
 			}
 			if (!this.statuses.isEmpty()) {
 				predicates.add(root.get("status").in(this.statuses));

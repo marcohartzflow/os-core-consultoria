@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 
+import com.maximusflow.os.common.RateLimiter;
 import com.maximusflow.os.common.error.RateLimitedException;
 import com.maximusflow.os.common.logging.Sanitize;
 
@@ -37,6 +38,7 @@ class RateLimitFilter extends OncePerRequestFilter {
 		this.limiters = Map.of(
 				"POST /api/auth/login", login,
 				"POST /api/auth/mfa", recovery,
+				"POST /api/auth/mfa/passkey", recovery,
 				"POST /api/iam/password-reset/request", recovery,
 				"POST /api/iam/password-reset/confirm", recovery,
 				"POST /api/iam/invitations/accept", recovery);

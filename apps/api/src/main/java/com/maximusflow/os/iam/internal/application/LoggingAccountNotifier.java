@@ -30,6 +30,23 @@ class LoggingAccountNotifier implements AccountNotifier {
 	}
 
 	@Override
+	public void sendSecondFactorReset(String email, String name, String link) {
+		log.info("Second-factor reset for {} <{}>: {}", Sanitize.forLog(name), Sanitize.forLog(email), link);
+	}
+
+	@Override
+	public void sendSecondFactorChanged(String email, String name, String change) {
+		log.info("Second-factor change for {} <{}>: {}", Sanitize.forLog(name), Sanitize.forLog(email),
+				Sanitize.forLog(change));
+	}
+
+	@Override
+	public void sendSecurityNotice(String email, String name, String notice) {
+		log.info("Security notice for {} <{}>: {}", Sanitize.forLog(name), Sanitize.forLog(email),
+				Sanitize.forLog(notice));
+	}
+
+	@Override
 	public void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
 			String grantedByName) {
 		log.info("Administrator notice for {}: {} <{}> is now an administrator (granted by {})",

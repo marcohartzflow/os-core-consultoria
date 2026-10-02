@@ -4,11 +4,14 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
+import com.maximusflow.os.ai.internal.tools.SafeToolExceptionProcessor;
+
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +25,16 @@ class AiConfig {
 	ChatMemory chatMemory(ChatMemoryRepository repository, AiProperties properties) {
 		return MessageWindowChatMemory.builder().chatMemoryRepository(repository)
 			.maxMessages(properties.maxMessages()).build();
+	}
+
+	/**
+	 * What the model reads when a tool fails: domain refusals and "sem permissão" as written, a generic
+	 * text for anything else, never SQL or library messages (OWASP LLM02). Replaces Spring AI's default,
+	 * which returns the exception message; {@code ToolCallingAutoConfiguration} backs off for this bean.
+	 */
+	@Bean
+	ToolExecutionExceptionProcessor toolExecutionExceptionProcessor() {
+		return new SafeToolExceptionProcessor();
 	}
 
 	/**

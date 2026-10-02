@@ -11,6 +11,7 @@ import com.maximusflow.os.iam.AccountStatus;
 import com.maximusflow.os.iam.internal.domain.Role;
 import com.maximusflow.os.iam.internal.domain.User;
 import com.maximusflow.os.iam.internal.domain.UserMfa;
+import com.maximusflow.os.iam.internal.domain.UserPasskey;
 
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
@@ -68,7 +69,11 @@ public record UserQuery(@Nullable String q, Set<State> states, Set<UUID> roleIds
 				Subquery<UUID> enrolled = query.subquery(UUID.class);
 				Root<UserMfa> enrolment = enrolled.from(UserMfa.class);
 				enrolled.select(enrolment.get("userId")).where(cb.isNotNull(enrolment.get("enabledAt")));
-				Predicate hasMfa = root.get("id").in(enrolled);
+				Subquery<UUID> passkeys = query.subquery(UUID.class);
+				Root<UserPasskey> passkey = passkeys.from(UserPasskey.class);
+				passkeys.select(passkey.get("userId"));
+				// Either second factor counts: the authenticator app or a passkey.
+				Predicate hasMfa = cb.or(root.get("id").in(enrolled), root.get("id").in(passkeys));
 				predicates.add(this.mfa ? hasMfa : cb.not(hasMfa));
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));

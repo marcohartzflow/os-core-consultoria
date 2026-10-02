@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 class RoleController {
 
 	record RoleRequest(@NotBlank @Size(max = 100) String name, @Nullable @Size(max = 500) String description,
-			@NotNull Set<String> permissions) {
+			@NotNull @Size(max = 500) Set<@NotNull @Size(max = 100) String> permissions) {
 	}
 
 	private final RoleService service;

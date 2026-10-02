@@ -40,7 +40,7 @@ class PasswordChangeGateTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		Cookie session = login.getResponse().getCookie("OS_SESSION");
@@ -53,10 +53,13 @@ class PasswordChangeGateTests {
 			.andExpect(jsonPath("$.type").value("urn:os:problem:password-change-required"));
 		this.mvc.perform(get("/api/ai/tools").cookie(session)).andExpect(status().isForbidden());
 
-		this.mvc.perform(post("/api/me/password").cookie(session, xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"currentPassword\":\"Admin-Password-2026\",\"newPassword\":\"Chosen-By-Me-2026!\"}"))
-			.andExpect(status().isNoContent());
+		MvcResult changed = this.mvc
+			.perform(post("/api/me/password").cookie(session, xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"currentPassword\":\"Bootstrap-Secret-2026\",\"newPassword\":\"Chosen-By-Me-2026!\"}"))
+			.andExpect(status().isNoContent())
+			.andReturn();
+		session = changed.getResponse().getCookie("OS_SESSION");
 
 		this.mvc.perform(get("/api/me").cookie(session))
 			.andExpect(status().isOk())

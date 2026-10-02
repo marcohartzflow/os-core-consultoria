@@ -1,5 +1,7 @@
 package com.maximusflow.os.ai.internal.tools;
 
+import com.maximusflow.os.common.security.ReadOnlyTool;
+import com.maximusflow.os.common.security.RequiresConfirmation;
 import com.maximusflow.os.common.security.RequiresPermission;
 
 import org.junit.jupiter.api.Test;
@@ -30,9 +32,43 @@ class ToolRegistryRulesTests {
 
 	}
 
+	static class Undeclared {
+
+		@Tool(name = "tasks_touch", description = "x")
+		@RequiresPermission("tasks.task.update")
+		public String call() {
+			return "no";
+		}
+
+	}
+
+	static class DeclaredTwice {
+
+		@Tool(name = "tasks_touch", description = "x")
+		@ReadOnlyTool
+		@RequiresConfirmation("Altera a tarefa")
+		@RequiresPermission("tasks.task.update")
+		public String call() {
+			return "no";
+		}
+
+	}
+
+	static class SilentConfirmation {
+
+		@Tool(name = "tasks_touch", description = "x")
+		@RequiresConfirmation("")
+		@RequiresPermission("tasks.task.update")
+		public String call() {
+			return "no";
+		}
+
+	}
+
 	static class Ordinary {
 
 		@Tool(name = "tasks_probe", description = "x")
+		@ReadOnlyTool
 		@RequiresPermission("tasks.task.read")
 		public String call() {
 			return "ok";
@@ -50,6 +86,21 @@ class ToolRegistryRulesTests {
 	void aToolWithoutAPermissionIsRefused() {
 		assertThatIllegalStateException().isThrownBy(() -> registryWith(Unguarded.class))
 			.withMessageContaining("no @RequiresPermission");
+	}
+
+	/** Default deny: a tool that does not say it only reads is not assumed to. */
+	@Test
+	void aToolThatDoesNotDeclareWhetherItChangesStateIsRefused() {
+		assertThatIllegalStateException().isThrownBy(() -> registryWith(Undeclared.class))
+			.withMessageContaining("must declare exactly one of @ReadOnlyTool or @RequiresConfirmation");
+		assertThatIllegalStateException().isThrownBy(() -> registryWith(DeclaredTwice.class))
+			.withMessageContaining("must declare exactly one of @ReadOnlyTool or @RequiresConfirmation");
+	}
+
+	@Test
+	void aConfirmationWithoutASummaryIsRefused() {
+		assertThatIllegalStateException().isThrownBy(() -> registryWith(SilentConfirmation.class))
+			.withMessageContaining("empty @RequiresConfirmation");
 	}
 
 	/** These sample classes live in the ai module's package, so this rule applies to them too. */

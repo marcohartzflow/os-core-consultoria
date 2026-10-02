@@ -24,7 +24,8 @@ public final class ToolEvents {
 	public record ToolFailed(String tool, String reason) implements Event {
 	}
 
-	public record ActionPending(UUID actionId, String tool, String summary) implements Event {
+	/** {@code arguments} is the call as the model made it, shown to the person before they confirm. */
+	public record ActionPending(UUID actionId, String tool, String summary, String arguments) implements Event {
 	}
 
 	private static final ScopedListener<Event> LISTENER = new ScopedListener<>();

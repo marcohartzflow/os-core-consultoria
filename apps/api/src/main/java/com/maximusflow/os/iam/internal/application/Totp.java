@@ -22,8 +22,12 @@ public final class Totp {
 
 	public static final long STEP_SECONDS = 30;
 
-	/** Steps of tolerance on each side, for clock drift between phone and server. */
-	static final int WINDOW = 1;
+	/**
+	 * Steps of tolerance on each side. None: OWASP ASVS 5.0 6.5.5 gives a TOTP a lifetime of at most
+	 * 30 seconds, which only the current step meets (RFC 6238 allows a step of drift; the ASVS level
+	 * this portal targets does not).
+	 */
+	static final int WINDOW = 0;
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 

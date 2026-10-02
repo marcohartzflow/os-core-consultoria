@@ -3,7 +3,6 @@ package com.maximusflow.os.iam.internal.application;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.maximusflow.os.common.logging.Sanitize;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.internal.domain.Role;
@@ -39,7 +38,7 @@ class GrantGuard {
 			.collect(Collectors.toSet());
 		Set<String> missing = permissions.stream().filter((p) -> !held.contains(p)).collect(Collectors.toSet());
 		if (!missing.isEmpty()) {
-			security.warn("privilege escalation attempt user={} missing={}", Sanitize.forLog(actor.getEmail()),
+			security.warn("privilege escalation attempt user={} missing={}", actor.getId(),
 					missing);
 			throw new AccessDeniedException("Cannot grant permissions the actor does not hold");
 		}

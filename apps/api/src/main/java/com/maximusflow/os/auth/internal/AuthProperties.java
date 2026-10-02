@@ -2,11 +2,16 @@ package com.maximusflow.os.auth.internal;
 
 import java.time.Duration;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 @ConfigurationProperties("os.auth")
-public record AuthProperties(@DefaultValue Session session, @DefaultValue RateLimit rateLimit) {
+@Validated
+public record AuthProperties(@DefaultValue @Valid Session session, @DefaultValue @Valid RateLimit rateLimit) {
 
 	/**
 	 * Session limits and cookie. Inactivity timeout is {@code spring.session.timeout};
@@ -14,12 +19,13 @@ public record AuthProperties(@DefaultValue Session session, @DefaultValue RateLi
 	 * {@code maxConcurrent} sessions per user, the oldest is terminated when exceeded (ASVS 7.1.2);
 	 * {@code cookieSecure} must only be false on plain-HTTP development setups.
 	 */
-	public record Session(@DefaultValue("12h") Duration absoluteTimeout, @DefaultValue("3") int maxConcurrent,
+	public record Session(@DefaultValue("12h") Duration absoluteTimeout, @DefaultValue("3") @Min(1) int maxConcurrent,
 			@DefaultValue("true") boolean cookieSecure) {
 	}
 
 	/** Per-IP limits for unauthenticated endpoints. See {@link RateLimitFilter}. */
-	public record RateLimit(@DefaultValue("20") int loginPerMinute, @DefaultValue("5") int recoveryPerMinute) {
+	public record RateLimit(@DefaultValue("20") @Min(1) int loginPerMinute,
+			@DefaultValue("5") @Min(1) int recoveryPerMinute) {
 	}
 
 }

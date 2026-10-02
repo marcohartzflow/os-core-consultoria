@@ -24,3 +24,27 @@ logging:
   level:
     # Invitation and reset links must never reach shipped logs; in prod MailAccountNotifier is active.
     com.maximusflow.os.iam.internal.application.LoggingAccountNotifier: WARN
+  # One JSON object per line on the console, in Elastic Common Schema (Spring Boot structured logging,
+  # section "Structured Logging" of https://docs.spring.io/spring-boot/reference/features/logging.html).
+  # MDC entries are written into every line: http.request.id and client.ip, set per request by
+  # common/logging/RequestLoggingContextFilter (ASVS 16.2.1). JSON encoding escapes CR/LF and other
+  # control characters in messages and stack traces, so request text cannot forge a line (ASVS 16.4.1).
+  # Use logstash or gelf instead of ecs if the client's log pipeline expects it.
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: os-api
+
+---
+# One-shot migrate service of the reference deploy (deploy/compose.yaml): Flyway migrates as the
+# schema owner and the process exits (common/persistence/FlywayConfig). Nothing else is created:
+# no web server, every other bean lazy.
+spring:
+  config:
+    activate:
+      on-profile: migrate
+  main:
+    web-application-type: none
+    lazy-initialization: true

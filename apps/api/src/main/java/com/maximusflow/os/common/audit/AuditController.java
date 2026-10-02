@@ -4,10 +4,14 @@ import java.io.IOException;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Stream;
 
-import com.maximusflow.os.common.error.DomainRuleException;
+import com.maximusflow.os.common.error.InvalidRequestException;
 import com.maximusflow.os.common.paging.PageQuery;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -16,7 +20,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
 import org.jspecify.annotations.Nullable;
-import org.springframework.data.web.PagedModel;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,8 +35,16 @@ class AuditController {
 		this.service = service;
 	}
 
+	/**
+	 * Newest first, a page at a time: without a position the newest page; {@code after} (the
+	 * {@code next} of a page) the older page, {@code before} (the {@code previous}) the newer one,
+	 * {@code oldest=true} the last page. {@code actorEmail} matches part of an address and needs at
+	 * least 3 characters: shorter text cannot use the trigram index and would read the whole trail.
+	 */
 	@GetMapping("/api/audit/events")
-	PagedModel<AuditEventView> search(@RequestParam(required = false) @Size(max = 320) @Nullable String actorEmail,
+	AuditEventPage search(
+			@RequestParam(required = false) @Size(min = 3, max = 320) @Nullable String actorEmail,
+			@RequestParam(required = false) @Nullable UUID actorId,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String action,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String entityType,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String entityId,
@@ -41,12 +52,17 @@ class AuditController {
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) @Nullable Instant to,
 			@RequestParam(required = false) @Size(max = 3) @Nullable Set<AuditOrigin> origin,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String correlationId,
-			@RequestParam(defaultValue = "0") int page,
-			@RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) int size,
-			@RequestParam(required = false) @Size(max = 40) @Nullable String sort) {
-		return new PagedModel<>(this.service.search(
-				new AuditFilter(actorEmail, action, entityType, entityId, from, to, origin, correlationId),
-				PageQuery.of(page, size, sort, AuditQueryService.SORTABLE, AuditQueryService.DEFAULT_SORT)));
+			@RequestParam(required = false) @Size(max = 100) @Nullable String after,
+			@RequestParam(required = false) @Size(max = 100) @Nullable String before,
+			@RequestParam(defaultValue = "false") boolean oldest,
+			@RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) @Min(1) @Max(PageQuery.MAX_SIZE) int size) {
+		if (Stream.of(after, before, oldest ? "" : null).filter(Objects::nonNull).count() > 1) {
+			throw new InvalidRequestException("Use só um de after, before e oldest");
+		}
+		return this.service.search(
+				new AuditFilter(actorEmail, actorId, action, entityType, entityId, from, to, origin, correlationId),
+				(after != null) ? AuditCursor.decode(after) : null, (before != null) ? AuditCursor.decode(before) : null,
+				oldest, size);
 	}
 
 	/**
@@ -62,13 +78,19 @@ class AuditController {
 			zoneId = ZoneId.of(zone);
 		}
 		catch (DateTimeException ex) {
-			throw new DomainRuleException("Fuso horário desconhecido");
+			throw new InvalidRequestException("Fuso horário desconhecido");
+		}
+		// Regions only (America/Sao_Paulo, UTC). PostgreSQL reads a bare offset such as +03:00 as a
+		// POSIX zone, where the sign means the opposite, and would group the days six hours off.
+		if (zoneId instanceof ZoneOffset || zoneId.getId().contains(":")) {
+			throw new InvalidRequestException("Use o nome do fuso horário, por exemplo America/Sao_Paulo");
 		}
 		return this.service.activity(days, zoneId);
 	}
 
 	@GetMapping(value = "/api/audit/events.csv", produces = "text/csv")
-	void export(@RequestParam(required = false) @Size(max = 320) @Nullable String actorEmail,
+	void export(@RequestParam(required = false) @Size(min = 3, max = 320) @Nullable String actorEmail,
+			@RequestParam(required = false) @Nullable UUID actorId,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String action,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String entityType,
 			@RequestParam(required = false) @Size(max = 100) @Nullable String entityId,
@@ -81,7 +103,7 @@ class AuditController {
 		response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"auditoria.csv\"");
 		response.setHeader("X-Content-Type-Options", "nosniff");
 		this.service.exportCsv(
-				new AuditFilter(actorEmail, action, entityType, entityId, from, to, origin, correlationId),
+				new AuditFilter(actorEmail, actorId, action, entityType, entityId, from, to, origin, correlationId),
 				response.getWriter());
 	}
 

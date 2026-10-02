@@ -4,12 +4,13 @@ import java.util.List;
 import java.util.UUID;
 
 import com.maximusflow.os.common.security.CurrentUser;
-import com.maximusflow.os.common.security.MfaSession;
+import com.maximusflow.os.common.security.SecondFactor;
+import com.maximusflow.os.common.security.SecondFactorGrant;
 import com.maximusflow.os.iam.MfaStatus;
 import com.maximusflow.os.iam.internal.application.MfaService;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -29,7 +30,11 @@ class MfaController {
 	record CodeRequest(@NotBlank @Size(max = 20) String code) {
 	}
 
-	record DisableRequest(@NotBlank @Size(max = 128) String currentPassword, @NotBlank @Size(max = 20) String code) {
+	// Password fields: 512 UTF-16 units (4 × 128), so the password policy's 128 code points is the limit.
+	record SetupRequest(@NotBlank @Size(max = 512) String currentPassword) {
+	}
+
+	record DisableRequest(@NotBlank @Size(max = 512) String currentPassword) {
 	}
 
 	record RecoveryCodes(List<String> recoveryCodes) {
@@ -39,8 +44,11 @@ class MfaController {
 
 	private final CurrentUser currentUser;
 
-	MfaController(MfaService service, CurrentUser currentUser) {
+	private final SecondFactorGrant secondFactor;
+
+	MfaController(MfaService service, CurrentUser currentUser, SecondFactorGrant secondFactor) {
 		this.service = service;
+		this.secondFactor = secondFactor;
 		this.currentUser = currentUser;
 	}
 
@@ -50,25 +58,32 @@ class MfaController {
 	}
 
 	@PostMapping("/api/me/mfa/setup")
-	MfaService.Setup setup() {
-		return this.service.beginSetup();
+	MfaService.Setup setup(@Valid @RequestBody SetupRequest body) {
+		return this.service.beginSetup(body.currentPassword());
 	}
 
-	/** Enabling in this session also counts as having passed the factor for this session. */
+	/** The account's first factor, enabled in this session, also counts as passed for this session. */
 	@PostMapping("/api/me/mfa/confirm")
-	RecoveryCodes confirm(@Valid @RequestBody CodeRequest body, HttpServletRequest request) {
-		List<String> codes = this.service.confirmSetup(body.code());
-		HttpSession session = request.getSession(false);
-		if (session != null) {
-			session.setAttribute(MfaSession.VERIFIED, Boolean.TRUE);
+	RecoveryCodes confirm(@Valid @RequestBody CodeRequest body, HttpServletRequest request,
+			HttpServletResponse response) {
+		var added = this.service.confirmSetup(body.code());
+		// Only the account's first factor proves this session; a factor added to an older session must
+		// not refresh it, or enrolling one would stand in for the step-up.
+		if (added.firstFactor()) {
+			this.secondFactor.grant(SecondFactor.TOTP_AUTHORITY, request, response);
 		}
-		return new RecoveryCodes(codes);
+		return new RecoveryCodes(added.recoveryCodes());
+	}
+
+	@PostMapping("/api/me/mfa/recovery-codes")
+	RecoveryCodes regenerateRecoveryCodes(@Valid @RequestBody SetupRequest body) {
+		return new RecoveryCodes(this.service.regenerateRecoveryCodes(body.currentPassword()));
 	}
 
 	@PostMapping("/api/me/mfa/disable")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	void disable(@Valid @RequestBody DisableRequest body) {
-		this.service.disable(body.currentPassword(), body.code());
+		this.service.disable(body.currentPassword());
 	}
 
 	@PostMapping("/api/iam/users/{id}/mfa/reset")

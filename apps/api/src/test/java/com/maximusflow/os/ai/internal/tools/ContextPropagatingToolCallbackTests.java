@@ -89,6 +89,22 @@ class ContextPropagatingToolCallbackTests {
 		assertThat(wrapped.call("{}", null)).isEqualTo("anonymous");
 	}
 
+	/** The request that started the turn: its client address for the audit rows, its MDC for the log lines. */
+	@Test
+	void carriesTheRequestsAddressAndLogContextToTheModelsThread() throws Exception {
+		ToolCallback delegate = probe(() -> AuditContext.current().map(AuditContext.Scope::ip).orElse(null) + "|"
+				+ org.slf4j.MDC.get("http.request.id"));
+		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contextWith(Set.of("x")), "conv-1", null,
+				null, "203.0.113.7", java.util.Map.of("http.request.id", "req-1"));
+
+		try (var executor = Executors.newSingleThreadExecutor()) {
+			assertThat(CompletableFuture.supplyAsync(() -> wrapped.call("{}", null), executor).get())
+				.isEqualTo("203.0.113.7|req-1");
+			assertThat(CompletableFuture.supplyAsync(() -> org.slf4j.MDC.getCopyOfContextMap(), executor).get())
+				.isNullOrEmpty();
+		}
+	}
+
 	@Test
 	void aFailingToolLeavesNothingBehindOnTheThread() {
 		ToolCallback delegate = probe(() -> {

@@ -21,4 +21,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 	List<Task> findAllByStatusAndAssigneeIdOrderByDueDateAscCreatedAtAsc(TaskStatus status, UUID assigneeId,
 			Limit limit);
 
+	/** Tasks a person created or is responsible for, oldest first (LGPD art. 18 II export). */
+	List<Task> findAllByCreatedByOrAssigneeIdOrderByCreatedAtAsc(UUID createdBy, UUID assigneeId);
+
 }

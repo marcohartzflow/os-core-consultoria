@@ -3,10 +3,16 @@ package com.maximusflow.os.common.error;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.maximusflow.os.common.logging.Denials;
+import com.maximusflow.os.common.logging.Sanitize;
+
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -30,6 +36,8 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+	private static final Logger security = LoggerFactory.getLogger("SECURITY");
+
 	@ExceptionHandler(NotFoundException.class)
 	ProblemDetail notFound(NotFoundException ex) {
 		return problem(HttpStatus.NOT_FOUND, "Não encontrado", ex.getMessage());
@@ -38,6 +46,18 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler(ConflictException.class)
 	ProblemDetail conflict(ConflictException ex) {
 		return problem(HttpStatus.CONFLICT, "Conflito", ex.getMessage());
+	}
+
+	/**
+	 * A unique or foreign key the database enforced after a check in code passed: two requests raced
+	 * (the same e-mail invited twice, a role deleted while being assigned). The code checks first for
+	 * a precise message; this is what the loser of the race sees instead of a 500.
+	 */
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	ProblemDetail integrityViolation(DataIntegrityViolationException ex) {
+		log.warn("Integrity violation: {}", ex.getMostSpecificCause().getClass().getSimpleName());
+		return problem(HttpStatus.CONFLICT, "Conflito",
+				"Os dados mudaram enquanto a operação era feita. Atualize a tela e tente de novo");
 	}
 
 	@ExceptionHandler(InvalidRequestException.class)
@@ -56,7 +76,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 	}
 
 	@ExceptionHandler(AccessDeniedException.class)
-	ProblemDetail forbidden(AccessDeniedException ex) {
+	ProblemDetail forbidden(AccessDeniedException ex, HttpServletRequest request) {
+		// Denials of a permission check (@RequiresPermission, reserved actions) go to the security log
+		// with the resource asked for and the rule that refused it (ASVS 16.3.2). Request id and client
+		// IP come from the MDC (RequestLoggingContextFilter).
+		security.warn("access denied method={} uri={} rule={} user={}", Sanitize.forLog(request.getMethod()),
+				Sanitize.forLog(request.getRequestURI()), Denials.rule(ex), Sanitize.maskEmail(request.getRemoteUser()));
 		return problem(HttpStatus.FORBIDDEN, "Acesso negado", "Você não tem permissão para esta ação");
 	}
 
@@ -100,9 +125,16 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 		return handleExceptionInternal(ex, problem, headers, status, request);
 	}
 
+	/**
+	 * The stack trace goes to the log only. Its message can hold request text; in production the log is
+	 * structured JSON (logging.structured.format.console in application-prod.yml), whose encoder escapes
+	 * CR, LF and every other control character, so it cannot forge a log line (ASVS 16.4.1). The plain
+	 * text console of development does not escape it.
+	 */
 	@ExceptionHandler(Exception.class)
-	ProblemDetail unexpected(Exception ex) {
-		log.error("Unhandled exception", ex);
+	ProblemDetail unexpected(Exception ex, HttpServletRequest request) {
+		log.error("Unhandled exception method={} uri={}", Sanitize.forLog(request.getMethod()),
+				Sanitize.forLog(request.getRequestURI()), ex);
 		return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno", "Ocorreu um erro inesperado");
 	}
 

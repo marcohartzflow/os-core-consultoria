@@ -1,4 +1,4 @@
-package com.maximusflow.os.auth.internal;
+package com.maximusflow.os.common;
 
 import java.time.Clock;
 import java.time.Duration;

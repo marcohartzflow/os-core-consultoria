@@ -7,9 +7,10 @@ import com.maximusflow.os.iam.UserDirectory;
 
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.common.error.DomainRuleException;
-import com.maximusflow.os.common.logging.Sanitize;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.MfaSession;
+import com.maximusflow.os.common.security.SecondFactor;
+import com.maximusflow.os.common.security.SecondFactorGrant;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -41,7 +42,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 class AuthController {
 
-	record LoginRequest(@NotBlank @Size(max = 320) String email, @NotBlank @Size(max = 128) String password) {
+	// Password fields: 512 UTF-16 units (4 × 128), so the password policy's 128 code points is the limit.
+	record LoginRequest(@NotBlank @Size(max = 320) String email, @NotBlank @Size(max = 512) String password) {
 	}
 
 	record MfaRequest(@NotBlank @Size(max = 20) String code) {
@@ -63,9 +65,12 @@ class AuthController {
 
 	private final UserDirectory userDirectory;
 
+	private final SecondFactorGrant secondFactor;
+
 	AuthController(AuthenticationManager authenticationManager, SessionAuthenticationStrategy sessionStrategy,
 			SecurityContextRepository securityContextRepository, UserDirectory userDirectory, CurrentUser currentUser,
-			AuditRecorder audit) {
+			AuditRecorder audit, SecondFactorGrant secondFactor) {
+		this.secondFactor = secondFactor;
 		this.currentUser = currentUser;
 		this.audit = audit;
 		this.authenticationManager = authenticationManager;
@@ -107,15 +112,17 @@ class AuthController {
 	 */
 	@PostMapping("/mfa")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void verifyMfa(@Valid @RequestBody MfaRequest body, HttpServletRequest request) {
+	void verifyMfa(@Valid @RequestBody MfaRequest body, HttpServletRequest request, HttpServletResponse response) {
 		OsPrincipal principal = this.currentUser.require();
 		HttpSession session = request.getSession(false);
 		if (session == null) {
 			throw new IllegalStateException("Authenticated request without session");
 		}
 		if (this.userDirectory.verifyMfa(principal.getId(), body.code())) {
-			session.setAttribute(MfaSession.VERIFIED, Boolean.TRUE);
 			session.removeAttribute(MfaSession.FAILURES);
+			// Also answers a step-up: the factor is stamped again with the current time. The session
+			// gets a new id and CSRF token, so values captured before this step are worthless.
+			this.secondFactor.grant(SecondFactor.TOTP_AUTHORITY, request, response);
 			this.audit.recordFor(principal.getId(), principal.getEmail(), "auth.mfa.verified", "user",
 					principal.getId().toString(), null);
 			return;
@@ -123,7 +130,7 @@ class AuthController {
 		Integer failures = (Integer) session.getAttribute(MfaSession.FAILURES);
 		int count = (failures != null) ? failures + 1 : 1;
 		session.setAttribute(MfaSession.FAILURES, count);
-		security.warn("mfa failure user={} attempt={}", Sanitize.forLog(principal.getEmail()), count);
+		security.warn("mfa failure user={} attempt={}", principal.getId(), count);
 		if (count >= MAX_MFA_FAILURES) {
 			this.audit.recordFor(principal.getId(), principal.getEmail(), "auth.mfa.locked", "user",
 					principal.getId().toString(), null);

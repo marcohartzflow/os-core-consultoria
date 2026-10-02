@@ -1,6 +1,8 @@
 package com.maximusflow.os.ai.internal.web;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,10 +15,15 @@ import com.maximusflow.os.ai.internal.application.AgentService;
 import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
 import com.maximusflow.os.ai.internal.tools.ToolEvents;
+import com.maximusflow.os.common.RateLimiter;
+import com.maximusflow.os.common.audit.AuditContext;
+import com.maximusflow.os.common.audit.AuditOrigin;
 import com.maximusflow.os.common.error.RateLimitedException;
+import com.maximusflow.os.common.logging.RequestLoggingContextFilter;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.ui.UiAction;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,6 +31,7 @@ import jakarta.validation.constraints.Size;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -44,10 +52,13 @@ class AiController {
 
 	private static final Logger log = LoggerFactory.getLogger(AiController.class);
 
+	private static final Logger security = LoggerFactory.getLogger("SECURITY");
+
 	record CreateConversationRequest(@Nullable @Size(max = 200) String title) {
 	}
 
-	record MessageRequest(@NotBlank @Size(max = AgentService.MAX_USER_MESSAGE_LENGTH) String text) {
+	/** The configured {@code os.ai.max-user-message-length} is applied by {@link AgentService}. */
+	record MessageRequest(@NotBlank @Size(max = AiProperties.MAX_USER_MESSAGE_LENGTH_CEILING) String text) {
 	}
 
 	private final AgentService agent;
@@ -64,8 +75,12 @@ class AiController {
 
 	private final ConcurrentHashMap<UUID, AtomicInteger> inFlight = new ConcurrentHashMap<>();
 
+	/** Turns started per person per minute (OWASP LLM10, ASVS 5.0 15.2.2), on top of the concurrency cap. */
+	private final RateLimiter turnsPerMinute;
+
 	AiController(AgentService agent, ConversationService conversations, PendingActionService pendingActions,
-			AsyncTaskExecutor applicationTaskExecutor, CurrentUser currentUser, AiProperties properties) {
+			AsyncTaskExecutor applicationTaskExecutor, CurrentUser currentUser, AiProperties properties, Clock clock) {
+		this.turnsPerMinute = new RateLimiter(properties.turnsPerMinute(), Duration.ofMinutes(1), clock);
 		this.agent = agent;
 		this.conversations = conversations;
 		this.pendingActions = pendingActions;
@@ -111,12 +126,25 @@ class AiController {
 	 * One agent turn as a Server-Sent Events stream: {@code token} as the model writes, interleaved
 	 * with {@code tool_call}, {@code tool_failed}, {@code action_pending} and {@code ui_action}; then {@code done} with
 	 * the full text (or {@code error}). The turn runs on a virtual thread carrying the caller's
-	 * security context. It ends when the client goes away or the turn timeout passes, and one person
-	 * runs at most {@code os.ai.max-concurrent-turns-per-user} turns at a time.
+	 * security context. It ends when the client goes away or the turn timeout passes. One person starts
+	 * at most {@code os.ai.turns-per-minute} turns per minute and runs at most
+	 * {@code os.ai.max-concurrent-turns-per-user} at a time; beyond either, 429.
+	 *
+	 * <p>The audit origin, client address and request id are captured here, on the request thread, and
+	 * re-established on the turn's thread with the log context (MDC), so the turn's audit rows are
+	 * {@code REST} with the person's address and the request id, and its log lines carry
+	 * {@code http.request.id} and {@code client.ip} (OWASP ASVS 5.0 16.2.1).
 	 */
 	@PostMapping(value = "/conversations/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-	SseEmitter send(@PathVariable UUID id, @Valid @RequestBody MessageRequest body) {
+	SseEmitter send(@PathVariable UUID id, @Valid @RequestBody MessageRequest body, HttpServletRequest request) {
 		UUID userId = this.currentUser.require().getId();
+		if (!this.turnsPerMinute.tryAcquire(userId.toString())) {
+			security.warn("ai turn rate limit exceeded user={}", userId);
+			throw new RateLimitedException("Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo");
+		}
+		String clientIp = request.getRemoteAddr();
+		String requestId = RequestLoggingContextFilter.requestId(request);
+		Map<String, String> logContext = MDC.getCopyOfContextMap();
 		AtomicInteger running = this.inFlight.computeIfAbsent(userId, (k) -> new AtomicInteger());
 		if (running.incrementAndGet() > this.properties.maxConcurrentTurnsPerUser()) {
 			running.decrementAndGet();
@@ -124,8 +152,12 @@ class AiController {
 		}
 		Sink sink = new Sink(new SseEmitter(this.properties.turnTimeout().toMillis()));
 		Runnable turn = () -> {
+			if (logContext != null) {
+				MDC.setContextMap(logContext);
+			}
 			try {
-				AgentService.Reply reply = this.agent.chat(id, body.text(), sink::event, sink::uiAction, sink::token);
+				AgentService.Reply reply = AuditContext.with(AuditOrigin.REST, requestId, clientIp,
+						() -> this.agent.chat(id, body.text(), sink::event, sink::uiAction, sink::token));
 				sink.done(reply.text());
 			}
 			catch (Sink.ClientGone ex) {
@@ -137,6 +169,7 @@ class AiController {
 			}
 			finally {
 				running.decrementAndGet();
+				MDC.clear();
 			}
 		};
 		this.executor.execute(new DelegatingSecurityContextRunnable(turn));
@@ -184,7 +217,8 @@ class AiController {
 				case ToolEvents.ToolFailed e -> write(
 						SseEmitter.event().name("tool_failed").data(Map.of("tool", e.tool(), "reason", e.reason())));
 				case ToolEvents.ActionPending e -> write(SseEmitter.event().name("action_pending")
-					.data(Map.of("actionId", e.actionId().toString(), "tool", e.tool(), "summary", e.summary())));
+					.data(Map.of("actionId", e.actionId().toString(), "tool", e.tool(), "summary", e.summary(),
+							"arguments", e.arguments())));
 			}
 		}
 

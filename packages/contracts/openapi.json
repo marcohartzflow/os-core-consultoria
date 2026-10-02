@@ -21,7 +21,7 @@
       "AssignRolesRequest" : {
         "properties" : {
           "currentPassword" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : [ "string", "null" ]
           },
@@ -30,6 +30,8 @@
               "format" : "uuid",
               "type" : "string"
             },
+            "maxItems" : 100,
+            "minItems" : 0,
             "type" : "array",
             "uniqueItems" : true
           }
@@ -80,6 +82,33 @@
         "required" : [ "aiTool", "day", "loginFailure", "loginSuccess", "rest", "system" ],
         "type" : "object"
       },
+      "AuditEventPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AuditEventView"
+            },
+            "type" : "array"
+          },
+          "next" : {
+            "description" : "Position of the older page; null on the oldest page",
+            "type" : [ "string", "null" ]
+          },
+          "previous" : {
+            "description" : "Position of the newer page; null on the newest page",
+            "type" : [ "string", "null" ]
+          },
+          "total" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalExact" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "content", "next", "previous", "total", "totalExact" ],
+        "type" : "object"
+      },
       "AuditEventView" : {
         "properties" : {
           "action" : {
@@ -127,12 +156,12 @@
       "ChangePasswordRequest" : {
         "properties" : {
           "currentPassword" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : "string"
           },
           "newPassword" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : "string"
           }
@@ -211,18 +240,13 @@
       },
       "DisableRequest" : {
         "properties" : {
-          "code" : {
-            "maxLength" : 20,
-            "minLength" : 0,
-            "type" : "string"
-          },
           "currentPassword" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : "string"
           }
         },
-        "required" : [ "code", "currentPassword" ],
+        "required" : [ "currentPassword" ],
         "type" : "object"
       },
       "EmailRequest" : {
@@ -252,7 +276,7 @@
       "InviteUserRequest" : {
         "properties" : {
           "currentPassword" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : [ "string", "null" ]
           },
@@ -272,6 +296,8 @@
               "format" : "uuid",
               "type" : "string"
             },
+            "maxItems" : 100,
+            "minItems" : 0,
             "type" : [ "array", "null" ],
             "uniqueItems" : true
           }
@@ -287,7 +313,7 @@
             "type" : "string"
           },
           "password" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : "string"
           }
@@ -310,6 +336,9 @@
           "name" : {
             "type" : "string"
           },
+          "notificationEmail" : {
+            "type" : [ "string", "null" ]
+          },
           "passwordChangeRequired" : {
             "type" : "boolean"
           },
@@ -328,13 +357,13 @@
             "uniqueItems" : true
           }
         },
-        "required" : [ "email", "id", "mfa", "name", "passwordChangeRequired", "permissions", "roles" ],
+        "required" : [ "email", "id", "mfa", "name", "notificationEmail", "passwordChangeRequired", "permissions", "roles" ],
         "type" : "object"
       },
       "MessageRequest" : {
         "properties" : {
           "text" : {
-            "maxLength" : 4000,
+            "maxLength" : 32000,
             "minLength" : 0,
             "type" : "string"
           }
@@ -372,15 +401,39 @@
           "enabled" : {
             "type" : "boolean"
           },
+          "passkeys" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
           "recoveryCodesLeft" : {
             "format" : "int32",
             "type" : "integer"
           },
           "required" : {
             "type" : "boolean"
+          },
+          "totp" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "enabled", "recoveryCodesLeft", "required" ],
+        "required" : [ "enabled", "passkeys", "recoveryCodesLeft", "required", "totp" ],
+        "type" : "object"
+      },
+      "NotificationEmailRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "notificationEmail" : {
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "currentPassword", "notificationEmail" ],
         "type" : "object"
       },
       "PageMetadata" : {
@@ -400,20 +453,6 @@
           "totalPages" : {
             "format" : "int64",
             "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "PagedModelAuditEventView" : {
-        "properties" : {
-          "content" : {
-            "items" : {
-              "$ref" : "#/components/schemas/AuditEventView"
-            },
-            "type" : "array"
-          },
-          "page" : {
-            "$ref" : "#/components/schemas/PageMetadata"
           }
         },
         "type" : "object"
@@ -458,6 +497,37 @@
             "$ref" : "#/components/schemas/PageMetadata"
           }
         },
+        "type" : "object"
+      },
+      "Passkey" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "createdAt", "id", "label", "lastUsedAt" ],
+        "type" : "object"
+      },
+      "PasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
         "type" : "object"
       },
       "PendingActionView" : {
@@ -566,8 +636,12 @@
           },
           "permissions" : {
             "items" : {
+              "maxLength" : 100,
+              "minLength" : 0,
               "type" : "string"
             },
+            "maxItems" : 500,
+            "minItems" : 0,
             "type" : "array",
             "uniqueItems" : true
           }
@@ -635,6 +709,17 @@
           }
         },
         "required" : [ "otpauthUri", "secret" ],
+        "type" : "object"
+      },
+      "SetupRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
         "type" : "object"
       },
       "SseEmitter" : {
@@ -716,7 +801,7 @@
       "TokenAndPassword" : {
         "properties" : {
           "password" : {
-            "maxLength" : 128,
+            "maxLength" : 512,
             "minLength" : 0,
             "type" : "string"
           },
@@ -899,7 +984,7 @@
     },
     "/api/ai/conversations/{id}" : {
       "delete" : {
-        "operationId" : "delete_2",
+        "operationId" : "delete_3",
         "parameters" : [ {
           "in" : "path",
           "name" : "id",
@@ -1085,7 +1170,15 @@
           "required" : false,
           "schema" : {
             "maxLength" : 320,
-            "minLength" : 0,
+            "minLength" : 3,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
             "type" : "string"
           }
         }, {
@@ -1156,12 +1249,29 @@
           }
         }, {
           "in" : "query",
-          "name" : "page",
+          "name" : "after",
           "required" : false,
           "schema" : {
-            "default" : 0,
-            "format" : "int32",
-            "type" : "integer"
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "before",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "oldest",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
           }
         }, {
           "in" : "query",
@@ -1170,16 +1280,9 @@
           "schema" : {
             "default" : 20,
             "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
             "type" : "integer"
-          }
-        }, {
-          "in" : "query",
-          "name" : "sort",
-          "required" : false,
-          "schema" : {
-            "maxLength" : 40,
-            "minLength" : 0,
-            "type" : "string"
           }
         } ],
         "responses" : {
@@ -1187,7 +1290,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PagedModelAuditEventView"
+                  "$ref" : "#/components/schemas/AuditEventPage"
                 }
               }
             },
@@ -1206,7 +1309,15 @@
           "required" : false,
           "schema" : {
             "maxLength" : 320,
-            "minLength" : 0,
+            "minLength" : 3,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
             "type" : "string"
           }
         }, {
@@ -1352,6 +1463,45 @@
         "tags" : [ "auth-controller" ]
       }
     },
+    "/api/auth/mfa/passkey" : {
+      "post" : {
+        "operationId" : "verify",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/mfa/passkey/options" : {
+      "post" : {
+        "operationId" : "authenticationOptions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
     "/api/iam/invitations/accept" : {
       "post" : {
         "operationId" : "acceptInvitation",
@@ -1417,7 +1567,7 @@
     },
     "/api/iam/permissions" : {
       "get" : {
-        "operationId" : "list",
+        "operationId" : "list_1",
         "responses" : {
           "200" : {
             "content" : {
@@ -2089,9 +2239,47 @@
         "tags" : [ "mfa-controller" ]
       }
     },
+    "/api/me/mfa/recovery-codes" : {
+      "post" : {
+        "operationId" : "regenerateRecoveryCodes",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
     "/api/me/mfa/setup" : {
       "post" : {
         "operationId" : "setup",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
         "responses" : {
           "200" : {
             "content" : {
@@ -2105,6 +2293,138 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/notification-email" : {
+      "put" : {
+        "operationId" : "changeNotificationEmail",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationEmailRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/passkeys" : {
+      "get" : {
+        "operationId" : "list",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/Passkey"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      },
+      "post" : {
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/me/passkeys/options" : {
+      "post" : {
+        "operationId" : "registrationOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/me/passkeys/{id}" : {
+      "delete" : {
+        "operationId" : "delete_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
       }
     },
     "/api/me/password" : {
@@ -2212,7 +2532,7 @@
               "format" : "uuid",
               "type" : "string"
             },
-            "maxItems" : 50,
+            "maxItems" : 200,
             "minItems" : 0,
             "type" : "array",
             "uniqueItems" : true

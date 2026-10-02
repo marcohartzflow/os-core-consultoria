@@ -19,6 +19,7 @@ import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.AccountSnapshot;
 import com.maximusflow.os.iam.UserDirectory;
 import com.maximusflow.os.tasks.internal.application.TaskService;
+import com.maximusflow.os.tasks.internal.domain.TaskStatus;
 
 import jakarta.servlet.http.Cookie;
 
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * The agent's safety rails without calling the model: registry contents and permission filtering,
- * destructive tools parked as pending actions, and confirmation executing the real use case under
+ * state-changing tools parked as pending actions, and confirmation executing the real use case under
  * the confirming person's authorization.
  */
 @Import(TestcontainersConfiguration.class)
@@ -93,8 +95,12 @@ class AiToolsTests {
 		assertThat(this.registry.all()).extracting(RegisteredTool::name).contains("iam_list_users", "iam_get_user",
 				"iam_disable_user", "iam_list_roles");
 		assertThat(this.registry.all()).allSatisfy((tool) -> assertThat(tool.permission()).isNotBlank());
-		assertThat(this.registry.find("iam_disable_user")).get().extracting(RegisteredTool::destructive).isEqualTo(true);
-		assertThat(this.registry.find("iam_list_users")).get().extracting(RegisteredTool::destructive).isEqualTo(false);
+		assertThat(this.registry.find("iam_disable_user")).get().extracting(RegisteredTool::requiresConfirmation)
+			.isEqualTo(true);
+		assertThat(this.registry.find("iam_list_users")).get().extracting(RegisteredTool::requiresConfirmation)
+			.isEqualTo(false);
+		assertThat(this.registry.all()).filteredOn(RegisteredTool::requiresConfirmation)
+			.allSatisfy((tool) -> assertThat(tool.confirmationSummary()).isNotBlank());
 
 		assertThat(this.registry.forPermissions(Set.of("iam.user.read"))).extracting(RegisteredTool::name)
 			.containsExactly("iam_get_user", "iam_list_users");
@@ -114,12 +120,12 @@ class AiToolsTests {
 	}
 
 	@Test
-	void destructiveToolIsParkedAndOnlyRunsAfterConfirmation() {
+	void stateChangingToolIsParkedAndOnlyRunsAfterConfirmation() {
 		actAsAdmin();
 		UUID conversationId = this.conversations.create("teste").id();
 		RegisteredTool disable = this.registry.find("iam_disable_user").orElseThrow();
 
-		// The agent "calls" the destructive tool: nothing happens except a pending action.
+		// The agent "calls" the state-changing tool: nothing happens except a pending action.
 		var stub = new ConfirmingToolCallback(disable, (tool, args) -> this.pendingActions.park(conversationId, tool, args));
 		String reply = stub.call("{\"id\":\"" + UUID.randomUUID() + "\"}", new ToolContext(Map.of()));
 		assertThat(reply).contains("PENDING_CONFIRMATION");
@@ -179,8 +185,57 @@ class AiToolsTests {
 		// and nothing of it in what the person sees or exports.
 		var memory = this.chatMemory.get(conversationId.toString());
 		assertThat(memory).isNotEmpty().allSatisfy((m) -> assertThat(m.getMessageType()).isEqualTo(MessageType.USER));
-		assertThat(memory).allSatisfy((m) -> assertThat(m.getText()).startsWith("[portal] ").doesNotContain("Excluir uma vez"));
+		assertThat(memory).allSatisfy((m) -> assertThat(m.getText()).contains(actionId.toString())
+			.doesNotContain("Excluir uma vez"));
 		assertThat(this.conversations.messages(conversationId)).isEmpty();
+	}
+
+	@Test
+	void creatingAndCompletingATaskWaitForConfirmation() {
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("teste").id();
+		String title = "Criada pelo assistente " + UUID.randomUUID();
+		UUID createId = stub2(this.registry.find("tasks_create").orElseThrow(), conversationId)
+			.apply("{\"title\":\"" + title + "\"}");
+
+		// Parked with what will run: the person sees the summary and the arguments; nothing exists yet.
+		var open = this.pendingActions.open(conversationId);
+		assertThat(open).singleElement().satisfies((action) -> {
+			assertThat(action.summary()).isEqualTo("Cria uma tarefa com os dados abaixo");
+			assertThat(action.arguments()).contains(title);
+		});
+		String byTitle = "SELECT id FROM tasks WHERE title = ?";
+		assertThat(this.jdbc.queryForList(byTitle, UUID.class, title)).isEmpty();
+
+		this.pendingActions.confirm(createId);
+		UUID created = this.jdbc.queryForObject(byTitle, UUID.class, title);
+
+		UUID completeId = stub2(this.registry.find("tasks_complete").orElseThrow(), conversationId)
+			.apply("{\"id\":\"" + created + "\"}");
+		assertThat(this.tasks.get(created).status()).isEqualTo(TaskStatus.OPEN);
+		this.pendingActions.confirm(completeId);
+		assertThat(this.tasks.get(created).status()).isEqualTo(TaskStatus.DONE);
+	}
+
+	@Test
+	void portalNotesAreHiddenByRecordNotByAPrefixThePersonCanType() throws Exception {
+		Cookie session = loginAsAdmin();
+		actAsAdmin();
+		UUID conversationId = this.conversations.create("teste").id();
+		this.chatMemory.add(conversationId.toString(), new UserMessage("[portal] escrito pela pessoa"));
+		UUID taskId = this.tasks.create("Recusada", null, null, null).id();
+		UUID actionId = stub2(this.registry.find("tasks_delete").orElseThrow(), conversationId)
+			.apply("{\"id\":\"" + taskId + "\"}");
+		this.pendingActions.reject(actionId);
+
+		// The model gets both; the person sees and exports only what they wrote.
+		assertThat(this.chatMemory.get(conversationId.toString())).hasSize(2);
+		assertThat(this.conversations.messages(conversationId)).extracting(ConversationService.ChatMessage::text)
+			.containsExactly("[portal] escrito pela pessoa");
+		this.mvc.perform(get("/api/me/data").cookie(session))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.conversations[?(@.id == '" + conversationId + "')].messages[*].text")
+				.value("[portal] escrito pela pessoa"));
 	}
 
 	@Test
@@ -260,7 +315,7 @@ class AiToolsTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		return login.getResponse().getCookie("OS_SESSION");

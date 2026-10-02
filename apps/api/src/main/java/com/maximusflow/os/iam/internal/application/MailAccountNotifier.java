@@ -71,6 +71,56 @@ class MailAccountNotifier implements AccountNotifier {
 	}
 
 	@Override
+	public void sendSecondFactorReset(String email, String name, String link) {
+		send(email, "Seu segundo fator foi removido no " + this.portalName, """
+				Olá, %s.
+
+				Um administrador do %s removeu o segundo fator da sua conta, a seu pedido (por exemplo, \
+				porque você perdeu o celular). Por segurança, a sua senha também deixou de valer e todas \
+				as suas sessões foram encerradas.
+
+				Para voltar a entrar, escolha uma nova senha pelo link abaixo e configure o segundo fator \
+				de novo. O link vale por tempo limitado e só pode ser usado uma vez.
+
+				%s
+
+				Se você não pediu isso, avise a segurança da sua empresa: alguém pode estar tentando \
+				tomar a sua conta.
+				""".formatted(name, this.portalName, link));
+		log.info("Second-factor reset e-mail sent to {}", Sanitize.forLog(email));
+	}
+
+	@Override
+	public void sendSecondFactorChanged(String email, String name, String change) {
+		send(email, "Mudança na verificação em duas etapas do " + this.portalName, """
+				Olá, %s.
+
+				Houve uma mudança na verificação em duas etapas da sua conta no %s:
+
+				%s
+
+				Se foi você, não precisa fazer nada. Se não foi, troque a sua senha e avise a segurança \
+				da sua empresa.
+				""".formatted(name, this.portalName, change));
+		log.info("Second-factor change e-mail sent to {}", Sanitize.forLog(email));
+	}
+
+	@Override
+	public void sendSecurityNotice(String email, String name, String notice) {
+		send(email, "Aviso de segurança da sua conta no " + this.portalName, """
+				Olá, %s.
+
+				Houve uma mudança de segurança na sua conta no %s:
+
+				%s
+
+				Se foi você, não precisa fazer nada. Se não foi, redefina a sua senha pela tela de \
+				entrada (Esqueci minha senha) e avise a segurança da sua empresa.
+				""".formatted(name, this.portalName, notice));
+		log.info("Security notice e-mail sent to {}", Sanitize.forLog(email));
+	}
+
+	@Override
 	public void sendAdministratorGranted(String email, String name, String granteeName, String granteeEmail,
 			String grantedByName) {
 		send(email, "Novo administrador no " + this.portalName, """

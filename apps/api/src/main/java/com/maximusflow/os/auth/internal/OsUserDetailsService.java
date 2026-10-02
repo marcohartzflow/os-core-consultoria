@@ -1,6 +1,7 @@
 package com.maximusflow.os.auth.internal;
 
 import java.time.Clock;
+import java.util.UUID;
 
 import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.iam.AccountSnapshot;
@@ -12,6 +13,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsPasswordService;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,9 +28,17 @@ class OsUserDetailsService implements UserDetailsService, UserDetailsPasswordSer
 
 	private final Clock clock;
 
-	OsUserDetailsService(UserDirectory userDirectory, Clock clock) {
+	/**
+	 * Stands in for the hash of an account without a password (invited, anonymized). It is a real
+	 * hash of a random value nobody knows, so the login compares against it at full cost and fails
+	 * like a wrong password.
+	 */
+	private final String unusableHash;
+
+	OsUserDetailsService(UserDirectory userDirectory, Clock clock, PasswordEncoder passwordEncoder) {
 		this.userDirectory = userDirectory;
 		this.clock = clock;
+		this.unusableHash = passwordEncoder.encode(UUID.randomUUID().toString());
 	}
 
 	@Override
@@ -49,9 +59,7 @@ class OsUserDetailsService implements UserDetailsService, UserDetailsPasswordSer
 
 	OsPrincipal principalOf(AccountSnapshot account) {
 		boolean enabled = account.status() == AccountStatus.ACTIVE && account.passwordHash() != null;
-		// Disabled accounts fail the pre-authentication check before any password comparison, so a
-		// placeholder hash is never compared.
-		String password = (account.passwordHash() != null) ? account.passwordHash() : "{disabled}";
+		String password = (account.passwordHash() != null) ? account.passwordHash() : this.unusableHash;
 		return new OsPrincipal(account.id(), account.email(), account.name(), password, enabled,
 				!account.isLocked(this.clock.instant()), account.permissions(), account.passwordChangeRequired(),
 				account.mfaEnabled(), account.mfaRequired());

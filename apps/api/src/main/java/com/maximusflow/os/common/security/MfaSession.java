@@ -1,10 +1,10 @@
 package com.maximusflow.os.common.security;
 
-/** Session attributes that record the second factor state of the current login. */
+/**
+ * Session attributes of the login's second step. Whether the factor was passed is not one of them:
+ * that is a {@link SecondFactor} authority on the session's authentication.
+ */
 public final class MfaSession {
-
-	/** {@code Boolean.TRUE} once the person passed the second factor in this session. */
-	public static final String VERIFIED = "os.mfa.verified";
 
 	/** Consecutive failed second-factor attempts in this session. */
 	public static final String FAILURES = "os.mfa.failures";

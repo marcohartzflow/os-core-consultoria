@@ -3,7 +3,6 @@ package com.maximusflow.os.auth.internal.web;
 import java.util.List;
 import java.util.UUID;
 
-import com.maximusflow.os.auth.internal.MfaGateFilter;
 import com.maximusflow.os.auth.internal.SessionAdminService;
 import com.maximusflow.os.auth.internal.SessionTerminator;
 import com.maximusflow.os.common.audit.AuditRecorder;
@@ -11,20 +10,24 @@ import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.common.privacy.PersonalDataService;
 import com.maximusflow.os.common.security.CurrentUser;
 import com.maximusflow.os.common.security.OsPrincipal;
+import com.maximusflow.os.common.security.SecondFactor;
 import com.maximusflow.os.iam.UserDirectory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,8 +36,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class MeController {
 
-	record ChangePasswordRequest(@NotBlank @Size(max = 128) String currentPassword,
-			@NotBlank @Size(max = 128) String newPassword) {
+	/**
+	 * Password fields allow 512 UTF-16 units (4 × 128): the password policy counts Unicode code
+	 * points (at most 128), and a code point can take two units, so the real limit is the policy's.
+	 */
+	record ChangePasswordRequest(@NotBlank @Size(max = 512) String currentPassword,
+			@NotBlank @Size(max = 512) String newPassword) {
+	}
+
+	/** {@code notificationEmail} null or blank removes the second address. */
+	record NotificationEmailRequest(@NotBlank @Size(max = 512) String currentPassword,
+			@Nullable @Email @Size(max = 320) String notificationEmail) {
 	}
 
 	private final CurrentUser currentUser;
@@ -62,7 +74,7 @@ class MeController {
 	@GetMapping("/api/me")
 	MeResponse me(HttpServletRequest request) {
 		OsPrincipal principal = this.currentUser.require();
-		return this.userDirectory.findById(principal.getId()).map((a) -> MeResponse.of(a, MfaGateFilter.verified(request)))
+		return this.userDirectory.findById(principal.getId()).map((a) -> MeResponse.of(a, SecondFactor.present(SecurityContextHolder.getContext().getAuthentication())))
 			.orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
 	}
 
@@ -81,8 +93,27 @@ class MeController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	void changePassword(@Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request) {
 		OsPrincipal principal = this.currentUser.require();
+		// Read before the change: confirming the password renews the session id in memory, and the
+		// stored session keeps the old one until the request ends, so that is the one to spare.
+		String current = requireSessionId(request);
 		this.userDirectory.changePassword(principal.getId(), body.currentPassword(), body.newPassword());
-		this.sessions.terminateOthers(principal.getEmail(), requireSessionId(request));
+		this.sessions.terminateOthers(principal.getEmail(), current);
+		// Whoever held a copy of this session's id before the change loses it too.
+		request.changeSessionId();
+	}
+
+	/**
+	 * The second address for security notices (NIST SP 800-63B-4: at least two notification addresses).
+	 * Full re-authentication, as for the password: the current password here plus, with a second
+	 * factor, one passed in the last minutes (security configuration).
+	 */
+	@PutMapping("/api/me/notification-email")
+	MeResponse changeNotificationEmail(@Valid @RequestBody NotificationEmailRequest body) {
+		OsPrincipal principal = this.currentUser.require();
+		this.userDirectory.changeNotificationEmail(principal.getId(), body.currentPassword(), body.notificationEmail());
+		return this.userDirectory.findById(principal.getId())
+			.map((a) -> MeResponse.of(a, SecondFactor.present(SecurityContextHolder.getContext().getAuthentication())))
+			.orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
 	}
 
 	@GetMapping("/api/me/sessions")

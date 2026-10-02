@@ -2,6 +2,7 @@ package com.maximusflow.os.ai.internal.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -10,6 +11,8 @@ import com.maximusflow.os.ai.internal.AiProperties;
 import com.maximusflow.os.ai.internal.domain.PendingAction;
 import com.maximusflow.os.ai.internal.persistence.PendingActionRepository;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
+import com.maximusflow.os.ai.internal.tools.ToolArguments;
+import com.maximusflow.os.ai.internal.tools.ToolFailures;
 import com.maximusflow.os.ai.internal.tools.ToolRegistry;
 import com.maximusflow.os.common.audit.AuditContext;
 import com.maximusflow.os.common.audit.AuditOrigin;
@@ -24,7 +27,6 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
-import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -32,7 +34,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Human-in-the-loop for destructive tools. */
+/** Human-in-the-loop for state-changing tools. */
 @Service
 public class PendingActionService {
 
@@ -87,10 +89,12 @@ public class PendingActionService {
 		OsPrincipal actor = this.currentUser.require();
 		Instant now = this.clock.instant();
 		PendingAction action = this.actions.save(new PendingAction(conversationId, actor.getId(), tool.name(),
-				tool.destructiveSummary().isBlank() ? tool.description() : tool.destructiveSummary(), arguments, now,
-				now.plus(this.properties.pendingActionTtl())));
-		this.audit.record("ai.action.parked", "ai_action", action.getId().toString(),
-				Map.of("tool", tool.name(), "arguments", arguments));
+				tool.confirmationSummary(), arguments, now, now.plus(this.properties.pendingActionTtl())));
+		// Argument names and hash only: the values stay in ai_pending_action, which is purged, and never
+		// in the append-only trail (LGPD art. 6 III).
+		Map<String, Object> details = new HashMap<>(ToolArguments.auditDetails(arguments));
+		details.put("tool", tool.name());
+		this.audit.record("ai.action.parked", "ai_action", action.getId().toString(), details);
 		return action.getId();
 	}
 
@@ -110,13 +114,24 @@ public class PendingActionService {
 	 * again. The use case then runs in its own transaction and applies its own authorization and rules;
 	 * the outcome is recorded afterwards in a separate transaction so a failed action is still marked
 	 * FAILED and audited.
+	 *
+	 * <p>What the model learns about the outcome is a fixed sentence in the user role, never the tool's
+	 * result: tool output is data written by portal users and must not reach the system prompt
+	 * (Anthropic joins every system message into the system block). The sentence names the action id
+	 * and is stored on the action, which is how the portal tells its notes apart from what the person
+	 * typed (the chat memory table keeps only text, type and time).
 	 */
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
 	public PendingActionView confirm(UUID actionId) {
 		PendingAction action = this.tx.execute((status) -> claim(actionId, PendingAction.Status.EXECUTING));
-		RegisteredTool tool = this.registry.find(action.getToolName())
-			.orElseThrow(() -> new DomainRuleException("Ferramenta não existe mais"));
 		String conversationId = action.getConversationId().toString();
+		RegisteredTool tool = this.registry.find(action.getToolName()).orElse(null);
+		if (tool == null) {
+			// Already claimed EXECUTING: resolve it, or it would stay EXECUTING forever.
+			DomainRuleException gone = new DomainRuleException("Ferramenta não existe mais");
+			fail(actionId, action.getToolName(), conversationId, gone);
+			throw gone;
+		}
 		String result;
 		try {
 			result = AuditContext.with(AuditOrigin.AI_TOOL, conversationId, () -> tool.callback()
@@ -124,21 +139,15 @@ public class PendingActionService {
 		}
 		catch (RuntimeException ex) {
 			RuntimeException cause = unwrap(ex);
-			this.tx.executeWithoutResult((status) -> {
-				PendingAction failed = this.actions.findById(actionId).orElseThrow();
-				failed.resolve(PendingAction.Status.FAILED, cause.getClass().getSimpleName(), this.clock.instant());
-				this.chatMemory.add(conversationId, note("A pessoa confirmou a ação " + tool.name()
-						+ " no portal, mas a execução falhou (" + cause.getClass().getSimpleName() + ")."));
-				this.audit.record("ai.action.failed", "ai_action", actionId.toString(),
-						Map.of("tool", tool.name(), "reason", cause.getClass().getSimpleName()));
-			});
+			fail(actionId, tool.name(), conversationId, cause);
 			throw cause;
 		}
 		return this.tx.execute((status) -> {
 			PendingAction done = this.actions.findById(actionId).orElseThrow();
-			done.resolve(PendingAction.Status.CONFIRMED, result, this.clock.instant());
-			this.chatMemory.add(conversationId, note("A pessoa confirmou a ação " + tool.name()
-					+ " no portal e ela foi executada com sucesso. Consulte as ferramentas se precisar do estado atual."));
+			String note = "A pessoa confirmou a ação " + tool.name() + " (" + actionId
+					+ ") no portal e ela foi executada com sucesso. Consulte as ferramentas se precisar do estado atual.";
+			done.resolve(PendingAction.Status.CONFIRMED, result, note, this.clock.instant());
+			this.chatMemory.add(conversationId, new UserMessage(note));
 			this.audit.record("ai.action.confirmed", "ai_action", actionId.toString(), Map.of("tool", tool.name()));
 			return PendingActionView.of(done);
 		});
@@ -149,20 +158,30 @@ public class PendingActionService {
 	public PendingActionView reject(UUID actionId) {
 		claim(actionId, PendingAction.Status.REJECTED);
 		PendingAction action = this.actions.findById(actionId).orElseThrow();
-		action.resolve(PendingAction.Status.REJECTED, null, this.clock.instant());
-		this.chatMemory.add(action.getConversationId().toString(), note("A pessoa recusou a ação "
-				+ action.getToolName() + " no portal. Não a execute nem a proponha de novo."));
+		String note = "A pessoa recusou a ação " + action.getToolName() + " (" + actionId
+				+ ") no portal. Não a execute nem a proponha de novo.";
+		action.resolve(PendingAction.Status.REJECTED, null, note, this.clock.instant());
+		this.chatMemory.add(action.getConversationId().toString(), new UserMessage(note));
 		this.audit.record("ai.action.rejected", "ai_action", actionId.toString(), Map.of("tool", action.getToolName()));
 		return PendingActionView.of(action);
 	}
 
 	/**
-	 * What the model learns about the outcome: a fixed sentence in the user role, never the tool's
-	 * result. Tool output is data written by portal users and must not reach the system prompt
-	 * (Anthropic joins every system message into the system block).
+	 * Marks a claimed action FAILED in its own transaction, so it is recorded even though the caller
+	 * then throws. The model and the stored result get only the person-facing reason (OWASP ASVS 5.0
+	 * 16.5.1, LLM02); the exception class goes to the audit trail.
 	 */
-	private static UserMessage note(String text) {
-		return new UserMessage(ConversationService.PORTAL_NOTE + text);
+	private void fail(UUID actionId, String toolName, String conversationId, RuntimeException cause) {
+		this.tx.executeWithoutResult((status) -> {
+			PendingAction failed = this.actions.findById(actionId).orElseThrow();
+			String reason = ToolFailures.shownReason(cause);
+			String note = "A pessoa confirmou a ação " + toolName + " (" + actionId
+					+ ") no portal, mas a execução falhou (" + reason + ").";
+			failed.resolve(PendingAction.Status.FAILED, reason, note, this.clock.instant());
+			this.chatMemory.add(conversationId, new UserMessage(note));
+			this.audit.record("ai.action.failed", "ai_action", actionId.toString(),
+					Map.of("tool", toolName, "reason", cause.getClass().getSimpleName()));
+		});
 	}
 
 	/** Loads the open action and moves it to {@code to} atomically; exactly one caller wins. */
@@ -192,19 +211,17 @@ public class PendingActionService {
 
 	private void expire(UUID actionId, UUID userId, Instant now) {
 		this.isolated.executeWithoutResult((status) -> {
-			PendingAction expired = this.actions.findByIdAndUserId(actionId, userId).orElseThrow();
-			expired.resolve(PendingAction.Status.EXPIRED, null, now);
-			this.audit.record("ai.action.expired", "ai_action", actionId.toString(),
-					Map.of("tool", expired.getToolName()));
+			PendingAction overdue = this.actions.findByIdAndUserId(actionId, userId).orElseThrow();
+			if (this.actions.expire(actionId, now) == 1) {
+				this.audit.record("ai.action.expired", "ai_action", actionId.toString(),
+						Map.of("tool", overdue.getToolName()));
+			}
 		});
 	}
 
 	/** Spring AI wraps use-case exceptions; surface the original so the API maps it (404, 403, 422). */
 	private static RuntimeException unwrap(RuntimeException ex) {
-		if (ex instanceof ToolExecutionException wrapped && wrapped.getCause() instanceof RuntimeException cause) {
-			return cause;
-		}
-		return ex;
+		return ToolFailures.unwrap(ex);
 	}
 
 }

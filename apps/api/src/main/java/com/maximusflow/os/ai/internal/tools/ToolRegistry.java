@@ -7,7 +7,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 
-import com.maximusflow.os.common.security.Destructive;
+import com.maximusflow.os.common.security.ReadOnlyTool;
+import com.maximusflow.os.common.security.RequiresConfirmation;
 import com.maximusflow.os.common.security.RequiresPermission;
 
 import org.slf4j.Logger;
@@ -21,18 +22,30 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionAttribute;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
 /**
  * Discovers every {@code @Tool} method on singleton beans at startup. A tool without
  * {@code @RequiresPermission} fails the boot: a tool the agent could call without authorization is a
- * bug, not a configuration choice. The registry never imports business modules; it only sees beans.
+ * bug, not a configuration choice. So does a tool that declares neither {@code @ReadOnlyTool} nor
+ * {@code @RequiresConfirmation}: nothing runs without confirmation unless it says it only reads. A
+ * {@code @ReadOnlyTool} is then held to it: every call runs in a read-only transaction
+ * ({@link ReadOnlyTransactionToolCallback}), so the database refuses a write, and a read-only tool whose
+ * own transaction would escape that one (REQUIRES_NEW, NOT_SUPPORTED) fails the boot. The registry never
+ * imports business modules; it only sees beans.
  */
 @Component
 public class ToolRegistry implements SmartInitializingSingleton {
 
 	private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
+
+	private static final AnnotationTransactionAttributeSource TRANSACTION_ATTRIBUTES =
+			new AnnotationTransactionAttributeSource();
 
 	private final ApplicationContext context;
 
@@ -77,6 +90,18 @@ public class ToolRegistry implements SmartInitializingSingleton {
 					+ " requires the reserved permission " + permission.value()
 					+ ". Access management stays with people in the portal; it is never an AI tool.");
 		}
+		ReadOnlyTool readOnly = AnnotatedElementUtils.findMergedAnnotation(method, ReadOnlyTool.class);
+		RequiresConfirmation confirmation = AnnotatedElementUtils.findMergedAnnotation(method,
+				RequiresConfirmation.class);
+		if ((readOnly == null) == (confirmation == null)) {
+			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
+					+ " must declare exactly one of @ReadOnlyTool or @RequiresConfirmation."
+					+ " A tool that changes anything waits for the person's confirmation.");
+		}
+		if (confirmation != null && confirmation.value().isBlank()) {
+			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
+					+ " has an empty @RequiresConfirmation. Say what the person is confirming.");
+		}
 		if (userClass.getPackageName().startsWith(ToolRegistry.class.getPackageName().replace(".internal.tools", ""))) {
 			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
 					+ " lives in the ai module. Confirm, reject and the chat itself are never tools.");
@@ -88,13 +113,37 @@ public class ToolRegistry implements SmartInitializingSingleton {
 			.toolMethod(method)
 			.toolObject(bean)
 			.build();
+		if (readOnly != null) {
+			callback = readOnly(userClass, method, callback);
+		}
 		String name = callback.getToolDefinition().name();
 		if (this.tools.containsKey(name)) {
 			throw new IllegalStateException("Duplicate AI tool name: " + name);
 		}
-		Destructive destructive = AnnotatedElementUtils.findMergedAnnotation(method, Destructive.class);
 		this.tools.put(name, new RegisteredTool(name, callback.getToolDefinition().description(), permission.value(),
-				destructive != null, (destructive != null) ? destructive.value() : "", callback));
+				confirmation != null, (confirmation != null) ? confirmation.value() : "", callback));
+	}
+
+	/**
+	 * Wraps a {@code @ReadOnlyTool} in a read-only transaction. The tool's own transaction attribute is
+	 * resolved the way Spring's transaction interceptor resolves it (method, then class); one that would
+	 * start a separate transaction or run without one could write outside the guard, so it is refused.
+	 */
+	private ToolCallback readOnly(Class<?> userClass, Method method, ToolCallback callback) {
+		TransactionAttribute own = TRANSACTION_ATTRIBUTES.getTransactionAttribute(method, userClass);
+		if (own != null && (own.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRES_NEW
+				|| own.getPropagationBehavior() == TransactionDefinition.PROPAGATION_NOT_SUPPORTED)) {
+			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
+					+ " is @ReadOnlyTool but its @Transactional suspends the caller's transaction."
+					+ " A read-only tool runs inside the read-only transaction the registry opens.");
+		}
+		PlatformTransactionManager transactionManager = this.context.getBeanProvider(PlatformTransactionManager.class)
+			.getIfUnique();
+		if (transactionManager == null) {
+			throw new IllegalStateException("AI tool " + userClass.getSimpleName() + "." + method.getName()
+					+ " is @ReadOnlyTool, which needs a single PlatformTransactionManager to run it read-only.");
+		}
+		return new ReadOnlyTransactionToolCallback(callback, transactionManager);
 	}
 
 	public Collection<RegisteredTool> all() {

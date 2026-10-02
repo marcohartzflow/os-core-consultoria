@@ -33,7 +33,9 @@ class ReservedPermissionsMigrationTests {
 					"iam.role.delete", "iam.role.read");
 			UUID readers = role(jdbc, "Leitura", false, "tasks.task.read");
 
-			Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
+			// Up to V11 only: later migrations build indexes CONCURRENTLY, which with Flyway's default
+			// transactional lock would wait forever on Flyway's own open transaction.
+			Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").target("11").load().migrate();
 
 			assertThat(permissions(jdbc, system)).containsExactly("iam.role.create", "iam.user.anonymize",
 					"tasks.task.read");

@@ -48,7 +48,14 @@ class PrivacyTests {
 			.andExpect(jsonPath("$.sessions").isArray())
 			.andExpect(jsonPath("$.sessions.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
 			.andExpect(jsonPath("$.conversations").isArray())
-			.andExpect(jsonPath("$.audit").isArray());
+			.andExpect(jsonPath("$.audit.events").isArray())
+			.andExpect(jsonPath("$.audit.events[?(@.action == 'auth.login.success')]").isNotEmpty())
+			.andExpect(jsonPath("$.audit.truncated").value(false));
+		// The export itself is in the trail (it once joined a read-only transaction and was never written).
+		Integer exported = this.jdbc.queryForObject(
+				"SELECT count(*) FROM audit_event WHERE action = 'privacy.data.exported' AND actor_email = ?",
+				Integer.class, "admin@example.com");
+		org.assertj.core.api.Assertions.assertThat(exported).isGreaterThanOrEqualTo(1);
 	}
 
 	@Test
@@ -65,8 +72,10 @@ class PrivacyTests {
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/anonymize"), admin)).andExpect(status().is(422));
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + id + "/disable"), admin)).andExpect(status().isOk());
 
-		// Personal data held elsewhere: a second factor, recovery codes, a conversation with memory.
+		// Personal data held elsewhere: a second notification address, a second factor, recovery codes,
+		// a conversation with memory.
 		UUID userId = UUID.fromString(id);
+		this.jdbc.update("UPDATE users SET notification_email = 'dora.pessoal@example.org' WHERE id = ?", userId);
 		UUID conversation = UUID.randomUUID();
 		this.jdbc.update("INSERT INTO user_mfa (user_id, secret, created_at, updated_at) VALUES (?, 'x', now(), now())",
 				userId);
@@ -96,6 +105,8 @@ class PrivacyTests {
 				Integer.class, conversation.toString())).isZero();
 		assertThat(this.jdbc.queryForObject("SELECT password_hash FROM users WHERE id = ?", String.class, userId))
 			.isNull();
+		assertThat(this.jdbc.queryForObject("SELECT notification_email FROM users WHERE id = ?", String.class, userId))
+			.isNull();
 
 		// The audit row names only the id, never the person.
 		this.mvc.perform(get("/api/audit/events").cookie(admin.cookie()).param("action", "iam.user.anonymized"))
@@ -118,7 +129,7 @@ class PrivacyTests {
 		MvcResult login = this.mvc
 			.perform(post("/api/auth/login").cookie(xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"admin@example.com\",\"password\":\"Admin-Password-2026\"}"))
+				.content("{\"email\":\"admin@example.com\",\"password\":\"Bootstrap-Secret-2026\"}"))
 			.andExpect(status().isOk())
 			.andReturn();
 		return new Session(login.getResponse().getCookie("OS_SESSION"), xsrf);

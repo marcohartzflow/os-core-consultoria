@@ -10,7 +10,7 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 
 /**
- * Stands in for a destructive tool during the agent turn. Instead of executing, it records a pending
+ * Stands in for a state-changing tool during the agent turn. Instead of executing, it records a pending
  * action and tells the model to wait. The real call happens in {@code PendingActionService} after the
  * person confirms it.
  */
@@ -43,7 +43,8 @@ public final class ConfirmingToolCallback implements ToolCallback {
 	@Override
 	public String call(String toolInput, ToolContext toolContext) {
 		UUID actionId = this.park.apply(this.tool, toolInput);
-		ToolEvents.publish(new ToolEvents.ActionPending(actionId, this.tool.name(), this.tool.destructiveSummary()));
+		ToolEvents.publish(new ToolEvents.ActionPending(actionId, this.tool.name(), this.tool.confirmationSummary(),
+				toolInput));
 		return "{\"status\":\"PENDING_CONFIRMATION\",\"actionId\":\"" + actionId
 				+ "\",\"message\":\"A ação foi registrada e aguarda confirmação da pessoa no portal. Não repita a chamada.\"}";
 	}

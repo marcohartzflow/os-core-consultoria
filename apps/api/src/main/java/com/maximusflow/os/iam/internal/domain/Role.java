@@ -11,12 +11,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.UuidGenerator;
 import org.jspecify.annotations.Nullable;
 
 @Entity
@@ -24,7 +23,9 @@ import org.jspecify.annotations.Nullable;
 public class Role extends AuditableEntity {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
+	// Time-ordered (v7): new rows land at the end of the primary key index instead of on random
+	// pages, which keeps inserts cheap and the index compact as the table grows.
+	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	private UUID id;
 
 	@Column(nullable = false, unique = true, length = 100)
@@ -68,6 +69,14 @@ public class Role extends AuditableEntity {
 
 	public void grantAll(Set<String> permissions) {
 		this.permissions.addAll(permissions);
+	}
+
+	/** Removes the given permissions and returns the ones this role actually held. */
+	public Set<String> revoke(Set<String> permissions) {
+		Set<String> removed = new HashSet<>(this.permissions);
+		removed.retainAll(permissions);
+		this.permissions.removeAll(removed);
+		return removed;
 	}
 
 	public UUID getId() {

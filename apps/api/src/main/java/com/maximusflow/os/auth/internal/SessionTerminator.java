@@ -5,6 +5,8 @@ import com.maximusflow.os.common.logging.Sanitize;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -32,13 +34,23 @@ public class SessionTerminator {
 
 	private final FindByIndexNameSessionRepository<? extends Session> sessions;
 
-	SessionTerminator(FindByIndexNameSessionRepository<? extends Session> sessions) {
+	private final Duration absoluteTimeout;
+
+	private final Clock clock;
+
+	SessionTerminator(FindByIndexNameSessionRepository<? extends Session> sessions, AuthProperties properties,
+			Clock clock) {
 		this.sessions = sessions;
+		this.absoluteTimeout = properties.session().absoluteTimeout();
+		this.clock = clock;
 	}
 
+	/** Live sessions only: one past the absolute lifetime is refused on its next request anyway. */
 	public List<SessionInfo> list(String email, @Nullable String currentSessionId) {
 		String current = (currentSessionId != null) ? opaque(currentSessionId) : null;
+		Instant oldestAlive = this.clock.instant().minus(this.absoluteTimeout);
 		return this.sessions.findByPrincipalName(email).values().stream()
+			.filter((session) -> !session.getCreationTime().isBefore(oldestAlive))
 			.map((session) -> new SessionInfo(opaque(session.getId()), session.getCreationTime(),
 					session.getLastAccessedTime(), opaque(session.getId()).equals(current)))
 			.sorted(Comparator.comparing(SessionInfo::createdAt).reversed())
@@ -67,7 +79,7 @@ public class SessionTerminator {
 			}
 		}
 		if (count > 0) {
-			security.info("terminated {} session(s) of {}", count, Sanitize.forLog(email));
+			security.info("terminated {} session(s) of {}", count, Sanitize.maskEmail(email));
 		}
 		return count;
 	}
