@@ -1,19 +1,21 @@
-# Onde paramos (2026-10-02, fim do dia)
+# Onde paramos (2026-10-04)
 
-Estado do trabalho em andamento no `develop`. O que já foi feito, em detalhe, está em [`feito.md`](feito.md).
+Estado do trabalho no `develop`. O que já foi feito, em detalhe, está em [`feito.md`](feito.md); a lista por versão, no `CHANGELOG.md`.
 
 ## Estado do repositório
 
-- Branch `develop`, último commit `0e9613a` (tabelas paginadas no servidor). **Nada do trabalho desde então está commitado**, por decisão do usuário: os commits só saem quando ele decidir.
-- A pasta de trabalho junta seis frentes, feitas nesta ordem:
+- Tudo commitado no `develop` e enviado ao GitHub; o CI passa. Não há trabalho local pendente.
+- PR `develop` → `main` aberto, esperando revisão e merge. No `os-core` o merge só roda o CI: as imagens e o deploy do `cd.yml` dependem da variável `DEPLOY_HOST`, que só existe no repositório de um cliente.
+- O trabalho reúne sete frentes, feitas nesta ordem:
   1. Configurações em janela (popup no estilo do Claude).
   2. Preset do shadcn (`b5KafGdxA`, menu do usuário com cor padrão no tema claro).
   3. Desempenho das listagens (auditoria por posição, índices, totais pré-somados, UUIDv7).
   4. Revisão de usuários, roles, permissões e auditoria (API e web), de 2026-09-30.
   5. Revisão de segurança de 2026-10-02 (OWASP ASVS 5.0 nível 2 e NIST SP 800-63B-4 AAL2).
   6. Fluxo de deploy e continuidade do cliente (2026-10-02): CD que roda o CI antes, chave do CD presa a `deploy/ci-deploy.sh`, playbook Ansible da VPS, `deploy.md` e `fork.md` reescritos; depois da pesquisa de padrões: `up --wait` e conferência de `/api/health` depois do deploy, `zizmor` e Grype no CI, regra de migração em paralelo. A varredura achou CVEs críticas no Tomcat e no BouncyCastle e altas no Jackson, no OpenSSL do Temurin e no npm da imagem do web, corrigidas.
+  7. Teste no navegador dos fluxos novos (2026-10-04), com três correções pequenas (abaixo).
 
-## O que foi feito hoje
+## O que foi feito (2026-10-02)
 
 A lista completa está no CHANGELOG, em "Revisão de 2026-10-02", com o que um fork precisa fazer em "Ação necessária no fork". O estado resultante está em `docs/security-baseline.md`. Em resumo:
 
@@ -45,24 +47,53 @@ Verificações que passaram:
   - Só 22, 80 e 443 escutando; containers sem root (exceto o entrypoint do Postgres), raiz somente leitura, sem novos privilégios.
   - Carga (20 conexões, 20 s, pela cadeia inteira com TLS): `/api/health` 2.366 req/s (p99 32 ms), `/login` 476 req/s (p99 73 ms), `/api/auth/csrf` 5.191 req/s (p99 12 ms), sem erro. Login com Argon2id em 40 a 55 ms; e-mail inexistente em 66 ms. Memória: API 540 MB, web 114 MB, Postgres 40 MB, Caddy 20 MB.
 
+## Testes no navegador (2026-10-04)
+
+Pilha local (`pnpm api` com o perfil `local`, `pnpm dev`), no Chrome; a passkey num Chromium com o autenticador virtual do DevTools (Playwright, domínio WebAuthn), e os e-mails pelo Mailpit. Passaram:
+
+- Primeiro login do administrador: troca de senha obrigatória, depois o cadastro do segundo fator (senha atual, QR code, código do aplicativo), 10 códigos de recuperação mostrados uma vez; o portal só abre depois.
+- Login com código de recuperação: o código vale uma vez (reusado, é recusado), aviso por e-mail e registro na trilha. Código errado é recusado.
+- Segundo endereço de avisos: salvo com a senha, os dois endereços avisados.
+- Gerar novos códigos: pede a senha, os antigos deixam de valer, aviso nos dois endereços.
+- Passkey: cadastro como primeiro fator, login pela passkey, remoção recusada quando é o único fator ("A política exige segundo fator") e aceita depois de cadastrar o aplicativo autenticador; aviso por e-mail no cadastro e na remoção.
+- Sessões: encerrar outra sessão pela tela; a sessão encerrada passa a receber 401.
+- Convite: sem SMTP o link aparece na tela; com SMTP a API não devolve o link e ele chega por e-mail; aberto do e-mail, ativou a conta. Senha com parte do e-mail recusada.
+- Redefinição do segundo fator pelo administrador: depois de 15 min pede o código do administrador (step-up); apaga o fator e a senha (a antiga dá 401); o link de nova senha vai por e-mail; com a senha nova, a pessoa cai no cadastro do segundo fator.
+- E-mails pelo SMTP (Mailpit): convite, redefinição de senha, redefinição do segundo fator e avisos de fator, nos dois endereços.
+
+Corrigido depois dos testes:
+
+- Erros de regra (`422`) mostravam o título "Regra de negócio" acima da mensagem; agora "Não foi possível concluir".
+- Sem SMTP, a redefinição do segundo fator dizia "Enviamos um link"; agora diz que o link ficou no log da API. A API responde `{emailed}` e nunca devolve o link ao administrador.
+- O bloco de e-mail local do `application-local.yml.example` não funcionava descomentado (chaves repetidas, SMTP com login e STARTTLS); corrigido e testado com o Mailpit.
+
 ## O que falta
 
-1. Testar no navegador os fluxos novos:
-   - Segundo fator obrigatório para todos: cadastro no primeiro login.
-   - Passkey: cadastrar, entrar com ela e removê-la.
-   - Reconfirmação do segundo fator (step-up) nas ações de segurança: aplicativo autenticador, passkeys, senha e sessões.
-   - Redefinição do segundo fator pelo administrador: a pessoa recebe o e-mail e define a senha nova.
-   - Gerar novos códigos de recuperação.
-   - Encerrar sessões com a reconfirmação.
-   - Cookies `__Host-` em HTTPS.
-   - Segundo endereço de avisos e os e-mails de aviso.
-2. Primeiro deploy numa VPS de verdade, com domínio real, pelo caminho novo: playbook do Ansible, `cd.yml` (CI, imagens, `ci-deploy.sh`) e um rollback pelo Run workflow. O playbook e o `ci-deploy.sh` foram testados num Ubuntu 24.04 em container (duas execuções seguidas; shell, comando arbitrário, injeção, túnel, commit fora da `main` e root recusados; senha do SSH desligada); o `cd.yml` rodou pelo `act` (acima); falta a primeira execução no GitHub de verdade, com o `ghcr.io` real e o Let's Encrypt.
-   - Em container o `systemd-timesyncd` não sobe (ele se desliga em container); na VPS ele roda. Conferir com `timedatectl` no primeiro servidor.
-3. Os commits, que esperam o usuário.
+Nada de código. O que resta depende de um servidor de cliente ou de uma decisão do usuário ou do cliente.
 
-## Depende do usuário
+### Revisão e merge (usuário)
 
-- A chave da API da Anthropic.
+1. Revisar e fazer o merge do PR `develop` → `main`.
+
+### No primeiro cliente (com a VPS, o domínio e o repositório do cliente)
+
+O roteiro está em `docs/fork.md` (repositório, variáveis, chaves) e `docs/deploy.md` ("Preparar o servidor", "Entrada em produção"). Tudo foi ensaiado num Ubuntu 24.04 em container e com o `act`; falta rodar com os serviços reais:
+
+2. Playbook do Ansible na VPS.
+3. Primeiro push na `main` do cliente: CI, imagens no `ghcr.io`, deploy por `ci-deploy.sh`, conferência de `/api/health`, certificado do Let's Encrypt.
+4. Um rollback de teste pelo Run workflow com o SHA anterior.
+5. Conferir no servidor: cookies `__Host-` em HTTPS, um SMTP de verdade (convite e redefinição), `timedatectl` (em container o `systemd-timesyncd` não sobe) e uma passkey num aparelho real (Touch ID ou celular).
+
+### Depende do usuário ou do cliente
+
+- A chave da API da Anthropic. Sem ela o assistente não foi testado de ponta a ponta.
 - O e-mail real de contato de segurança no `SECURITY.md`.
 - A decisão sobre a transferência internacional de dados pessoais à Anthropic (LGPD art. 33). É contratual, do cliente; está registrada como risco aceito na seção 9 de `security-baseline.md`.
 - Os itens que dependem da infraestrutura do cliente (`security-baseline.md`, seção 9): logs num sistema separado, cofre de segredos, firewall de saída no host, destino do backup, backup e snapshot do provedor, e a resposta escrita da Hostinger sobre criptografia do disco.
+- Opcional: tirar `zizmorcore/zizmor-action@*` da lista de actions permitidas do repositório (não é mais usada).
+
+## Ambiente local depois dos testes
+
+- O banco local de desenvolvimento tem o administrador (`admin@example.com`, com a senha trocada no primeiro login e o segundo fator cadastrado) e três usuários de teste (`teste@example.com`, `convite-smtp@example.com`, `passkey2@example.com`). Para começar do zero, apague o volume `postgres-data` de `apps/api/compose.yaml`; para dados de demonstração, `pnpm demo:data`.
+- Para testar e-mails, use o bloco do Mailpit em `application-local.yml.example`.
+- Para testar passkeys sem um aparelho, use o painel WebAuthn do DevTools do Chrome (More tools, WebAuthn, "Enable virtual authenticator environment").
