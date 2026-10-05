@@ -18,7 +18,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { api, download } from "@/core/api/client";
+import { api, download, isAbortError } from "@/core/api/client";
 import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
 import { actionLabel } from "@/core/audit/labels";
 import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
@@ -434,22 +434,35 @@ function ActorFilter({
   const [text, setText] = useState("");
   const [people, setPeople] = useState<UserSummary[]>([]);
   const [chosen, setChosen] = useState<UserSummary | null>(null);
+  // A search is on its way (set on typing, so stale results never pass for the answer), or failed.
+  const [searching, setSearching] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // People matching the text, after a pause in typing; the newest answer wins.
   useEffect(() => {
     if (!open || !mayListPeople) return;
-    let current = true;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetchPage<UserSummary>(`/api/iam/users${toQuery({ q: text.trim() || undefined, size: 8, sort: "name" })}`).then(
-        (page) => current && setPeople(page.content),
-        () => current && setPeople([]),
+      fetchPage<UserSummary>(`/api/iam/users${toQuery({ q: text.trim() || undefined, size: 8, sort: "name" })}`, controller.signal).then(
+        (page) => {
+          setPeople(page.content);
+          setFailed(false);
+          setSearching(false);
+        },
+        (e: unknown) => {
+          if (isAbortError(e)) return;
+          setPeople([]);
+          setFailed(true);
+          setSearching(false);
+        },
       );
     }, 250);
     return () => {
-      current = false;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [open, text, mayListPeople]);
+  }, [open, text, mayListPeople, attempt]);
 
   // A person in the URL (a link, "events of this person"): show the name, not the id.
   useEffect(() => {
@@ -475,7 +488,13 @@ function ActorFilter({
   const active = !!(actorId || actorEmail);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next && mayListPeople) setSearching(true);
+      }}
+    >
       <div className="flex items-center">
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className={active ? "max-w-60 border-solid" : "border-dashed"}>
@@ -495,13 +514,39 @@ function ActorFilter({
           <CommandInput
             placeholder={mayListPeople ? "Nome ou e-mail…" : "Parte do e-mail…"}
             value={text}
-            onValueChange={setText}
+            onValueChange={(next) => {
+              setText(next);
+              if (mayListPeople) setSearching(true);
+            }}
             maxLength={320}
           />
           <CommandList>
-            <CommandEmpty>
-              {trimmed.length < MIN_EMAIL_TEXT ? "Digite ao menos 3 letras." : "Ninguém encontrado."}
-            </CommandEmpty>
+            {!searching && !failed && (
+              <CommandEmpty>
+                {trimmed.length < MIN_EMAIL_TEXT ? "Digite ao menos 3 letras." : "Ninguém encontrado."}
+              </CommandEmpty>
+            )}
+            {searching && (
+              <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground" role="status">
+                <Spinner className="size-3.5" />
+                Buscando…
+              </div>
+            )}
+            {failed && !searching && (
+              <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-destructive">
+                Não foi possível buscar as pessoas.
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearching(true);
+                    setAttempt((n) => n + 1);
+                  }}
+                >
+                  Tentar novamente
+                </Button>
+              </div>
+            )}
             {trimmed.length >= MIN_EMAIL_TEXT && (
               <CommandGroup heading="E-mail">
                 <CommandItem
@@ -516,7 +561,7 @@ function ActorFilter({
                 </CommandItem>
               </CommandGroup>
             )}
-            {people.length > 0 && (
+            {!searching && people.length > 0 && (
               <CommandGroup heading="Pessoas">
                 {people.map((person) => (
                   <CommandItem

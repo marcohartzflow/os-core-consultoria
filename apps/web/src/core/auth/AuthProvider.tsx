@@ -115,11 +115,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
   if (!value) {
     return (
-      <div className="flex min-h-svh">
-        <Skeleton className="hidden h-svh w-64 md:block" />
-        <div className="flex-1 space-y-4 p-8">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-40 w-full" />
+      // The shell's frame (menu, header, content) while the session is read, so the portal does
+      // not jump into place when it arrives.
+      <div className="flex min-h-svh bg-sidebar" aria-busy="true" aria-label="Carregando o portal">
+        <div className="hidden w-68 shrink-0 flex-col gap-2 p-4 md:flex">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="mt-2 h-9 w-full" />
+          <div className="mt-4 flex flex-col gap-2">
+            {Array.from({ length: 7 }, (_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col bg-background md:m-2 md:ml-0 md:rounded-2xl md:shadow-sm md:ring-1 md:ring-border">
+          <div className="flex h-12 items-center gap-2 border-b px-4 lg:px-6">
+            <Skeleton className="size-7" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="ml-auto h-8 w-32" />
+          </div>
+          <div className="flex flex-col gap-4 p-4 md:p-6">
+            <Skeleton className="h-9 w-56" />
+            <Skeleton className="h-4 w-80 max-w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
         </div>
       </div>
     );

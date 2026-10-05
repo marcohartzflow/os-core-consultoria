@@ -15,6 +15,16 @@ export interface Loaded<T> {
   loading: boolean;
 }
 
+const DATA_CHANGED = "os:data-changed";
+
+/**
+ * Something changed data outside the screen's own actions (an action confirmed in the assistant):
+ * every mounted `useLoad` fetches again and keeps its current data on screen meanwhile.
+ */
+export function announceDataChanged() {
+  window.dispatchEvent(new Event(DATA_CHANGED));
+}
+
 /**
  * Loads data for a screen. `key` names the inputs of `load` (a filter, a page number): when it
  * changes, the data is fetched again. A response that arrives after the key changed is dropped.
@@ -92,6 +102,12 @@ export function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key = ""):
       },
     );
   }, []);
+
+  useEffect(() => {
+    const onChanged = () => void refresh();
+    window.addEventListener(DATA_CHANGED, onChanged);
+    return () => window.removeEventListener(DATA_CHANGED, onChanged);
+  }, [refresh]);
 
   const retry = useCallback(() => {
     setData(null);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Fingerprint } from "lucide-react";
-import { api, ApiError } from "@/core/api/client";
+import { api, ApiError, isAbortError } from "@/core/api/client";
 import type { MfaStatus } from "@/core/api/types";
 import { isPasskeyCancelled, passkeysSupported, verifyWithPasskey } from "./passkeys";
 import { fieldError, FormError } from "@/core/ui/feedback";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 
 /** 403 the API answers when a sensitive action needs a second factor confirmed recently in this session. */
@@ -86,31 +87,42 @@ function StepUpDialog({
 }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
+  // Which way of confirming is running, so the spinner shows on the button that was used.
+  const [busy, setBusy] = useState<"code" | "passkey" | null>(null);
   // Whether the person has a passkey to offer; read each time the dialog opens.
   const [passkeys, setPasskeys] = useState(false);
+  // The request whose factors were read: until then the fields wait, so nothing jumps or steals focus.
+  const [checked, setChecked] = useState<StepUpRequest | null>(null);
   const open = request !== null;
+  const deciding = open && checked !== request;
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
     api<MfaStatus>("/api/me/mfa", { signal: controller.signal }).then(
-      (status) => setPasskeys(status.passkeys > 0 && passkeysSupported()),
-      () => setPasskeys(false),
+      (status) => {
+        setPasskeys(status.passkeys > 0 && passkeysSupported());
+        setChecked(request);
+      },
+      (e: unknown) => {
+        if (isAbortError(e)) return;
+        setPasskeys(false);
+        setChecked(request);
+      },
     );
     return () => controller.abort();
-  }, [open]);
+  }, [open, request]);
 
   function settle(confirmed: boolean) {
     setCode("");
     setError(null);
-    setBusy(false);
+    setBusy(null);
     onSettled(confirmed);
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
+    setBusy("code");
     setError(null);
     try {
       await api("/api/auth/mfa", { method: "POST", body: { code: code.trim() } });
@@ -120,12 +132,12 @@ function StepUpDialog({
       if (e instanceof ApiError && e.unauthorized) return settle(false);
       setError(e);
       setCode("");
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function confirmWithPasskey() {
-    setBusy(true);
+    setBusy("passkey");
     setError(null);
     try {
       await verifyWithPasskey();
@@ -133,7 +145,7 @@ function StepUpDialog({
     } catch (e) {
       if (e instanceof ApiError && e.unauthorized) return settle(false);
       if (!isPasskeyCancelled(e)) setError(e);
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -157,46 +169,55 @@ function StepUpDialog({
           </DialogHeader>
           <FieldGroup className="py-4">
             <FormError error={codeError ? null : error} />
-            {passkeys && (
+            {deciding ? (
+              <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
               <>
-                <Button type="button" disabled={busy} onClick={() => void confirmWithPasskey()}>
-                  <Fingerprint data-icon="inline-start" />
-                  Usar chave de acesso
-                </Button>
-                <FieldSeparator>ou</FieldSeparator>
+                {passkeys && (
+                  <>
+                    <Button type="button" disabled={!!busy} onClick={() => void confirmWithPasskey()}>
+                      {busy === "passkey" ? <Spinner data-icon="inline-start" /> : <Fingerprint data-icon="inline-start" />}
+                      Usar chave de acesso
+                    </Button>
+                    <FieldSeparator>ou</FieldSeparator>
+                  </>
+                )}
+                <Field data-invalid={!!codeError}>
+                  <FieldLabel htmlFor="step-up-code">Código</FieldLabel>
+                  <Input
+                    id="step-up-code"
+                    autoFocus={!passkeys}
+                    autoComplete="one-time-code"
+                    inputMode="text"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    placeholder="000000"
+                    maxLength={20}
+                    required
+                    className="text-center font-mono text-lg tracking-widest"
+                    aria-invalid={!!codeError}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                  {codeError ? (
+                    <FieldError>{codeError}</FieldError>
+                  ) : (
+                    <FieldDescription>Sem o celular? Use um dos seus códigos de recuperação.</FieldDescription>
+                  )}
+                </Field>
               </>
             )}
-            <Field data-invalid={!!codeError}>
-              <FieldLabel htmlFor="step-up-code">Código</FieldLabel>
-              <Input
-                id="step-up-code"
-                autoFocus={!passkeys}
-                autoComplete="one-time-code"
-                inputMode="text"
-                autoCapitalize="off"
-                spellCheck={false}
-                placeholder="000000"
-                maxLength={20}
-                required
-                className="text-center font-mono text-lg tracking-widest"
-                aria-invalid={!!codeError}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              {codeError ? (
-                <FieldError>{codeError}</FieldError>
-              ) : (
-                <FieldDescription>Sem o celular? Use um dos seus códigos de recuperação.</FieldDescription>
-              )}
-            </Field>
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => settle(false)}>
+            <Button type="button" variant="outline" disabled={!!busy} onClick={() => settle(false)}>
               Cancelar
             </Button>
-            <Button type="submit" variant={passkeys ? "secondary" : "default"} disabled={busy || !code.trim()}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Verificando…" : "Confirmar"}
+            <Button type="submit" variant={passkeys ? "secondary" : "default"} disabled={!!busy || !code.trim()}>
+              {busy === "code" && <Spinner data-icon="inline-start" />}
+              {busy === "code" ? "Verificando…" : "Confirmar"}
             </Button>
           </DialogFooter>
         </form>

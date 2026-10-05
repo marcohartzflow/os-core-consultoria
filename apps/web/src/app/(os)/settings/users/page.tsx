@@ -4,19 +4,21 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CircleAlert,
   CircleCheck,
   CircleDashed,
   CircleSlash,
   LayoutGrid,
   Lock,
+  RotateCw,
   Rows3,
   Search,
   ShieldAlert,
   ShieldCheck,
   TriangleAlert,
   UserPlus,
-  Users,
   UserX,
+  Users,
 } from "lucide-react";
 import { api } from "@/core/api/client";
 import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
@@ -277,6 +279,19 @@ export default function UsersPage() {
             {belowMinimum.active <= 1
               ? "Promova mais uma pessoa de confiança a administrador. Se a única conta de administrador for perdida, ninguém poderá gerenciar acessos."
               : `Promova mais ${belowMinimum.minimum - belowMinimum.active} ${belowMinimum.minimum - belowMinimum.active === 1 ? "pessoa" : "pessoas"} de confiança a administrador. Se todas as contas de administrador forem perdidas, ninguém poderá gerenciar acessos.`}
+          </AlertDescription>
+        </Alert>
+      )}
+      {administrators.error && (
+        <Alert>
+          <CircleAlert />
+          <AlertTitle>Não foi possível conferir os administradores</AlertTitle>
+          <AlertDescription>
+            <p>O aviso de administradores abaixo do mínimo depende dessa conferência.</p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={administrators.retry}>
+              <RotateCw data-icon="inline-start" />
+              Tentar novamente
+            </Button>
           </AlertDescription>
         </Alert>
       )}

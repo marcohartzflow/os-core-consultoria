@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/core/api/client";
-import { fieldError, FormError } from "@/core/ui/feedback";
+import { fieldError, FormError, notifySuccess } from "@/core/ui/feedback";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -42,6 +42,7 @@ export function SetPasswordForm({
     setError(null);
     try {
       await api(endpoint, { method: "POST", body: { token, password } });
+      notifySuccess("Senha definida", "Entre com o seu e-mail e a nova senha.");
       onDone();
     } catch (e) {
       setError(e);
@@ -60,6 +61,7 @@ export function SetPasswordForm({
           <FieldLabel htmlFor="password">Nova senha</FieldLabel>
           <PasswordInput
             id="password"
+            autoFocus
             autoComplete="new-password"
             required
             minLength={12}

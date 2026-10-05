@@ -14,14 +14,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyHeader, EmptyMedia } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 
 /** Second step of the login: a passkey, a code from the authenticator app or a recovery code. */
 export default function MfaPage() {
   const router = useRouter();
   const { me, refresh, logout } = useAuth();
-  // Which factors the account has; while it loads (or if it fails) the code field alone is shown.
-  const { data: status } = useLoad((signal) => api<MfaStatus>("/api/me/mfa", { signal }));
+  // Which factors the account has. While it loads the fields wait (nothing jumps or steals focus);
+  // if it fails, the code field alone is shown.
+  const { data: status, error: statusError } = useLoad((signal) => api<MfaStatus>("/api/me/mfa", { signal }));
+  const deciding = !status && !statusError;
   const [code, setCode] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<"code" | "passkey" | null>(null);
@@ -81,7 +84,14 @@ export default function MfaPage() {
       <CardContent>
         <FieldGroup>
           <FormError error={codeError ? null : error} />
-          {hasPasskeys && (
+          {deciding && (
+            <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-11 w-full" />
+            </div>
+          )}
+          {!deciding && hasPasskeys && (
             <>
               <Field>
                 <Button type="button" className="w-full" disabled={busy !== null || !supported} onClick={() => void signInWithPasskey()}>
@@ -93,46 +103,48 @@ export default function MfaPage() {
               <FieldSeparator>ou</FieldSeparator>
             </>
           )}
-          <form onSubmit={submit}>
-            <FieldGroup>
-              <Field data-invalid={!!codeError}>
-                <FieldLabel htmlFor="mfa-code">Código</FieldLabel>
-                <Input
-                  id="mfa-code"
-                  autoFocus={!hasPasskeys}
-                  autoComplete="one-time-code"
-                  inputMode="text"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  placeholder="000000"
-                  maxLength={20}
-                  required
-                  className="text-center font-mono text-lg tracking-widest"
-                  aria-invalid={!!codeError}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                />
-                {codeError ? (
-                  <FieldError>{codeError}</FieldError>
-                ) : (
-                  <FieldDescription>
-                    {status && !status.totp
-                      ? "Sem a chave de acesso? Use um dos seus códigos de recuperação."
-                      : "Sem o celular? Use um dos seus códigos de recuperação."}
-                  </FieldDescription>
-                )}
-              </Field>
-              <Button
-                type="submit"
-                variant={hasPasskeys ? "outline" : "default"}
-                className="w-full"
-                disabled={busy !== null || !code.trim()}
-              >
-                {busy === "code" && <Spinner data-icon="inline-start" />}
-                {busy === "code" ? "Verificando…" : "Confirmar código"}
-              </Button>
-            </FieldGroup>
-          </form>
+          {!deciding && (
+            <form onSubmit={submit}>
+              <FieldGroup>
+                <Field data-invalid={!!codeError}>
+                  <FieldLabel htmlFor="mfa-code">Código</FieldLabel>
+                  <Input
+                    id="mfa-code"
+                    autoFocus={!hasPasskeys}
+                    autoComplete="one-time-code"
+                    inputMode="text"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    placeholder="000000"
+                    maxLength={20}
+                    required
+                    className="text-center font-mono text-lg tracking-widest"
+                    aria-invalid={!!codeError}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                  {codeError ? (
+                    <FieldError>{codeError}</FieldError>
+                  ) : (
+                    <FieldDescription>
+                      {status && !status.totp
+                        ? "Sem a chave de acesso? Use um dos seus códigos de recuperação."
+                        : "Sem o celular? Use um dos seus códigos de recuperação."}
+                    </FieldDescription>
+                  )}
+                </Field>
+                <Button
+                  type="submit"
+                  variant={hasPasskeys ? "outline" : "default"}
+                  className="w-full"
+                  disabled={busy !== null || !code.trim()}
+                >
+                  {busy === "code" && <Spinner data-icon="inline-start" />}
+                  {busy === "code" ? "Verificando…" : "Confirmar código"}
+                </Button>
+              </FieldGroup>
+            </form>
+          )}
         </FieldGroup>
       </CardContent>
       <CardFooter className="justify-center border-t">

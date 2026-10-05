@@ -10,6 +10,7 @@ import { useStepUp } from "@/core/auth/StepUp";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { notifyError, notifySuccess } from "@/core/ui/feedback";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +97,8 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
   const [pending, setPending] = useState<Pending>(null);
   const { withStepUp, stepUpDialog } = useStepUp();
   const [link, setLink] = useState<string | null>(null);
+  // A menu action is running: the row's menu button spins and stays disabled, so it is not sent twice.
+  const [working, setWorking] = useState(false);
   const isSelf = user.id === me.id;
   const alive = !user.anonymizedAt;
 
@@ -107,6 +110,7 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
   const mayEnable = alive && user.status === "DISABLED" && hasPermission("iam.user.disable");
 
   async function resend() {
+    setWorking(true);
     try {
       const issued = await api<InvitationIssued>(`/api/iam/users/${user.id}/invitations`, { method: "POST" });
       if (issued.invitationLink) setLink(issued.invitationLink);
@@ -114,16 +118,21 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
       await onChanged();
     } catch (e) {
       notifyError(e, "Não foi possível reenviar o convite");
+    } finally {
+      setWorking(false);
     }
   }
 
   async function enable() {
+    setWorking(true);
     try {
       await api(`/api/iam/users/${user.id}/enable`, { method: "POST" });
       notifySuccess("Usuário reativado", `${user.name} pode entrar de novo.`);
       await onChanged();
     } catch (e) {
       notifyError(e, "Não foi possível reativar");
+    } finally {
+      setWorking(false);
     }
   }
 
@@ -136,9 +145,11 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
             size="icon-sm"
             className="text-muted-foreground"
             aria-label={`Ações para ${user.name}`}
+            aria-busy={working}
+            disabled={working}
             onClick={(event) => event.stopPropagation()}
           >
-            <MoreHorizontal />
+            {working ? <Spinner /> : <MoreHorizontal />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56" onClick={(event) => event.stopPropagation()}>

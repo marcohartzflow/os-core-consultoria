@@ -75,6 +75,7 @@ function LoginForm() {
           <Input
             id="email"
             type="email"
+            autoFocus
             autoComplete="username"
             placeholder="voce@empresa.com"
             required

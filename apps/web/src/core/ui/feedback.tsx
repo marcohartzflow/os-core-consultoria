@@ -19,6 +19,15 @@ export function notifyWarning(title: string, description?: string) {
   toast.warning(title, { description });
 }
 
+/** Toast while an action that runs in the background (a download, say) is working; returns its id. */
+export function notifyLoading(title: string): string | number {
+  return toast.loading(title);
+}
+
+export function dismissToast(id: string | number) {
+  toast.dismiss(id);
+}
+
 /** Toast after an action failed; the API's own title and text when it sent a problem. */
 export function notifyError(error: unknown, fallbackTitle?: string) {
   const { title, detail } = describeError(error);

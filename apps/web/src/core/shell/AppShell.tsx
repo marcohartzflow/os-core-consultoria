@@ -1,20 +1,19 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
-import { ChevronDown, CirclePlus, Command, LogOut, TriangleAlert } from "lucide-react";
+import { ChevronDown, CirclePlus, Command, LogOut } from "lucide-react";
 import { AgentToggle } from "@/core/ai/AgentToggle";
 import { AgentWorkspace } from "@/core/ai/AgentWorkspace";
 import type { Layout } from "react-resizable-panels";
+import { AccountOnboarding } from "@/core/auth/AccountOnboarding";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { SettingsProvider } from "@/core/settings/SettingsDialog";
-import { SecuritySection } from "@/core/settings/sections";
 import { breadcrumbFor, navigationFor, quickCreateFor } from "./navigation";
 import { NavUser } from "./NavUser";
 import { SearchDialog } from "./SearchDialog";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -32,6 +31,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -122,6 +123,22 @@ function Trail({ pathname, hasPermission }: { pathname: string; hasPermission: (
   );
 }
 
+/**
+ * Inline feedback while a menu link navigates (Next's useLinkStatus): always rendered, fading in,
+ * so the row does not shift. The route's loading.tsx takes over as soon as the server answers.
+ */
+function NavPending() {
+  const { pending } = useLinkStatus();
+  return (
+    <Spinner
+      aria-hidden
+      role={undefined}
+      aria-label={undefined}
+      className={cn("ml-auto opacity-0 transition-opacity", pending && "opacity-100")}
+    />
+  );
+}
+
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 }
@@ -138,6 +155,7 @@ export function AppShell({
   const { me, hasPermission, logout } = useAuth();
   const pathname = usePathname();
   const sections = navigationFor(hasPermission);
+  const fullBleed = isActive(pathname, "/chat");
 
   // Second factor pending: no navigation, only the verification screen and a way out.
   if (me.mfa.enabled && !me.mfa.verified) {
@@ -166,26 +184,8 @@ export function AppShell({
             Sair
           </Button>
         </header>
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 md:p-6">
-          <Alert>
-            <TriangleAlert />
-            {me.passwordChangeRequired ? (
-              <>
-                <AlertTitle>Defina uma nova senha para continuar</AlertTitle>
-                <AlertDescription>
-                  A senha atual foi definida por outra pessoa. O portal fica bloqueado até você escolher a sua.
-                </AlertDescription>
-              </>
-            ) : (
-              <>
-                <AlertTitle>Configure a verificação em duas etapas para continuar</AlertTitle>
-                <AlertDescription>
-                  A sua conta exige um segundo fator: um aplicativo autenticador ou uma chave de acesso. O portal fica bloqueado até a configuração.
-                </AlertDescription>
-              </>
-            )}
-          </Alert>
-          <SecuritySection />
+        <div className="flex flex-1 justify-center p-4 py-10 md:p-10">
+          <AccountOnboarding />
         </div>
       </div>
     );
@@ -219,6 +219,7 @@ export function AppShell({
                           <Link href={item.href}>
                             <item.icon />
                             <span>{item.label}</span>
+                            <NavPending />
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -237,7 +238,13 @@ export function AppShell({
           page={
         // On desktop the page is a window inside the resizable area (see AgentWorkspace) and scrolls
         // on its own; the sticky header stays at the top of that window.
-        <SidebarInset className="@container/page min-w-0 overflow-x-clip md:h-full md:overflow-y-auto md:rounded-2xl md:shadow-sm md:ring-1 md:ring-border">
+        <SidebarInset
+          className={cn(
+            "@container/page min-w-0 overflow-x-clip md:h-full md:rounded-2xl md:shadow-sm md:ring-1 md:ring-border",
+            // A full-bleed screen (the chat) fills the window and scrolls inside its own parts.
+            fullBleed ? "h-svh overflow-hidden md:h-full" : "md:overflow-y-auto",
+          )}
+        >
           <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-t-[inherit] border-b bg-background/50 backdrop-blur-md">
             <div className="flex w-full items-center justify-between px-4 lg:px-6">
               <div className="flex min-w-0 items-center gap-1 lg:gap-2">
@@ -252,9 +259,13 @@ export function AppShell({
               </div>
             </div>
           </header>
-          <div className="min-w-0 flex-1 p-4 md:p-6">
-            <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 md:gap-6">{children}</div>
-          </div>
+          {fullBleed ? (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+          ) : (
+            <div className="min-w-0 flex-1 p-4 md:p-6">
+              <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 md:gap-6">{children}</div>
+            </div>
+          )}
         </SidebarInset>
           }
         />

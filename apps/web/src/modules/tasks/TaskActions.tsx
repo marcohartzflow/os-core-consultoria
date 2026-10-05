@@ -7,6 +7,7 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { notifyError, notifySuccess } from "@/core/ui/feedback";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,8 @@ export function TaskActions({
 }) {
   const { hasPermission } = useAuth();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Completing or reopening is running: the menu button spins and stays disabled, so it is not sent twice.
+  const [working, setWorking] = useState(false);
   const mayUpdate = hasPermission("tasks.task.update");
   const mayDelete = hasPermission("tasks.task.delete");
 
@@ -53,9 +56,11 @@ export function TaskActions({
             size="icon-sm"
             className="text-muted-foreground"
             aria-label={`Ações para ${task.title}`}
+            aria-busy={working}
+            disabled={working}
             onClick={(event) => event.stopPropagation()}
           >
-            <MoreHorizontal />
+            {working ? <Spinner /> : <MoreHorizontal />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" onClick={(event) => event.stopPropagation()}>
@@ -65,7 +70,12 @@ export function TaskActions({
               {mayUpdate ? "Abrir e editar" : "Abrir"}
             </DropdownMenuItem>
             {mayUpdate && (
-              <DropdownMenuItem onSelect={() => void transitionTask(task, onChanged)}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setWorking(true);
+                  void transitionTask(task, onChanged).finally(() => setWorking(false));
+                }}
+              >
                 {task.status === "OPEN" ? <Check /> : <RotateCcw />}
                 {task.status === "OPEN" ? "Concluir" : "Reabrir"}
               </DropdownMenuItem>

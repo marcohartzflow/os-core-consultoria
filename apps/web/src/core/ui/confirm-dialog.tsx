@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { FormError } from "./feedback";
 import {
@@ -18,7 +18,8 @@ import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Asks before an action that is hard to undo. Stays open while the action runs and shows its
- * error in place; closes only when the action succeeded.
+ * error in place; closes only when the action succeeded. Fields passed as `children` sit in a form:
+ * Enter confirms, and `confirmDisabled` holds the button until they are filled.
  */
 export function ConfirmDialog({
   open,
@@ -28,6 +29,7 @@ export function ConfirmDialog({
   confirmLabel,
   destructive = false,
   onConfirm,
+  confirmDisabled = false,
   children,
 }: {
   open: boolean;
@@ -37,10 +39,12 @@ export function ConfirmDialog({
   confirmLabel: string;
   destructive?: boolean;
   onConfirm: () => Promise<void>;
+  confirmDisabled?: boolean;
   children?: React.ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const formId = useId();
 
   async function confirm() {
     setBusy(true);
@@ -74,11 +78,25 @@ export function ConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
-        {children}
+        {children && (
+          <form
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!busy && !confirmDisabled) void confirm();
+            }}
+          >
+            {children}
+          </form>
+        )}
         <FormError error={error} />
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-          <Button variant={destructive ? "destructive" : "default"} disabled={busy} onClick={() => void confirm()}>
+          <Button
+            variant={destructive ? "destructive" : "default"}
+            disabled={busy || confirmDisabled}
+            onClick={() => void confirm()}
+          >
             {busy && <Spinner data-icon="inline-start" />}
             {confirmLabel}
           </Button>

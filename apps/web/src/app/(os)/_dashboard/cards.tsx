@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Bot, ChevronRight, Cog, ShieldCheck, ShieldX } from "lucide-react";
+import { Bot, ChevronRight, Cog, ScrollText, ShieldCheck, ShieldX } from "lucide-react";
 import type { AdministratorStatus, AuditEventView } from "@/core/api/types";
 import type { NavItem } from "@/core/shell/navigation";
-import { ErrorState } from "@/core/ui/feedback";
+import { EmptyState, ErrorState } from "@/core/ui/feedback";
 import { formatDateTime, formatRelative, initials } from "@/core/ui/format";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +185,12 @@ export function RecentActivityCard({
         ) : !events ? (
           <ListSkeleton />
         ) : events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum evento ainda.</p>
+          <EmptyState
+            icon={ScrollText}
+            title="Nenhum evento ainda"
+            description="As ações feitas no portal aparecem aqui."
+            className="p-4"
+          />
         ) : (
           <ItemGroup>
             {events.map((event, index) => (

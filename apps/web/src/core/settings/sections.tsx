@@ -21,6 +21,7 @@ import { useLoad } from "@/core/api/useLoad";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { MfaSettings } from "@/core/auth/MfaSettings";
 import { useStepUp } from "@/core/auth/StepUp";
+import { ChangePasswordForm } from "@/core/auth/ChangePasswordForm";
 import { PasswordInput } from "@/core/auth/PasswordInput";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { EmptyState, ErrorState, fieldError, FormError, notifyError, notifySuccess } from "@/core/ui/feedback";
@@ -216,104 +217,9 @@ export function SecuritySection() {
 }
 
 function PasswordSection() {
-  const { refresh } = useAuth();
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<unknown>(null);
-  const [mismatch, setMismatch] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const { withStepUp, stepUpDialog } = useStepUp();
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (next !== confirm) {
-      setMismatch(true);
-      return;
-    }
-    setMismatch(false);
-    setBusy(true);
-    setError(null);
-    try {
-      await withStepUp(() =>
-        api("/api/me/password", {
-          method: "POST",
-          body: { currentPassword: current, newPassword: next },
-        }),
-      );
-      setCurrent("");
-      setNext("");
-      setConfirm("");
-      notifySuccess("Senha alterada", "Suas outras sessões foram encerradas.");
-      await refresh();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const currentError = fieldError(error, "currentPassword");
-  const nextError = fieldError(error, "newPassword");
-
   return (
     <SettingsSection title="Senha" description="Ao alterar, todas as outras sessões são encerradas.">
-      <form onSubmit={submit} className="max-w-md">
-        <FieldGroup>
-          <FormError error={currentError || nextError ? null : error} />
-          <Field data-invalid={!!currentError}>
-            <FieldLabel htmlFor="current">Senha atual</FieldLabel>
-            <PasswordInput
-              id="current"
-              autoComplete="current-password"
-              required
-              aria-invalid={!!currentError}
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-            />
-            {currentError && <FieldError>{currentError}</FieldError>}
-          </Field>
-          <Field data-invalid={!!nextError}>
-            <FieldLabel htmlFor="next">Nova senha</FieldLabel>
-            <PasswordInput
-              id="next"
-              autoComplete="new-password"
-              required
-              minLength={12}
-              aria-invalid={!!nextError}
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-            />
-            {nextError ? (
-              <FieldError>{nextError}</FieldError>
-            ) : (
-              <FieldDescription>Mínimo de 12 caracteres. Senhas vazadas são recusadas.</FieldDescription>
-            )}
-          </Field>
-          <Field data-invalid={mismatch}>
-            <FieldLabel htmlFor="confirm">Confirmar nova senha</FieldLabel>
-            <PasswordInput
-              id="confirm"
-              autoComplete="new-password"
-              required
-              aria-invalid={mismatch}
-              value={confirm}
-              onChange={(e) => {
-                setConfirm(e.target.value);
-                setMismatch(false);
-              }}
-            />
-            {mismatch && <FieldError>As senhas não conferem.</FieldError>}
-          </Field>
-          <div>
-            <Button type="submit" disabled={busy}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Salvando…" : "Alterar senha"}
-            </Button>
-          </div>
-        </FieldGroup>
-      </form>
-      {stepUpDialog}
+      <ChangePasswordForm className="max-w-md" />
     </SettingsSection>
   );
 }
@@ -328,11 +234,12 @@ function NotificationEmailSection() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
+  // Which button is working, so only that one shows the spinner.
+  const [busy, setBusy] = useState<"save" | "remove" | null>(null);
   const { withStepUp, stepUpDialog } = useStepUp();
 
   async function save(notificationEmail: string | null) {
-    setBusy(true);
+    setBusy(notificationEmail ? "save" : "remove");
     setError(null);
     try {
       const body: NotificationEmailRequest = { currentPassword: password, notificationEmail };
@@ -347,7 +254,7 @@ function NotificationEmailSection() {
     } catch (e) {
       setError(e);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -403,12 +310,13 @@ function NotificationEmailSection() {
             {passwordError && <FieldError>{passwordError}</FieldError>}
           </Field>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Salvando…" : "Salvar"}
+            <Button type="submit" disabled={!!busy}>
+              {busy === "save" && <Spinner data-icon="inline-start" />}
+              {busy === "save" ? "Salvando…" : "Salvar"}
             </Button>
             {me.notificationEmail && (
-              <Button type="button" variant="outline" disabled={busy || !password} onClick={() => void save(null)}>
+              <Button type="button" variant="outline" disabled={!!busy || !password} onClick={() => void save(null)}>
+                {busy === "remove" && <Spinner data-icon="inline-start" />}
                 Remover e-mail secundário
               </Button>
             )}

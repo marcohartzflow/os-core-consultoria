@@ -67,6 +67,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TYPE_OPTIONS: FacetOption[] = [
   { value: "system", label: "Sistema", icon: ShieldCheck },
@@ -320,7 +321,9 @@ export default function RolesPage() {
       {editing && (
         <RoleDialog
           role={editing === "new" ? null : editing}
-          permissions={catalog ?? EMPTY_PERMISSIONS}
+          permissions={mayReadCatalog ? catalog : EMPTY_PERMISSIONS}
+          permissionsError={mayReadCatalog ? catalogLoad.error : null}
+          onRetryPermissions={catalogLoad.retry}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -516,11 +519,16 @@ function PermissionCatalog({
 function RoleDialog({
   role,
   permissions,
+  permissionsError,
+  onRetryPermissions,
   onClose,
   onSaved,
 }: {
   role: RoleSummary | null;
-  permissions: PermissionDefinition[];
+  /** Null while the catalog loads; empty when the person may not read it. */
+  permissions: PermissionDefinition[] | null;
+  permissionsError: unknown;
+  onRetryPermissions: () => void;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -532,7 +540,7 @@ function RoleDialog({
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
-  const groups = useMemo(() => groupByModule(permissions), [permissions]);
+  const groups = useMemo(() => groupByModule(permissions ?? EMPTY_PERMISSIONS), [permissions]);
 
   function toggle(keys: string[], checked: boolean) {
     const next = new Set(selected);
@@ -607,7 +615,15 @@ function RoleDialog({
               />
               {descriptionError && <FieldError>{descriptionError}</FieldError>}
             </Field>
-            {groups.length === 0 ? (
+            {permissionsError ? (
+              <ErrorState error={permissionsError} onRetry={onRetryPermissions} className="p-4" />
+            ) : !permissions ? (
+              <div className="flex flex-col gap-2" aria-busy="true" aria-label="Carregando permissões">
+                {Array.from({ length: 4 }, (_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : groups.length === 0 ? (
               <FieldDescription>
                 {role ? `${permissionCount(role.permissions.length)}.` : "Sem acesso ao catálogo de permissões."}
               </FieldDescription>

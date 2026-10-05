@@ -65,6 +65,9 @@ export function UserPicker({
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<UserSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
+  // A search is on its way: set on typing, so the previous results never pass for the answer.
+  const [searching, setSearching] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!open || !mayList) return;
@@ -77,22 +80,27 @@ export function UserPicker({
           if (!active) return;
           setResults(page.content);
           setFailed(false);
+          setSearching(false);
         },
-        () => active && setFailed(true),
+        () => {
+          if (!active) return;
+          setFailed(true);
+          setSearching(false);
+        },
       );
     }, SEARCH_DELAY_MS);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [open, mayList, search]);
+  }, [open, mayList, search, attempt]);
 
   function pick(next: PickedUser | null) {
     onChange(next);
     setOpen(false);
   }
 
-  const loading = mayList && results === null && !failed;
+  const loading = mayList && (searching || (results === null && !failed));
 
   return (
     <Popover
@@ -124,7 +132,15 @@ export function UserPicker({
       <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-0">
         {/* Results come filtered from the API, so cmdk must not filter them again. */}
         <Command shouldFilter={false}>
-          {mayList && <CommandInput placeholder="Buscar por nome ou e-mail…" value={search} onValueChange={setSearch} />}
+          {mayList && (
+            <CommandInput
+              placeholder="Buscar por nome ou e-mail…" value={search}
+              onValueChange={(next) => {
+                setSearch(next);
+                setSearching(true);
+              }}
+            />
+          )}
           <CommandList>
             <CommandGroup>
               <CommandItem value="__none" onSelect={() => pick(null)}>
@@ -155,10 +171,22 @@ export function UserPicker({
                       Buscando…
                     </div>
                   )}
-                  {failed && (
-                    <p className="px-2 py-3 text-sm text-destructive">Não foi possível buscar as pessoas.</p>
+                  {failed && !loading && (
+                    <div className="flex items-center justify-between gap-2 px-2 py-2 text-sm text-destructive">
+                      Não foi possível buscar as pessoas.
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSearching(true);
+                          setAttempt((n) => n + 1);
+                        }}
+                      >
+                        Tentar novamente
+                      </Button>
+                    </div>
                   )}
-                  {results?.map((user) => (
+                  {!loading && results?.map((user) => (
                     <CommandItem
                       key={user.id}
                       value={user.id}
@@ -168,7 +196,7 @@ export function UserPicker({
                       <Check className={cn(value?.id !== user.id && "opacity-0")} />
                     </CommandItem>
                   ))}
-                  {results && results.length === 0 && (
+                  {!loading && results && results.length === 0 && (
                     <p className="px-2 py-3 text-sm text-muted-foreground">Ninguém encontrado.</p>
                   )}
                 </CommandGroup>

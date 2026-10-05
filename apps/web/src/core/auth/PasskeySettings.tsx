@@ -182,11 +182,13 @@ export function PasskeySettings({
         confirmLabel="Remover"
         destructive
         onConfirm={remove}
+        confirmDisabled={!removePassword}
       >
         <Field>
           <FieldLabel htmlFor="passkey-remove-password">Senha atual</FieldLabel>
           <PasswordInput
             id="passkey-remove-password"
+            autoFocus
             autoComplete="current-password"
             value={removePassword}
             onChange={(e) => setRemovePassword(e.target.value)}

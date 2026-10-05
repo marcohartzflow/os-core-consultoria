@@ -202,14 +202,14 @@ function UserDetail({
         <div className="flex flex-wrap items-center gap-2">
           {mayResend && (
             <Button variant="outline" disabled={busy} onClick={() => void resend()}>
-              <Mail data-icon="inline-start" />
+              {busy ? <Spinner data-icon="inline-start" /> : <Mail data-icon="inline-start" />}
               Reenviar convite
             </Button>
           )}
           {mayToggle &&
             (user.status === "DISABLED" ? (
               <Button variant="outline" disabled={busy} onClick={() => void enable()}>
-                <UserCheck data-icon="inline-start" />
+                {busy ? <Spinner data-icon="inline-start" /> : <UserCheck data-icon="inline-start" />}
                 Reativar
               </Button>
             ) : (
@@ -327,6 +327,7 @@ function UserDetail({
                       <ItemActions>
                         {user.status === "DISABLED" ? (
                           <Button variant="outline" size="sm" disabled={busy} onClick={() => void enable()}>
+                            {busy && <Spinner data-icon="inline-start" />}
                             Reativar
                           </Button>
                         ) : (
