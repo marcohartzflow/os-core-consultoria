@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Brain, Database, Keyboard, Settings2, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { api } from "@/core/api/client";
-import type { ToolView } from "@/core/api/types";
 import { useAgentPreferences } from "./preferences";
 import { useOpenSettings } from "@/core/settings/SettingsDialog";
-import { ErrorState } from "@/core/ui/feedback";
+import { ToolPermissions } from "./chat/ToolPermissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,7 +12,6 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,51 +54,6 @@ function SwitchRow({
   );
 }
 
-function ToolsList() {
-  const [tools, setTools] = useState<ToolView[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let current = true;
-    api<ToolView[]>("/api/ai/tools").then(
-      (list) => current && setTools(list),
-      (e: unknown) => current && setError(e),
-    );
-    return () => {
-      current = false;
-    };
-  }, [attempt]);
-
-  if (error) {
-    return (
-      <ErrorState
-        error={error}
-        onRetry={() => {
-          setError(null);
-          setTools(null);
-          setAttempt((n) => n + 1);
-        }}
-        className="p-6"
-      />
-    );
-  }
-  if (!tools) return <Skeleton className="h-40 w-full" />;
-  return (
-    <ItemGroup className="gap-2">
-      {tools.map((tool) => (
-        <Item key={tool.name} variant="outline" size="sm">
-          <ItemContent className="min-w-0">
-            <ItemTitle className="font-mono text-xs">{tool.name}</ItemTitle>
-            <ItemDescription className="line-clamp-2">{tool.description}</ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            {tool.destructive ? <Badge variant="destructive">Pede confirmação</Badge> : <Badge variant="secondary">Leitura</Badge>}
-          </ItemActions>
-        </Item>
-      ))}
-    </ItemGroup>
-  );
-}
 
 const SHORTCUTS: [string[], string][] = [
   [["⌘", "I"], "Abrir ou fechar o assistente"],
@@ -124,7 +75,8 @@ export function AgentSettings({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  conversationCount: number;
+  /** Null while the conversations are still loading. */
+  conversationCount: number | null;
   onDeleteAll: () => void;
 }) {
   const [preferences, update] = useAgentPreferences();
@@ -132,12 +84,13 @@ export function AgentSettings({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b p-6">
+      {/* Same frame as the portal's settings: a fixed size, so switching tabs never resizes the window. */}
+      <DialogContent className="flex h-[min(44rem,calc(100svh-2rem))] flex-col gap-0 overflow-hidden p-0 md:max-w-3xl lg:max-w-5xl">
+        <DialogHeader className="shrink-0 border-b p-6">
           <DialogTitle>Configurações do assistente</DialogTitle>
           <DialogDescription>Valem neste navegador. O assistente age sempre com as suas permissões.</DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="general" orientation="vertical" className="min-h-0 flex-row gap-0">
+        <Tabs defaultValue="general" orientation="vertical" className="min-h-0 flex-1 flex-row gap-0">
           <TabsList className="h-auto w-48 shrink-0 items-stretch self-start rounded-none bg-transparent p-3 *:data-[slot=tabs-trigger]:justify-start">
             <TabsTrigger value="general">
               <Settings2 />
@@ -153,7 +106,7 @@ export function AgentSettings({
             </TabsTrigger>
             <TabsTrigger value="tools">
               <Wrench />
-              Ferramentas
+              Permissões
             </TabsTrigger>
             <TabsTrigger value="data">
               <Database />
@@ -164,7 +117,7 @@ export function AgentSettings({
               Atalhos
             </TabsTrigger>
           </TabsList>
-          <div className="max-h-[60vh] min-w-0 flex-1 overflow-y-auto border-l p-6">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto border-l p-6">
             <TabsContent value="general">
               <FieldGroup>
                 <Field orientation="horizontal">
@@ -195,8 +148,8 @@ export function AgentSettings({
                 />
                 <SwitchRow
                   id="agent-tools"
-                  label="Mostrar ferramentas usadas"
-                  description="Exibe na conversa cada consulta que o assistente fez ao portal."
+                  label="Mostrar as etapas de cada resposta"
+                  description="Mostra acima da resposta o que o assistente consultou e fez no portal."
                   checked={preferences.showTools}
                   onChange={(showTools) => update({ showTools })}
                 />
@@ -271,13 +224,7 @@ export function AgentSettings({
             </TabsContent>
 
             <TabsContent value="tools">
-              <FieldGroup>
-                <FieldDescription>
-                  O que o assistente pode fazer por você. A lista vem das suas permissões: quem ajusta é um
-                  administrador, em Roles e permissões. Ações que alteram dados pedem sua confirmação antes.
-                </FieldDescription>
-                <ToolsList />
-              </FieldGroup>
+              <ToolPermissions />
             </TabsContent>
 
             <TabsContent value="data">
@@ -315,13 +262,15 @@ export function AgentSettings({
                   <ItemContent>
                     <ItemTitle>Excluir todas as conversas</ItemTitle>
                     <ItemDescription>
-                      {conversationCount === 0
+                      {conversationCount === null
+                        ? "Contando as conversas…"
+                        : conversationCount === 0
                         ? "Nenhuma conversa para excluir."
                         : `Apaga as ${conversationCount} conversas de forma definitiva.`}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
-                    <Button variant="destructive" size="sm" disabled={conversationCount === 0} onClick={onDeleteAll}>
+                    <Button variant="destructive" size="sm" disabled={!conversationCount} onClick={onDeleteAll}>
                       Excluir tudo
                     </Button>
                   </ItemActions>

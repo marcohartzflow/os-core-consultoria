@@ -5,14 +5,14 @@ import { useCallback, useSyncExternalStore } from "react";
 /**
  * How the assistant panel behaves for this person, kept in this browser only (a convenience, not
  * a setting of the account). Fields marked "preview" are shown in the settings but not sent to
- * the server yet; the model and its instructions are defined by the administrators.
+ * the server yet.
  */
 export interface AgentPreferences {
   enterToSend: boolean;
   showTools: boolean;
   autoNavigate: boolean;
   textSize: "sm" | "md" | "lg";
-  /** preview */
+  /** Id of the model picked; empty or no longer offered means the server's default. */
   model: string;
   /** preview */
   tone: "equilibrado" | "conciso" | "detalhado" | "formal";
@@ -29,7 +29,7 @@ export const DEFAULT_PREFERENCES: AgentPreferences = {
   showTools: true,
   autoNavigate: true,
   textSize: "md",
-  model: "claude-opus-5",
+  model: "",
   tone: "equilibrado",
   instructions: "",
   memory: false,
@@ -80,15 +80,14 @@ export function clearAgentPreferences() {
   listeners.forEach((listener) => listener());
 }
 
-export function useAgentPreferences(): [AgentPreferences, (patch: Partial<AgentPreferences>) => void] {
+/** A change of the preferences: the fields to set, or a function of the preferences as they are now. */
+export type PreferencesPatch = Partial<AgentPreferences> | ((current: AgentPreferences) => Partial<AgentPreferences>);
+
+export function useAgentPreferences(): [AgentPreferences, (patch: PreferencesPatch) => void] {
   const preferences = useSyncExternalStore(subscribe, read, () => DEFAULT_PREFERENCES);
-  const update = useCallback((patch: Partial<AgentPreferences>) => write({ ...read(), ...patch }), []);
+  const update = useCallback((patch: PreferencesPatch) => {
+    const current = read();
+    write({ ...current, ...(typeof patch === "function" ? patch(current) : patch) });
+  }, []);
   return [preferences, update];
 }
-
-/** Models listed in the picker (preview: the server uses the model its configuration names). */
-export const MODELS = [
-  { id: "claude-opus-5", name: "Claude Opus 5", description: "Mais capaz, para tarefas complexas" },
-  { id: "claude-sonnet-5", name: "Claude Sonnet 5", description: "Equilíbrio entre qualidade e velocidade" },
-  { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Respostas rápidas do dia a dia" },
-];

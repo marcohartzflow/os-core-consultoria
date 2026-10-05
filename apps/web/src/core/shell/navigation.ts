@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ScrollText, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { LayoutDashboard, ScrollText, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
 import { moduleNavigation, moduleQuickCreate } from "@/modules/navigation";
 
 export interface NavItem {
@@ -18,7 +18,13 @@ export interface NavSection {
 /** Core sections first, client modules after, administration last. */
 export function navigationFor(hasPermission: (permission: string) => boolean): NavSection[] {
   const sections: NavSection[] = [
-    { title: "Início", items: [{ label: "Painel", href: "/", icon: LayoutDashboard }] },
+    {
+      title: "Início",
+      items: [
+        { label: "Painel", href: "/", icon: LayoutDashboard },
+        { label: "Assistente", href: "/chat", icon: Sparkles, permission: "ai.chat.use" },
+      ],
+    },
     ...moduleNavigation,
     {
       title: "Administração",

@@ -1,19 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { createContext, memo, useContext, useMemo, useState } from "react";
+import { marked } from "marked";
+import remend from "remend";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { internalPath } from "./stream";
 import { Button } from "@/components/ui/button";
 
+/** The text is still streaming: controls that act on the whole text (copy) wait for the end. */
+const Streaming = createContext(false);
+
 function CodeBlock({ children }: { children: React.ReactNode }) {
+  const streaming = useContext(Streaming);
   const [copied, setCopied] = useState(false);
   const text = extractText(children);
   return (
     <div className="group/code relative my-3">
       <pre className="overflow-x-auto rounded-xl bg-muted p-3 font-mono text-xs leading-relaxed">{children}</pre>
+      {!streaming && (
       <Button
         variant="ghost"
         size="icon-xs"
@@ -28,6 +35,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
       >
         {copied ? <Check /> : <Copy />}
       </Button>
+      )}
     </div>
   );
 }
@@ -87,14 +95,35 @@ const components: Components = {
   },
 };
 
+const Block = memo(
+  function Block({ text }: { text: string }) {
+    return (
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml disallowedElements={["img"]}>
+        {text}
+      </ReactMarkdown>
+    );
+  },
+  (previous, next) => previous.text === next.text,
+);
+
 /**
- * Assistant text as Markdown (GitHub flavour). Raw HTML is dropped and images are not rendered,
- * so a reply can neither inject markup nor make the browser fetch an address it chose.
+ * Assistant text as Markdown (GitHub flavour), after the AI SDK cookbook's "Markdown chatbot with
+ * memoization": the text is split into top-level blocks (marked's lexer) and each block renders
+ * only when it changes, so a long answer does not re-render as every token arrives. While streaming,
+ * unfinished syntax (an open code fence, half a bold) is closed with remend, the helper Streamdown
+ * uses, so the layout does not jump. Raw HTML is dropped and images are not rendered, so a reply can
+ * neither inject markup nor make the browser fetch an address it chose.
  */
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
+  const blocks = useMemo(() => {
+    const source = streaming ? remend(text) : text;
+    return marked.lexer(source).map((token) => token.raw);
+  }, [text, streaming]);
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml disallowedElements={["img"]}>
-      {text}
-    </ReactMarkdown>
+    <Streaming.Provider value={streaming}>
+      {blocks.map((block, index) => (
+        <Block key={index} text={block} />
+      ))}
+    </Streaming.Provider>
   );
 }

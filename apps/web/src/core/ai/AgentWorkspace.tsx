@@ -1,10 +1,12 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Layout, PanelSize } from "react-resizable-panels";
 import { usePanelRef } from "react-resizable-panels";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { AgentPanel } from "./AgentPanel";
+import { AgentChatProvider } from "./useAgentChat";
 import { AGENT_LAYOUT_COOKIE } from "./layout-cookie";
 import { AgentWindowContext, type AgentWindow } from "./agent-context";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -26,7 +28,9 @@ function saveLayout(layout: Layout) {
  */
 export function AgentWorkspace({ page, defaultLayout }: { page: React.ReactNode; defaultLayout?: Layout }) {
   const { hasPermission } = useAuth();
-  const available = hasPermission("ai.chat.use");
+  // The chat page is the assistant itself: no second window next to it.
+  const onChatPage = usePathname().startsWith("/chat");
+  const available = hasPermission("ai.chat.use") && !onChatPage;
   const isMobile = useIsMobile();
   const panel = usePanelRef();
   const initiallyOpen = (defaultLayout?.agent ?? 0) > 0;
@@ -87,12 +91,34 @@ export function AgentWorkspace({ page, defaultLayout }: { page: React.ReactNode;
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [available, value]);
 
+  // Same window as below, without the agent next to it.
+  const pageWindow = (children: React.ReactNode) => (
+    // The group sets height: 100% inline, so the screen height lives on this wrapper (a sibling of
+    // the sidebar, which also lets the inset spacing follow the sidebar's state).
+    <div className="h-svh min-w-0 flex-1 md:peer-data-[variant=inset]:py-2 md:peer-data-[variant=inset]:pr-2 md:peer-data-[variant=inset]:peer-data-[state=collapsed]:pl-2">
+      {children}
+    </div>
+  );
+
+  // One assistant state for the panel and the chat page: the conversation and a turn in progress
+  // carry over between them. Screens the agent points to open by themselves only from the panel.
+  const withChat = (children: React.ReactNode) =>
+    hasPermission("ai.chat.use") ? (
+      <AgentChatProvider navigate={!onChatPage}>{children}</AgentChatProvider>
+    ) : (
+      children
+    );
+
+  if (onChatPage) {
+    return withChat(<AgentWindowContext.Provider value={value}>{pageWindow(page)}</AgentWindowContext.Provider>);
+  }
+
   if (!available) {
     return <AgentWindowContext.Provider value={value}>{page}</AgentWindowContext.Provider>;
   }
 
   if (isMobile) {
-    return (
+    return withChat(
       <AgentWindowContext.Provider value={value}>
         {page}
         <Sheet open={open} onOpenChange={setOpen}>
@@ -102,50 +128,48 @@ export function AgentWorkspace({ page, defaultLayout }: { page: React.ReactNode;
             {mounted && <AgentPanel />}
           </SheetContent>
         </Sheet>
-      </AgentWindowContext.Provider>
+      </AgentWindowContext.Provider>,
     );
   }
 
-  return (
+  return withChat(
     <AgentWindowContext.Provider value={value}>
-      {/* The group sets height: 100% inline, so the screen height lives on this wrapper (a sibling of
-          the sidebar, which also lets the inset spacing follow the sidebar's state). */}
-      <div className="h-svh min-w-0 flex-1 md:peer-data-[variant=inset]:py-2 md:peer-data-[variant=inset]:pr-2 md:peer-data-[variant=inset]:peer-data-[state=collapsed]:pl-2">
-      <ResizablePanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={saveLayout}>
-        <ResizablePanel id="page" minSize="40%">
-          {page}
-        </ResizablePanel>
-        <ResizableHandle
-          withHandle
-          disabled={!open}
-          aria-label="Redimensionar o assistente"
-          className={cn(
-            "w-2 bg-transparent after:w-2 focus-visible:ring-0 [&>div]:h-10 [&>div]:opacity-0 [&>div]:transition-opacity hover:[&>div]:opacity-100 focus-visible:[&>div]:bg-ring focus-visible:[&>div]:opacity-100",
-            !open && "pointer-events-none w-0",
-          )}
-        />
-        <ResizablePanel
-          id="agent"
-          panelRef={panel}
-          collapsible
-          collapsedSize={0}
-          defaultSize={initiallyOpen ? `${defaultLayout!.agent}%` : 0}
-          minSize={360}
-          maxSize="60%"
-          onResize={onResize}
-        >
-          <aside
-            aria-label="Assistente"
+      {pageWindow(
+        <ResizablePanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={saveLayout}>
+          <ResizablePanel id="page" minSize="40%">
+            {page}
+          </ResizablePanel>
+          <ResizableHandle
+            withHandle
+            disabled={!open}
+            aria-label="Redimensionar o assistente"
             className={cn(
-              "flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-background shadow-sm ring-1 ring-border",
-              !open && "invisible",
+              "w-2 bg-transparent after:w-2 focus-visible:ring-0 [&>div]:h-10 [&>div]:opacity-0 [&>div]:transition-opacity hover:[&>div]:opacity-100 focus-visible:[&>div]:bg-ring focus-visible:[&>div]:opacity-100",
+              !open && "pointer-events-none w-0",
             )}
+          />
+          <ResizablePanel
+            id="agent"
+            panelRef={panel}
+            collapsible
+            collapsedSize={0}
+            defaultSize={initiallyOpen ? `${defaultLayout!.agent}%` : 0}
+            minSize={360}
+            maxSize="60%"
+            onResize={onResize}
           >
-            {mounted && <AgentPanel />}
-          </aside>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-      </div>
-    </AgentWindowContext.Provider>
+            <aside
+              aria-label="Assistente"
+              className={cn(
+                "flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-background shadow-sm ring-1 ring-border",
+                !open && "invisible",
+              )}
+            >
+              {mounted && <AgentPanel />}
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>,
+      )}
+    </AgentWindowContext.Provider>,
   );
 }

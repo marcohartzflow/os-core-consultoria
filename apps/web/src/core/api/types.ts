@@ -8,6 +8,7 @@ import type {
   ConversationSummary,
   InvitationIssued,
   MeResponse,
+  ModelView,
   MfaStatus,
   NotificationEmailRequest,
   AuditEventPage,
@@ -23,6 +24,7 @@ import type {
   SessionInfo,
   Setup,
   SetupRequest,
+  ToolSetting,
   ToolView,
   UserSummary,
 } from "@maximusflow/contracts";
@@ -36,6 +38,7 @@ export type {
   ConversationSummary,
   InvitationIssued,
   MfaStatus,
+  ModelView,
   NotificationEmailRequest,
   Passkey,
   PasswordRequest,
@@ -46,6 +49,7 @@ export type {
   RoleRef,
   RoleSummary,
   SessionInfo,
+  ToolSetting,
   ToolView,
   UserSummary,
 };
