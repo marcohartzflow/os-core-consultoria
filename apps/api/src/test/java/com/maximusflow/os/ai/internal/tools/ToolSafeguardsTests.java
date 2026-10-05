@@ -78,7 +78,8 @@ class ToolSafeguardsTests {
 		verify(audit).record(eq("ai.tool.failed"), eq("ai_tool"), eq("tasks_probe"),
 				eq(Map.of("argumentNames", List.of(), "argumentsSha256", ToolArguments.sha256("{}"), "reason",
 						"AuthorizationDeniedException")));
-		assertThat(events).containsExactly(new ToolEvents.ToolFailed("tasks_probe", "sem permissão"));
+		assertThat(events).containsExactly(new ToolEvents.ToolStarted("tasks_probe"),
+				new ToolEvents.ToolFailed("tasks_probe", "sem permissão"));
 	}
 
 	@Test

@@ -167,7 +167,7 @@ browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Sprin
   | `frontend` | caddy, web | não |
   | `app` | web, api | não |
   | `database` | postgres, migrate, api | não |
-  | `egress` | api | sim (Anthropic, Have I Been Pwned, SMTP) |
+  | `egress` | api | sim (Anthropic, OpenAI se configurada, Have I Been Pwned, SMTP) |
 
   O Postgres só é alcançável pelo `migrate` e pela API; o web e o Postgres não saem para a internet.
 - IP do cliente (ASVS 15.3.4). Quem decide o IP do cliente é o Caddy, e ele repassa um único endereço no `X-Forwarded-For` (`header_up X-Forwarded-For {client_ip}` no `Caddyfile`). Por padrão o Caddy não confia em nenhum proxy e ignora `X-Forwarded-*` vindos de fora ([`trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies)): o IP do cliente é o endereço que conectou nele. O Next repassa o cabeçalho sem mudar, e o Tomcat (`forward-headers-strategy: native`, [RemoteIpValve](https://tomcat.apache.org/tomcat-11.0-doc/config/valve.html#Remote_IP_Valve)) aceita porque a conexão vem do container web, que está numa faixa privada (padrão de `server.tomcat.remoteip.internal-proxies` no Spring Boot). Não mude essa propriedade: o deploy de referência não precisa dela.
@@ -211,6 +211,7 @@ Segredos não ficam no `.env` nem em variáveis de ambiente: ficam em `deploy/se
 | `bootstrap_admin_password` | gerado | Senha inicial do primeiro administrador (`os.iam.bootstrap.admin-password`); trocada no primeiro login. Esvazie o arquivo depois |
 | `mfa_encryption_key` | gerado | Cifra os segredos TOTP. Nunca troque: todos precisariam reconfigurar o segundo fator. Guarde uma cópia com a chave privada do backup, pois o backup sem ela não restaura o MFA |
 | `anthropic_api_key` | vazio | Chave da Anthropic; preencha antes de subir |
+| `openai_api_key` | vazio | Chave da OpenAI, opcional. Vazio, os modelos GPT de `os.ai.models` não aparecem no seletor. Preencher inclui a OpenAI como suboperadora (LGPD): registre no inventário de tratamento |
 | `mail_password` | vazio | Senha do SMTP; preencha se o servidor autentica |
 
 O diretório fica com permissão `700` (só o dono lê no host); os arquivos com `644`. Não dá para usar `600`: o Compose monta secrets de arquivo como bind mount, com o dono e a permissão do host (`uid`, `gid` e `mode` são ignorados nesse caso, [referência do Compose](https://docs.docker.com/reference/compose-file/services/#secrets)), e quem lê não é o dono dos arquivos: o usuário `postgres` (uid 999) roda o `postgres-roles.sh`, a API e o `migrate` rodam com uid 1001. Um grupo também não resolve: o usuário do deploy só pode atribuir grupos de que faz parte, e o entrypoint do Postgres (`gosu`) descarta grupos extras. Quem impede os outros usuários do host é o diretório `700`; dentro de cada container só roda o próprio usuário. As senhas do banco só são lidas na criação do volume (`postgres-roles.sh`). Para trocar uma depois, rode `docker compose exec postgres psql -U postgres -d os -c '\password os_app'` (ou `os_owner`, `postgres`), grave o mesmo valor no arquivo correspondente de `secrets/` e reinicie (`docker compose up -d --force-recreate migrate api`).

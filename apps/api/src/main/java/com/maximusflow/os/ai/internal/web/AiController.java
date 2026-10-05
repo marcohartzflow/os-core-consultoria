@@ -1,29 +1,35 @@
 package com.maximusflow.os.ai.internal.web;
 
-import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import com.maximusflow.os.ai.internal.AiProperties;
+import com.maximusflow.os.ai.internal.application.AgentModels;
 import com.maximusflow.os.ai.internal.application.AgentService;
 import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
-import com.maximusflow.os.ai.internal.tools.ToolEvents;
+import com.maximusflow.os.ai.internal.application.ToolPermissionService;
+import com.maximusflow.os.ai.internal.application.TurnTimedOutException;
+import com.maximusflow.os.ai.internal.tools.TurnCancelledException;
 import com.maximusflow.os.common.RateLimiter;
 import com.maximusflow.os.common.audit.AuditContext;
 import com.maximusflow.os.common.audit.AuditOrigin;
+import com.maximusflow.os.common.error.ConflictException;
+import com.maximusflow.os.common.error.DomainRuleException;
+import com.maximusflow.os.common.error.NotFoundException;
 import com.maximusflow.os.common.error.RateLimitedException;
 import com.maximusflow.os.common.logging.RequestLoggingContextFilter;
 import com.maximusflow.os.common.security.CurrentUser;
-import com.maximusflow.os.common.ui.UiAction;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -33,13 +39,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.concurrent.DelegatingSecurityContextRunnable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -57,11 +68,22 @@ class AiController {
 	record CreateConversationRequest(@Nullable @Size(max = 200) String title) {
 	}
 
-	/** The configured {@code os.ai.max-user-message-length} is applied by {@link AgentService}. */
-	record MessageRequest(@NotBlank @Size(max = AiProperties.MAX_USER_MESSAGE_LENGTH_CEILING) String text) {
+	record RenameConversationRequest(@NotBlank @Size(max = 200) String title) {
+	}
+
+	/**
+	 * The configured {@code os.ai.max-user-message-length} is applied by {@link AgentService}. {@code model}
+	 * is one id of {@code GET /api/ai/models}; without it the default model answers.
+	 */
+	record MessageRequest(@NotBlank @Size(max = AiProperties.MAX_USER_MESSAGE_LENGTH_CEILING) String text,
+			@Nullable @Size(max = 100) String model) {
 	}
 
 	private final AgentService agent;
+
+	private final AgentModels models;
+
+	private final ToolPermissionService toolPermissions;
 
 	private final ConversationService conversations;
 
@@ -75,13 +97,23 @@ class AiController {
 
 	private final ConcurrentHashMap<UUID, AtomicInteger> inFlight = new ConcurrentHashMap<>();
 
+	/** Conversations with a turn running: one at a time each (Spring AI rewrites a conversation's memory). */
+	private final Set<UUID> runningConversations = ConcurrentHashMap.newKeySet();
+
+	private final TaskScheduler scheduler;
+
 	/** Turns started per person per minute (OWASP LLM10, ASVS 5.0 15.2.2), on top of the concurrency cap. */
 	private final RateLimiter turnsPerMinute;
 
-	AiController(AgentService agent, ConversationService conversations, PendingActionService pendingActions,
-			AsyncTaskExecutor applicationTaskExecutor, CurrentUser currentUser, AiProperties properties, Clock clock) {
+	AiController(AgentService agent, AgentModels models, ConversationService conversations,
+			PendingActionService pendingActions, ToolPermissionService toolPermissions,
+			AsyncTaskExecutor applicationTaskExecutor, TaskScheduler taskScheduler, CurrentUser currentUser,
+			AiProperties properties, Clock clock) {
+		this.scheduler = taskScheduler;
+		this.toolPermissions = toolPermissions;
 		this.turnsPerMinute = new RateLimiter(properties.turnsPerMinute(), Duration.ofMinutes(1), clock);
 		this.agent = agent;
+		this.models = models;
 		this.conversations = conversations;
 		this.pendingActions = pendingActions;
 		this.executor = applicationTaskExecutor;
@@ -92,6 +124,11 @@ class AiController {
 	@GetMapping("/tools")
 	List<AgentService.ToolView> tools() {
 		return this.agent.availableTools();
+	}
+
+	@GetMapping("/models")
+	List<AgentModels.ModelView> models() {
+		return this.agent.availableModels();
 	}
 
 	@GetMapping("/conversations")
@@ -111,9 +148,16 @@ class AiController {
 		return this.conversations.messages(id);
 	}
 
+	@PatchMapping("/conversations/{id}")
+	ConversationService.ConversationSummary rename(@PathVariable UUID id,
+			@Valid @RequestBody RenameConversationRequest body) {
+		return this.conversations.rename(id, body.title());
+	}
+
 	@DeleteMapping("/conversations/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	void delete(@PathVariable UUID id) {
+		requireIdle(id);
 		this.conversations.delete(id);
 	}
 
@@ -124,7 +168,7 @@ class AiController {
 
 	/**
 	 * One agent turn as a Server-Sent Events stream: {@code token} as the model writes, interleaved
-	 * with {@code tool_call}, {@code tool_failed}, {@code action_pending} and {@code ui_action}; then {@code done} with
+	 * with {@code thinking} (the model started reasoning; no reasoning text), {@code tool_call}, {@code tool_failed}, {@code action_pending} and {@code ui_action}; then {@code done} with
 	 * the full text (or {@code error}). The turn runs on a virtual thread carrying the caller's
 	 * security context. It ends when the client goes away or the turn timeout passes. One person starts
 	 * at most {@code os.ai.turns-per-minute} turns per minute and runs at most
@@ -136,144 +180,162 @@ class AiController {
 	 * {@code http.request.id} and {@code client.ip} (OWASP ASVS 5.0 16.2.1).
 	 */
 	@PostMapping(value = "/conversations/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-	SseEmitter send(@PathVariable UUID id, @Valid @RequestBody MessageRequest body, HttpServletRequest request) {
-		UUID userId = this.currentUser.require().getId();
-		if (!this.turnsPerMinute.tryAcquire(userId.toString())) {
-			security.warn("ai turn rate limit exceeded user={}", userId);
-			throw new RateLimitedException("Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo");
-		}
-		String clientIp = request.getRemoteAddr();
-		String requestId = RequestLoggingContextFilter.requestId(request);
-		Map<String, String> logContext = MDC.getCopyOfContextMap();
-		AtomicInteger running = this.inFlight.computeIfAbsent(userId, (k) -> new AtomicInteger());
-		if (running.incrementAndGet() > this.properties.maxConcurrentTurnsPerUser()) {
-			running.decrementAndGet();
-			throw new RateLimitedException("Aguarde a resposta anterior terminar");
-		}
-		Sink sink = new Sink(new SseEmitter(this.properties.turnTimeout().toMillis()));
-		Runnable turn = () -> {
-			if (logContext != null) {
-				MDC.setContextMap(logContext);
-			}
-			try {
-				AgentService.Reply reply = AuditContext.with(AuditOrigin.REST, requestId, clientIp,
-						() -> this.agent.chat(id, body.text(), sink::event, sink::uiAction, sink::token));
-				sink.done(reply.text());
-			}
-			catch (Sink.ClientGone ex) {
-				log.debug("agent turn abandoned conversation={}", id);
-			}
-			catch (Exception ex) {
-				log.warn("agent turn failed conversation={} reason={}", id, ex.getClass().getSimpleName());
-				sink.error(userFacing(ex));
-			}
-			finally {
-				running.decrementAndGet();
-				MDC.clear();
-			}
-		};
-		this.executor.execute(new DelegatingSecurityContextRunnable(turn));
-		return sink.emitter;
+	SseEmitter send(@PathVariable UUID id, @Valid @RequestBody MessageRequest body, HttpServletRequest request,
+			HttpServletResponse response) {
+		return stream(id, body.model(), request, response,
+				(turn) -> this.agent.chat(id, body.model(), body.text(), turn));
+	}
+
+	record ContinueRequest(@Nullable @Size(max = 100) String model) {
 	}
 
 	/**
-	 * Writes SSE frames. Tool listeners run on the model's threads inside a tool call and must never
-	 * throw (an exception there would mark a successful tool as failed), so they only note that the
-	 * client is gone; the token loop, which runs on the turn's own thread, then stops the turn.
+	 * The turn after the person confirmed or refused the actions of the last answer: the assistant
+	 * reports the outcome without a new message (human in the loop). Same stream, limits and audit
+	 * as a message; an {@code error} frame when the conversation does not end with such a decision.
 	 */
-	private static final class Sink {
+	@PostMapping(value = "/conversations/{id}/continue", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	SseEmitter continueAfterActions(@PathVariable UUID id,
+			@Valid @RequestBody(required = false) @Nullable ContinueRequest body, HttpServletRequest request,
+			HttpServletResponse response) {
+		String model = (body != null) ? body.model() : null;
+		return stream(id, model, request, response, (turn) -> this.agent.continueAfterActions(id, model, turn));
+	}
 
-		static final class ClientGone extends RuntimeException {
-
-			ClientGone() {
-				super("SSE client disconnected", null, false, false);
-			}
-
+	/**
+	 * Admits one agent turn and streams it ({@link TurnStream}). Before anything is spent: the
+	 * conversation must be the person's, the model must be offered, and the conversation must not have
+	 * a turn running already (two turns would rewrite each other's memory). Then the per-person limits:
+	 * {@code os.ai.turns-per-minute} and {@code os.ai.max-concurrent-turns-per-user}; beyond either, 429.
+	 *
+	 * <p>The turn runs on a virtual thread carrying the caller's security context. The audit origin,
+	 * client address and request id are captured here, on the request thread, and re-established on
+	 * the turn's thread with the log context (MDC), so the turn's audit rows are {@code REST} with the
+	 * person's address and the request id, and its log lines carry {@code http.request.id} and
+	 * {@code client.ip} (OWASP ASVS 5.0 16.2.1).
+	 */
+	private SseEmitter stream(UUID id, @Nullable String modelId, HttpServletRequest request,
+			HttpServletResponse response, Function<TurnStream, AgentService.Reply> run) {
+		UUID userId = this.currentUser.require().getId();
+		this.conversations.checkOwned(id);
+		// An unknown model is a 400 here, before the stream starts and before any limit is spent.
+		this.models.resolve(modelId);
+		if (!this.runningConversations.add(id)) {
+			throw new ConflictException("Aguarde a resposta desta conversa terminar");
 		}
-
-		private final SseEmitter emitter;
-
-		private final AtomicBoolean closed = new AtomicBoolean();
-
-		Sink(SseEmitter emitter) {
-			this.emitter = emitter;
-			emitter.onCompletion(() -> this.closed.set(true));
-			emitter.onTimeout(() -> {
-				this.closed.set(true);
-				emitter.complete();
-			});
-			emitter.onError((ex) -> this.closed.set(true));
+		AtomicInteger running = this.inFlight.computeIfAbsent(userId, (k) -> new AtomicInteger());
+		boolean started = false;
+		try {
+			if (!this.turnsPerMinute.tryAcquire(userId.toString())) {
+				security.warn("ai turn rate limit exceeded user={}", userId);
+				throw new RateLimitedException("Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo");
+			}
+			if (running.incrementAndGet() > this.properties.maxConcurrentTurnsPerUser()) {
+				running.decrementAndGet();
+				throw new RateLimitedException("Aguarde a resposta anterior terminar");
+			}
+			String clientIp = request.getRemoteAddr();
+			String requestId = RequestLoggingContextFilter.requestId(request);
+			Map<String, String> logContext = MDC.getCopyOfContextMap();
+			// no-transform: a proxy must pass each frame on as written. Without it the Next.js server's
+			// gzip (and any compressing proxy) holds the frames back and the answer arrives all at once.
+			// no-store keeps the conversation out of every cache, as for the rest of the API.
+			response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, no-transform");
+			response.setHeader("X-Accel-Buffering", "no");
+			TurnStream stream = new TurnStream(this.properties.turnTimeout(), this.scheduler);
+			Runnable turn = () -> {
+				if (logContext != null) {
+					MDC.setContextMap(logContext);
+				}
+				try {
+					AgentService.Reply reply = AuditContext.with(AuditOrigin.REST, requestId, clientIp,
+							() -> run.apply(stream));
+					stream.done(reply);
+				}
+				catch (TurnCancelledException ex) {
+					log.debug("agent turn abandoned conversation={}", id);
+				}
+				catch (RuntimeException ex) {
+					log.warn("agent turn failed conversation={} reason={}", id, ex.getClass().getSimpleName());
+					stream.error(userFacing(ex));
+				}
+				finally {
+					running.decrementAndGet();
+					this.runningConversations.remove(id);
+					MDC.clear();
+				}
+			};
+			this.executor.execute(new DelegatingSecurityContextRunnable(turn));
+			started = true;
+			return stream.emitter();
 		}
-
-		void token(String token) {
-			if (!write(SseEmitter.event().name("token").data(Map.of("text", token)))) {
-				throw new ClientGone();
-			}
-		}
-
-		void event(ToolEvents.Event event) {
-			switch (event) {
-				case ToolEvents.ToolCalled e -> write(SseEmitter.event().name("tool_call").data(Map.of("tool", e.tool())));
-				case ToolEvents.ToolFailed e -> write(
-						SseEmitter.event().name("tool_failed").data(Map.of("tool", e.tool(), "reason", e.reason())));
-				case ToolEvents.ActionPending e -> write(SseEmitter.event().name("action_pending")
-					.data(Map.of("actionId", e.actionId().toString(), "tool", e.tool(), "summary", e.summary(),
-							"arguments", e.arguments())));
-			}
-		}
-
-		void uiAction(UiAction action) {
-			switch (action) {
-				case UiAction.Navigate n -> write(SseEmitter.event().name("ui_action")
-					.data(Map.of("type", "navigate", "path", n.path(), "label", n.label())));
-			}
-		}
-
-		void done(String text) {
-			if (write(SseEmitter.event().name("done").data(Map.of("text", text)))) {
-				this.emitter.complete();
-			}
-		}
-
-		/** The response is already committed: an error is a frame, not a second HTTP status. */
-		void error(String message) {
-			if (write(SseEmitter.event().name("error").data(Map.of("message", message)))) {
-				this.emitter.complete();
-			}
-		}
-
-		private boolean write(SseEmitter.SseEventBuilder frame) {
-			if (this.closed.get()) {
-				return false;
-			}
-			try {
-				this.emitter.send(frame);
-				return true;
-			}
-			catch (IOException | IllegalStateException ex) {
-				this.closed.set(true);
-				return false;
+		finally {
+			// Refused before the turn ran (a limit, or the executor): give the slots back.
+			if (!started) {
+				this.runningConversations.remove(id);
 			}
 		}
+	}
 
+	/** {@code scope}: ONCE (default), CONVERSATION or ALWAYS, within the action's ceiling. */
+	record ConfirmRequest(ToolPermissionService.@Nullable Scope scope) {
 	}
 
 	@PostMapping("/actions/{id}/confirm")
-	PendingActionService.PendingActionView confirm(@PathVariable UUID id) {
-		return this.pendingActions.confirm(id);
+	PendingActionService.PendingActionView confirm(@PathVariable UUID id,
+			@RequestBody(required = false) @Nullable ConfirmRequest body) {
+		ToolPermissionService.Scope scope = (body != null && body.scope() != null) ? body.scope()
+				: ToolPermissionService.Scope.ONCE;
+		requireIdle(this.pendingActions.conversationOf(id));
+		return this.pendingActions.confirm(id, scope);
+	}
+
+	/** The assistant's Tools settings: each tool the person may use, with their choice and its options. */
+	@GetMapping("/tool-preferences")
+	List<ToolPermissionService.ToolSetting> toolPreferences() {
+		return this.toolPermissions.mine();
+	}
+
+	record ToolChoiceRequest(ToolPermissionService.Choice choice) {
+	}
+
+	@PutMapping("/tool-preferences/{tool}")
+	ToolPermissionService.ToolSetting chooseTool(@PathVariable String tool, @Valid @RequestBody ToolChoiceRequest body) {
+		return this.toolPermissions.choose(tool, body.choice());
+	}
+
+	/** Back to the defaults: reads run, actions ask. */
+	@DeleteMapping("/tool-preferences")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void resetToolPreferences() {
+		this.toolPermissions.reset();
 	}
 
 	@PostMapping("/actions/{id}/reject")
 	PendingActionService.PendingActionView reject(@PathVariable UUID id) {
+		requireIdle(this.pendingActions.conversationOf(id));
 		return this.pendingActions.reject(id);
 	}
 
-	private static String userFacing(Exception ex) {
-		if (ex instanceof RateLimitedException || ex instanceof com.maximusflow.os.common.error.DomainRuleException
-				|| ex instanceof com.maximusflow.os.common.error.NotFoundException) {
+	/**
+	 * A decision or a deletion waits for the conversation's running turn: the turn rewrites the
+	 * conversation's memory when it ends, and would drop the note or bring the conversation back.
+	 */
+	private void requireIdle(UUID conversationId) {
+		if (this.runningConversations.contains(conversationId)) {
+			throw new ConflictException("Aguarde a resposta desta conversa terminar");
+		}
+	}
+
+	/** What the person reads when a turn fails: our own messages as written, a generic text for anything else. */
+	private static String userFacing(RuntimeException ex) {
+		if (ex instanceof RateLimitedException || ex instanceof DomainRuleException || ex instanceof NotFoundException) {
 			return String.valueOf(ex.getMessage());
 		}
-		if (ex instanceof org.springframework.security.access.AccessDeniedException) {
+		if (ex instanceof TurnTimedOutException) {
+			return "A resposta passou do tempo limite. Tente de novo.";
+		}
+		if (ex instanceof AccessDeniedException) {
 			return "Você não tem permissão para usar o assistente";
 		}
 		return "O assistente não conseguiu responder agora. Tente de novo em instantes";

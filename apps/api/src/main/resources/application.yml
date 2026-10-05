@@ -56,10 +56,27 @@ spring:
     anthropic:
       api-key: ${ANTHROPIC_API_KEY:}
       chat:
-        model: claude-opus-5
+        # Default only; each turn names the model picked from os.ai.models.
+        model: claude-opus-5-5
         max-tokens: 16000
         cache-options:
           strategy: SYSTEM_ONLY
+    # Second provider, optional: without OPENAI_API_KEY its models are not offered.
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          # Same cap as Anthropic (LLM10). max_completion_tokens is the parameter current OpenAI models take.
+          max-completion-tokens: 16000
+    # Only the chat model of each starter; the OpenAI starter would also configure embedding, image,
+    # audio and moderation clients the portal never uses.
+    model:
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
     chat:
       memory:
         repository:
@@ -183,3 +200,43 @@ os:
     # Per person (OWASP LLM10): turns started per minute and turns running at once; beyond either, 429.
     turns-per-minute: 20
     max-concurrent-turns-per-user: 2
+    # Models a person may pick in the assistant, in picker order; the first one whose provider has an
+    # API key (spring.ai.<provider>.api-key) is the default. A fork trims or reorders this list. Ids
+    # from https://platform.claude.com/docs/en/about-claude/models/overview and
+    # https://developers.openai.com/api/docs/models (checked 2026-10-05).
+    models:
+      - id: claude-opus-5-5
+        provider: anthropic
+        name: Claude Opus 5.5
+        description: Complexo, agêntico e trabalho profissional
+        context: 1M
+      - id: claude-fable-5-1
+        provider: anthropic
+        name: Claude Fable 5.1
+        description: Raciocínio mais exigente e tarefas longas
+        context: 1M
+      - id: claude-sonnet-5-5
+        provider: anthropic
+        name: Claude Sonnet 5.5
+        description: Melhor equilíbrio entre velocidade e inteligência
+        context: 1M
+      - id: claude-haiku-4-5
+        provider: anthropic
+        name: Claude Haiku 4.5
+        description: Mais rápido, para o dia a dia
+        context: 200K
+      - id: gpt-6-astra
+        provider: openai
+        name: GPT-6 Astra
+        description: Mais capaz, para o trabalho mais exigente
+        context: 1M
+      - id: gpt-6.1-sol
+        provider: openai
+        name: GPT-6.1 Sol
+        description: Quase Astra em tarefas complexas, custo menor
+        context: 1M
+      - id: gpt-6-luna
+        provider: openai
+        name: GPT-6 Luna
+        description: Mais eficiente, para tarefas focadas
+        context: 1M

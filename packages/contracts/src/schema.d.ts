@@ -62,10 +62,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["delete_3"];
+        delete: operations["delete_2"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["rename_1"];
         trace?: never;
     };
     "/api/ai/conversations/{id}/actions": {
@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/conversations/{id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["continueAfterActions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/conversations/{id}/messages": {
         parameters: {
             query?: never;
@@ -94,6 +110,54 @@ export interface paths {
         get: operations["messages"];
         put?: never;
         post: operations["send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["models"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/tool-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["toolPreferences"];
+        put?: never;
+        post?: never;
+        delete: operations["resetToolPreferences"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/tool-preferences/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["chooseTool"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -670,7 +734,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["delete_2"];
+        delete: operations["delete_3"];
         options?: never;
         head?: never;
         patch?: never;
@@ -856,10 +920,18 @@ export interface components {
         };
         ChatMessage: {
             role: string;
+            steps: components["schemas"]["ToolStep"][];
             text: string;
         };
         CodeRequest: {
             code: string;
+        };
+        ConfirmRequest: {
+            /** @enum {string|null} */
+            scope: "ONCE" | "CONVERSATION" | "ALWAYS" | null;
+        };
+        ContinueRequest: {
+            model: string | null;
         };
         ConversationSummary: {
             /** Format: date-time */
@@ -912,6 +984,7 @@ export interface components {
             roles: string[];
         };
         MessageRequest: {
+            model: string | null;
             text: string;
         };
         Mfa: {
@@ -930,6 +1003,14 @@ export interface components {
             recoveryCodesLeft: number;
             required: boolean;
             totp: boolean;
+        };
+        ModelView: {
+            context: string;
+            description: string;
+            id: string;
+            isDefault: boolean;
+            name: string;
+            provider: string;
         };
         NotificationEmailRequest: {
             currentPassword: string;
@@ -993,6 +1074,9 @@ export interface components {
         };
         RecoveryCodes: {
             recoveryCodes: string[];
+        };
+        RenameConversationRequest: {
+            title: string;
         };
         RenameUserRequest: {
             name: string;
@@ -1068,6 +1152,32 @@ export interface components {
             password: string;
             token: string;
         };
+        ToolChoiceRequest: {
+            /** @enum {string} */
+            choice: "ALLOW" | "ASK" | "BLOCK";
+        };
+        ToolSetting: {
+            action: boolean;
+            allowAlwaysOff: boolean;
+            /** @enum {string} */
+            choice: "ALLOW" | "ASK" | "BLOCK";
+            choices: ("ALLOW" | "ASK" | "BLOCK")[];
+            description: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+            name: string;
+            /** @enum {string} */
+            risk: "LOW" | "MEDIUM" | "HIGH";
+        };
+        ToolStep: {
+            action: components["schemas"]["PendingActionView"] | null;
+            kind: string;
+            reason: string | null;
+            scope: string | null;
+            tool: string;
+        };
         ToolView: {
             description: string;
             destructive: boolean;
@@ -1106,6 +1216,8 @@ export type AuditEventView = components['schemas']['AuditEventView'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type ChatMessage = components['schemas']['ChatMessage'];
 export type CodeRequest = components['schemas']['CodeRequest'];
+export type ConfirmRequest = components['schemas']['ConfirmRequest'];
+export type ContinueRequest = components['schemas']['ContinueRequest'];
 export type ConversationSummary = components['schemas']['ConversationSummary'];
 export type CreateConversationRequest = components['schemas']['CreateConversationRequest'];
 export type CsrfToken = components['schemas']['CsrfToken'];
@@ -1119,6 +1231,7 @@ export type MessageRequest = components['schemas']['MessageRequest'];
 export type Mfa = components['schemas']['Mfa'];
 export type MfaRequest = components['schemas']['MfaRequest'];
 export type MfaStatus = components['schemas']['MfaStatus'];
+export type ModelView = components['schemas']['ModelView'];
 export type NotificationEmailRequest = components['schemas']['NotificationEmailRequest'];
 export type PageMetadata = components['schemas']['PageMetadata'];
 export type PagedModelRoleSummary = components['schemas']['PagedModelRoleSummary'];
@@ -1129,6 +1242,7 @@ export type PasswordRequest = components['schemas']['PasswordRequest'];
 export type PendingActionView = components['schemas']['PendingActionView'];
 export type PermissionDefinition = components['schemas']['PermissionDefinition'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
+export type RenameConversationRequest = components['schemas']['RenameConversationRequest'];
 export type RenameUserRequest = components['schemas']['RenameUserRequest'];
 export type RoleRef = components['schemas']['RoleRef'];
 export type RoleRequest = components['schemas']['RoleRequest'];
@@ -1141,6 +1255,9 @@ export type SseEmitter = components['schemas']['SseEmitter'];
 export type TaskRequest = components['schemas']['TaskRequest'];
 export type TaskSummary = components['schemas']['TaskSummary'];
 export type TokenAndPassword = components['schemas']['TokenAndPassword'];
+export type ToolChoiceRequest = components['schemas']['ToolChoiceRequest'];
+export type ToolSetting = components['schemas']['ToolSetting'];
+export type ToolStep = components['schemas']['ToolStep'];
 export type ToolView = components['schemas']['ToolView'];
 export type UserSummary = components['schemas']['UserSummary'];
 export type $defs = Record<string, never>;
@@ -1154,7 +1271,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -1233,7 +1354,7 @@ export interface operations {
             };
         };
     };
-    delete_3: {
+    delete_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -1250,6 +1371,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    rename_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameConversationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ConversationSummary"];
+                };
             };
         };
     };
@@ -1271,6 +1418,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PendingActionView"][];
+                };
+            };
+        };
+    };
+    continueAfterActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ContinueRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["SseEmitter"];
                 };
             };
         };
@@ -1319,6 +1492,90 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["SseEmitter"];
+                };
+            };
+        };
+    };
+    models: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ModelView"][];
+                };
+            };
+        };
+    };
+    toolPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ToolSetting"][];
+                };
+            };
+        };
+    };
+    resetToolPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    chooseTool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ToolSetting"];
                 };
             };
         };
@@ -2264,7 +2521,7 @@ export interface operations {
             };
         };
     };
-    delete_2: {
+    delete_3: {
         parameters: {
             query?: never;
             header?: never;

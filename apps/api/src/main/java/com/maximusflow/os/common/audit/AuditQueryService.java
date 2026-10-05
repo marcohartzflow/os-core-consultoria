@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -223,6 +224,27 @@ public class AuditQueryService {
 		count.from(matching);
 		count.select(cb.count());
 		return this.entityManager.createQuery(count).getSingleResult();
+	}
+
+	/** One entry of a person's own trail under a correlation id: what happened, on what, and its details (JSON). */
+	public record CorrelatedEntry(Instant occurredAt, String action, @Nullable String entityId,
+			@Nullable String details) {
+	}
+
+	/**
+	 * The entries a person recorded under one correlation id since a moment (the assistant shows which
+	 * tools the messages it still holds used). No permission of its own: the caller has already checked that the
+	 * correlation id is the person's (their conversation), and only their own entries come back.
+	 */
+	@Transactional(readOnly = true)
+	public List<CorrelatedEntry> ownEntries(String correlationId, UUID actorId, Collection<String> actions,
+			Instant since) {
+		return this.repository
+			.findByCorrelationIdAndActorIdAndActionInAndOccurredAtGreaterThanEqualOrderByOccurredAtAsc(correlationId,
+					actorId, actions, since)
+			.stream()
+			.map((e) -> new CorrelatedEntry(e.getOccurredAt(), e.getAction(), e.getEntityId(), e.getDetails()))
+			.toList();
 	}
 
 	/** The trail as the agent sees it: without IP addresses ({@link AuditEntryForAgent}). */

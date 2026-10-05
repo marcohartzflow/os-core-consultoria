@@ -9,6 +9,7 @@ import java.util.UUID;
 import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
+import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.ai.internal.tools.ReadOnlyTransactionToolCallback;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
 import com.maximusflow.os.ai.internal.tools.SafeToolExceptionProcessor;
@@ -64,6 +65,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AiSafeguardsTests {
+
+	@Autowired
+	AuditRecorder auditRecorder;
 
 	@Autowired
 	MockMvc mvc;
@@ -260,7 +264,8 @@ class AiSafeguardsTests {
 	}
 
 	private UUID park(RegisteredTool tool, UUID conversationId, String arguments) {
-		var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a));
+		var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a),
+				(input) -> null, this.auditRecorder);
 		String reply = stub.call(arguments, new ToolContext(Map.of()));
 		return UUID.fromString(reply.replaceAll(".*\"actionId\":\"([^\"]+)\".*", "$1"));
 	}

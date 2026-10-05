@@ -23,6 +23,9 @@ public interface PendingActionRepository extends JpaRepository<PendingAction, UU
 
 	List<PendingAction> findByConversationIdAndUserIdOrderByCreatedAtAsc(UUID conversationId, UUID userId);
 
+	List<PendingAction> findByConversationIdAndUserIdAndCreatedAtGreaterThanEqualOrderByCreatedAtAsc(
+			UUID conversationId, UUID userId, Instant since);
+
 	/** The notes the portal added to the conversation about resolved actions. */
 	@Query("select a.note from PendingAction a where a.conversationId = :conversationId and a.note is not null")
 	List<String> findNotesByConversationId(@Param("conversationId") UUID conversationId);

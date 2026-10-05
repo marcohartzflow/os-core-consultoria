@@ -1,6 +1,7 @@
 package com.maximusflow.os.ai.internal.tools;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -35,29 +36,24 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 
 	private final String conversationId;
 
-	private final @Nullable Consumer<ToolEvents.Event> listener;
-
-	private final @Nullable Consumer<UiAction> uiListener;
+	private final @Nullable TurnListener turn;
 
 	private final @Nullable String clientIp;
 
 	private final @Nullable Map<String, String> logContext;
 
 	public ContextPropagatingToolCallback(ToolCallback delegate, Supplier<SecurityContext> securityContext,
-			String conversationId, @Nullable Consumer<ToolEvents.Event> listener,
-			@Nullable Consumer<UiAction> uiListener) {
-		this(delegate, securityContext, conversationId, listener, uiListener, null, null);
+			String conversationId, @Nullable TurnListener turn) {
+		this(delegate, securityContext, conversationId, turn, null, null);
 	}
 
 	public ContextPropagatingToolCallback(ToolCallback delegate, Supplier<SecurityContext> securityContext,
-			String conversationId, @Nullable Consumer<ToolEvents.Event> listener,
-			@Nullable Consumer<UiAction> uiListener, @Nullable String clientIp,
+			String conversationId, @Nullable TurnListener turn, @Nullable String clientIp,
 			@Nullable Map<String, String> logContext) {
 		this.delegate = delegate;
 		this.securityContext = securityContext;
 		this.conversationId = conversationId;
-		this.listener = listener;
-		this.uiListener = uiListener;
+		this.turn = turn;
 		this.clientIp = clientIp;
 		this.logContext = logContext;
 	}
@@ -74,6 +70,13 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 
 	@Override
 	public String call(String toolInput, @Nullable ToolContext toolContext) {
+		// Stopped or abandoned: no tool runs after that, not even an action the person allowed.
+		if (this.turn != null && !this.turn.isOpen()) {
+			throw new TurnCancelledException();
+		}
+		UUID callId = UUID.randomUUID();
+		Consumer<ToolEvents.Event> events = (this.turn != null) ? (event) -> this.turn.tool(callId, event) : null;
+		Consumer<UiAction> ui = (this.turn != null) ? this.turn::ui : null;
 		SecurityContext previous = SecurityContextHolder.getContext();
 		Map<String, String> previousLogContext = MDC.getCopyOfContextMap();
 		SecurityContextHolder.setContext(this.securityContext.get());
@@ -82,7 +85,7 @@ public final class ContextPropagatingToolCallback implements ToolCallback {
 		}
 		try {
 			return AuditContext.with(AuditOrigin.AI_TOOL, this.conversationId, this.clientIp,
-					() -> ToolEvents.listen(this.listener, () -> UiActions.listen(this.uiListener,
+					() -> ToolEvents.listen(events, () -> UiActions.listen(ui,
 							() -> this.delegate.call(toolInput, toolContext))));
 		}
 		finally {

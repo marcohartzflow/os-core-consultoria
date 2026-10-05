@@ -16,7 +16,8 @@ Versões verificadas em 2026-09-28 nas fontes oficiais. Ao atualizar, confira a 
 | Spring Data JPA + Hibernate ORM | Boot-managed, Hibernate 7.4.x | | https://docs.spring.io/spring-data/jpa/reference/ e https://hibernate.org/orm/documentation/ |
 | Spring Modulith | 2.1.1 | Fronteiras de módulo verificadas em teste, eventos com registry JDBC | https://docs.spring.io/spring-modulith/reference/ |
 | Spring AI | 2.0.1 | Starter Anthropic, tool calling, chat memory | https://docs.spring.io/spring-ai/reference/ |
-| Spring AI Anthropic | idem | Modelo padrão do projeto: `claude-opus-5` | https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html |
+| Spring AI Anthropic | idem | Modelo padrão do projeto: `claude-opus-5-5` (lista em `os.ai.models`) | https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html |
+| Spring AI OpenAI | idem | Segundo provedor, opcional (`spring.ai.openai.api-key`); um `ChatClient` por provedor | https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html e https://docs.spring.io/spring-ai/reference/api/chatclient.html |
 | Spring AI Tools | idem | `@Tool`, `ToolCallback`, `ToolCallingManager`, `ToolContext` | https://docs.spring.io/spring-ai/reference/api/tools.html |
 | Spring AI Chat Memory | idem | `spring-ai-starter-model-chat-memory-repository-jdbc` | https://docs.spring.io/spring-ai/reference/api/chat-memory.html |
 | Flyway | 12.4.x (gerenciado pelo Boot) | `spring-boot-starter-flyway` + `flyway-database-postgresql` | https://documentation.red-gate.com/fd |

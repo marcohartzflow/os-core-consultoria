@@ -174,6 +174,8 @@ services:
         target: os.iam.bootstrap.admin-password
       - source: anthropic_api_key
         target: spring.ai.anthropic.api-key
+      - source: openai_api_key
+        target: spring.ai.openai.api-key
       - source: mfa_encryption_key
         target: os.iam.mfa.encryption-key
       - source: mail_password
@@ -275,6 +277,8 @@ secrets:
     file: ./secrets/bootstrap_admin_password
   anthropic_api_key:
     file: ./secrets/anthropic_api_key
+  openai_api_key:
+    file: ./secrets/openai_api_key
   mfa_encryption_key:
     file: ./secrets/mfa_encryption_key
   mail_password:

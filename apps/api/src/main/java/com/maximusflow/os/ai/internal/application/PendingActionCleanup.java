@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.maximusflow.os.ai.internal.domain.PendingAction;
 import com.maximusflow.os.ai.internal.persistence.PendingActionRepository;
+import com.maximusflow.os.ai.internal.persistence.ToolGrantRepository;
 import com.maximusflow.os.common.audit.AuditRecorder;
 
 import org.slf4j.Logger;
@@ -63,8 +64,11 @@ class PendingActionCleanup {
 
 	private final Clock clock;
 
+	private final ToolGrantRepository grants;
+
 	PendingActionCleanup(PendingActionRepository actions, AuditRecorder audit,
-			PlatformTransactionManager transactionManager, Clock clock) {
+			PlatformTransactionManager transactionManager, Clock clock, ToolGrantRepository grants) {
+		this.grants = grants;
 		this.actions = actions;
 		this.audit = audit;
 		this.tx = new TransactionTemplate(transactionManager);
@@ -82,6 +86,11 @@ class PendingActionCleanup {
 		}
 		if (expired > 0) {
 			log.info("Expired {} pending AI actions", expired);
+		}
+		// Approvals of a read that the assistant never made again: nothing else removes them.
+		Long unused = this.tx.execute((status) -> this.grants.deleteBySingleUseTrueAndExpiresAtBefore(this.clock.instant()));
+		if (unused != null && unused > 0) {
+			log.info("Removed {} unused one-call approvals", unused);
 		}
 	}
 

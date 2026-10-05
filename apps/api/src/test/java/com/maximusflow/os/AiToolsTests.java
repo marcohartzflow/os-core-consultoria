@@ -13,6 +13,7 @@ import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
 import com.maximusflow.os.ai.internal.domain.PendingAction;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
+import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
 import com.maximusflow.os.ai.internal.tools.ToolRegistry;
 import com.maximusflow.os.common.security.OsPrincipal;
@@ -57,6 +58,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AiToolsTests {
+
+	@Autowired
+	AuditRecorder auditRecorder;
 
 	@Autowired
 	MockMvc mvc;
@@ -126,7 +130,8 @@ class AiToolsTests {
 		RegisteredTool disable = this.registry.find("iam_disable_user").orElseThrow();
 
 		// The agent "calls" the state-changing tool: nothing happens except a pending action.
-		var stub = new ConfirmingToolCallback(disable, (tool, args) -> this.pendingActions.park(conversationId, tool, args));
+		var stub = new ConfirmingToolCallback(disable, (tool, args) -> this.pendingActions.park(conversationId, tool, args),
+				(input) -> null, this.auditRecorder);
 		String reply = stub.call("{\"id\":\"" + UUID.randomUUID() + "\"}", new ToolContext(Map.of()));
 		assertThat(reply).contains("PENDING_CONFIRMATION");
 		var open = this.pendingActions.open(conversationId);
@@ -201,7 +206,7 @@ class AiToolsTests {
 		// Parked with what will run: the person sees the summary and the arguments; nothing exists yet.
 		var open = this.pendingActions.open(conversationId);
 		assertThat(open).singleElement().satisfies((action) -> {
-			assertThat(action.summary()).isEqualTo("Cria uma tarefa com os dados abaixo");
+			assertThat(action.summary()).isEqualTo("Cria uma tarefa");
 			assertThat(action.arguments()).contains(title);
 		});
 		String byTitle = "SELECT id FROM tasks WHERE title = ?";
@@ -293,7 +298,8 @@ class AiToolsTests {
 
 	private java.util.function.Function<String, UUID> stub2(RegisteredTool tool, UUID conversationId) {
 		return (args) -> {
-			var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a));
+			var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a),
+					(input) -> null, this.auditRecorder);
 			String reply = stub.call(args, new ToolContext(Map.of()));
 			return UUID.fromString(reply.replaceAll(".*\"actionId\":\"([^\"]+)\".*", "$1"));
 		};

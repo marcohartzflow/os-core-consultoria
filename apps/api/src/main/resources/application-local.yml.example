@@ -3,6 +3,9 @@ spring:
   ai:
     anthropic:
       api-key: sk-ant-...
+    # Opcional: com a chave, os modelos GPT de os.ai.models aparecem no seletor do assistente.
+    # openai:
+    #   api-key: sk-...
   # Sem SMTP, os links de convite e de senha vão para o log da API (e o convite aparece na tela).
   # Para receber os e-mails de verdade, suba o Mailpit (caixa de entrada em http://localhost:8025):
   #   docker run -d --name os-mailpit -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 axllent/mailpit

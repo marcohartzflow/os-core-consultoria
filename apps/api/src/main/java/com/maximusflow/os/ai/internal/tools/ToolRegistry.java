@@ -121,7 +121,9 @@ public class ToolRegistry implements SmartInitializingSingleton {
 			throw new IllegalStateException("Duplicate AI tool name: " + name);
 		}
 		this.tools.put(name, new RegisteredTool(name, callback.getToolDefinition().description(), permission.value(),
-				confirmation != null, (confirmation != null) ? confirmation.value() : "", callback));
+				confirmation != null, (confirmation != null) ? confirmation.value() : readSummary(callback),
+				// A read-only tool asks nothing; HIGH keeps "waive the confirmation" off for it all the same.
+				(confirmation != null) ? confirmation.risk() : RequiresConfirmation.Risk.HIGH, callback));
 	}
 
 	/**
@@ -157,6 +159,18 @@ public class ToolRegistry implements SmartInitializingSingleton {
 	/** Tools whose required permission is in the given set. The set comes from the session authorities. */
 	public List<RegisteredTool> forPermissions(Set<String> permissions) {
 		return this.tools.values().stream().filter((tool) -> permissions.contains(tool.permission())).toList();
+	}
+
+
+	/**
+	 * What the approval card says for a read the person chose to approve first: the first sentence of
+	 * the description, which is written for the model but reads well enough ("Lista os usuários…").
+	 */
+	private static String readSummary(ToolCallback callback) {
+		String description = callback.getToolDefinition().description().strip();
+		int end = description.indexOf(". ");
+		String first = (end > 0) ? description.substring(0, end) : description.replaceAll("\\.$", "");
+		return (first.length() > 200) ? first.substring(0, 199) + "…" : first;
 	}
 
 }

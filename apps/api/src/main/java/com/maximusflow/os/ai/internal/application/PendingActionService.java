@@ -24,6 +24,8 @@ import com.maximusflow.os.common.security.OsPrincipal;
 import com.maximusflow.os.common.security.RequiresPermission;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
@@ -37,6 +39,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Human-in-the-loop for state-changing tools. */
 @Service
 public class PendingActionService {
+
+	private static final Logger log = LoggerFactory.getLogger(PendingActionService.class);
 
 	public record PendingActionView(UUID id, UUID conversationId, String tool, String summary, String arguments,
 			PendingAction.Status status, Instant createdAt, Instant expiresAt, @Nullable String result) {
@@ -65,9 +69,12 @@ public class PendingActionService {
 
 	private final Clock clock;
 
+	private final ToolPermissionService permissions;
+
 	PendingActionService(PendingActionRepository actions, ToolRegistry registry, ChatMemory chatMemory,
 			CurrentUser currentUser, AuditRecorder audit, AiProperties properties,
-			PlatformTransactionManager transactionManager, Clock clock) {
+			PlatformTransactionManager transactionManager, Clock clock, ToolPermissionService permissions) {
+		this.permissions = permissions;
 		this.actions = actions;
 		this.registry = registry;
 		this.chatMemory = chatMemory;
@@ -123,9 +130,31 @@ public class PendingActionService {
 	 */
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
 	public PendingActionView confirm(UUID actionId) {
+		return confirm(actionId, ToolPermissionService.Scope.ONCE);
+	}
+
+	/**
+	 * Confirms, and lets the same action run without asking from now on ({@code scope}: in this
+	 * conversation, or always), within the action's ceiling. The reach is checked before the action
+	 * runs: a reach above the ceiling refuses the whole confirmation.
+	 */
+	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
+	public PendingActionView confirm(UUID actionId, ToolPermissionService.Scope scope) {
+		if (scope != ToolPermissionService.Scope.ONCE) {
+			PendingAction waiting = this.actions.findByIdAndUserId(actionId, this.currentUser.require().getId())
+				.orElseThrow(() -> new NotFoundException("Ação não encontrada"));
+			RegisteredTool target = this.registry.find(waiting.getToolName())
+				.orElseThrow(() -> new DomainRuleException("Ferramenta não existe mais"));
+			if (!this.permissions.allows(target, scope)) {
+				throw new DomainRuleException("Essa permissão não vale para esta ação");
+			}
+		}
 		PendingAction action = this.tx.execute((status) -> claim(actionId, PendingAction.Status.EXECUTING));
 		String conversationId = action.getConversationId().toString();
 		RegisteredTool tool = this.registry.find(action.getToolName()).orElse(null);
+		if (tool != null && !tool.requiresConfirmation()) {
+			return approveRead(actionId, tool, scope);
+		}
 		if (tool == null) {
 			// Already claimed EXECUTING: resolve it, or it would stay EXECUTING forever.
 			DomainRuleException gone = new DomainRuleException("Ferramenta não existe mais");
@@ -142,15 +171,75 @@ public class PendingActionService {
 			fail(actionId, tool.name(), conversationId, cause);
 			throw cause;
 		}
-		return this.tx.execute((status) -> {
+		PendingActionView confirmed = this.tx.execute((status) -> {
 			PendingAction done = this.actions.findById(actionId).orElseThrow();
 			String note = "A pessoa confirmou a ação " + tool.name() + " (" + actionId
 					+ ") no portal e ela foi executada com sucesso. Consulte as ferramentas se precisar do estado atual.";
 			done.resolve(PendingAction.Status.CONFIRMED, result, note, this.clock.instant());
 			this.chatMemory.add(conversationId, new UserMessage(note));
-			this.audit.record("ai.action.confirmed", "ai_action", actionId.toString(), Map.of("tool", tool.name()));
+			this.audit.record("ai.action.confirmed", "ai_action", actionId.toString(),
+					Map.of("tool", tool.name(), "scope", scope.name()));
 			return PendingActionView.of(done);
 		});
+		grantAfterConfirming(action, tool, scope);
+		return confirmed;
+	}
+
+	/**
+	 * The reach the person gave with a confirmation, saved after the outcome committed: the action ran
+	 * and is recorded as confirmed whatever happens here. A failure only costs the person the shortcut
+	 * (the next call asks again), so it is logged, not thrown.
+	 */
+	private void grantAfterConfirming(PendingAction action, RegisteredTool tool, ToolPermissionService.Scope scope) {
+		try {
+			this.permissions.grant(action.getUserId(), tool, action.getConversationId(), scope, action.getArguments());
+		}
+		catch (RuntimeException ex) {
+			log.warn("could not save the reach of a confirmation action={} tool={} scope={} reason={}", action.getId(),
+					tool.name(), scope, ex.getClass().getSimpleName());
+		}
+	}
+
+	/**
+	 * A read the person chose to approve first. It does not run here: its data would reach the model
+	 * only as a portal note, in the user role. The approval lets the assistant's next call through (or
+	 * every call, per {@code scope}), and the assistant makes the call again and gets the data the
+	 * ordinary way, as a tool result.
+	 */
+	private PendingActionView approveRead(UUID actionId, RegisteredTool tool, ToolPermissionService.Scope scope) {
+		try {
+			return approveReadNow(actionId, tool, scope);
+		}
+		catch (RuntimeException ex) {
+			// Already claimed EXECUTING: resolve it, or it would stay EXECUTING forever.
+			PendingAction action = this.actions.findById(actionId).orElseThrow();
+			fail(actionId, tool.name(), action.getConversationId().toString(), ex);
+			throw ex;
+		}
+	}
+
+	private PendingActionView approveReadNow(UUID actionId, RegisteredTool tool, ToolPermissionService.Scope scope) {
+		return this.tx.execute((status) -> {
+			PendingAction done = this.actions.findById(actionId).orElseThrow();
+			String note = "A pessoa permitiu a consulta " + tool.name() + " (" + actionId
+					+ ") no portal. Chame a ferramenta de novo para obter os dados.";
+			done.resolve(PendingAction.Status.CONFIRMED, null, note, this.clock.instant());
+			this.chatMemory.add(done.getConversationId().toString(), new UserMessage(note));
+			this.audit.record("ai.action.confirmed", "ai_action", actionId.toString(),
+					Map.of("tool", tool.name(), "scope", scope.name()));
+			// For a read the approval is the point: without it the assistant cannot make the call again.
+			this.permissions.grant(done.getUserId(), tool, done.getConversationId(), scope, done.getArguments());
+			return PendingActionView.of(done);
+		});
+	}
+
+	/** The conversation of one of the person's actions (404 for anyone else's). */
+	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")
+	@Transactional(readOnly = true)
+	public UUID conversationOf(UUID actionId) {
+		return this.actions.findByIdAndUserId(actionId, this.currentUser.require().getId())
+			.map(PendingAction::getConversationId)
+			.orElseThrow(() -> new NotFoundException("Ação não encontrada"));
 	}
 
 	@RequiresPermission(value = "ai.chat.use", description = "Usar o assistente de IA")

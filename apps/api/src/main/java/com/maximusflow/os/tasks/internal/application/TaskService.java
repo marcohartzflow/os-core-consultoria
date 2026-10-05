@@ -115,7 +115,9 @@ public class TaskService {
 			description = "Cria uma tarefa. Use quando o usuário pedir para anotar, criar ou delegar algo a fazer. "
 					+ "O responsável é opcional e deve ser o id de um usuário ativo do portal (obtenha com iam_list_users). "
 					+ "Exige confirmação da pessoa.")
-	@RequiresConfirmation("Cria uma tarefa com os dados abaixo")
+	// MEDIUM, not LOW: the title and description are free text others read. Run without asking for good,
+	// a prompt injection in data the assistant reads could copy that data into a task (OWASP LLM01/LLM06).
+	@RequiresConfirmation(value = "Cria uma tarefa", risk = RequiresConfirmation.Risk.MEDIUM)
 	@RequiresPermission(value = "tasks.task.create", description = "Criar tarefas")
 	public TaskSummary create(@ToolParam(description = "Título curto da tarefa") String title,
 			@ToolParam(required = false, description = "Detalhes da tarefa") @Nullable String description,
@@ -142,7 +144,7 @@ public class TaskService {
 
 	@Tool(name = "tasks_complete",
 			description = "Marca uma tarefa como concluída (status DONE). Exige confirmação da pessoa.")
-	@RequiresConfirmation("Marca a tarefa como concluída")
+	@RequiresConfirmation(value = "Marca a tarefa como concluída", risk = RequiresConfirmation.Risk.LOW)
 	@RequiresPermission(value = "tasks.task.update", description = "Editar tarefas")
 	public TaskSummary complete(@ToolParam(description = "Id (UUID) da tarefa") UUID id) {
 		Task task = load(id);
@@ -162,7 +164,7 @@ public class TaskService {
 	}
 
 	@Tool(name = "tasks_delete", description = "Exclui uma tarefa definitivamente. Exige confirmação da pessoa.")
-	@RequiresConfirmation("Exclui a tarefa definitivamente")
+	@RequiresConfirmation(value = "Exclui a tarefa definitivamente", risk = RequiresConfirmation.Risk.MEDIUM)
 	@RequiresPermission(value = "tasks.task.delete", description = "Excluir tarefas")
 	public void delete(@ToolParam(description = "Id (UUID) da tarefa") UUID id) {
 		Task task = load(id);

@@ -2,6 +2,7 @@ package com.maximusflow.os.common.audit;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -89,5 +90,8 @@ interface AuditEventRepository extends ListCrudRepository<AuditEvent, UUID>, Jpa
 		long getLoginFailure();
 
 	}
+
+	List<AuditEvent> findByCorrelationIdAndActorIdAndActionInAndOccurredAtGreaterThanEqualOrderByOccurredAtAsc(
+			String correlationId, UUID actorId, Collection<String> actions, Instant since);
 
 }

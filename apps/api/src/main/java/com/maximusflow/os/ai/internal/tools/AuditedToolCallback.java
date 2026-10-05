@@ -59,6 +59,10 @@ public final class AuditedToolCallback implements ToolCallback {
 	public String call(String toolInput, ToolContext toolContext) {
 		String name = getToolDefinition().name();
 		Instant started = this.clock.instant();
+		// An action announces itself once it knows whether it runs or waits (ConfirmingToolCallback).
+		if (!(this.delegate instanceof ConfirmingToolCallback)) {
+			ToolEvents.publish(new ToolEvents.ToolStarted(name));
+		}
 		try {
 			String result = this.delegate.call(toolInput, toolContext);
 			// A state-changing call only parks a pending action, which audits itself (ai.action.parked);

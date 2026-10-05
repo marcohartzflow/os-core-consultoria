@@ -10,6 +10,7 @@
 #                             first login. Empty the file afterwards (: > secrets/bootstrap_admin_password)
 #   mfa_encryption_key        generated here; back it up with the database backups' private key
 #   anthropic_api_key         empty: paste the key (printf '%s' 'sk-ant-...' > secrets/anthropic_api_key)
+#   openai_api_key            empty: optional; with a key the OpenAI models of os.ai.models are offered
 #   mail_password             empty unless SMTP needs a password
 set -euo pipefail
 umask 077
@@ -33,6 +34,7 @@ create db_app_password "$(openssl rand -base64 32 | tr -d '\n')"
 create bootstrap_admin_password "$(openssl rand -base64 32 | tr -d '\n')"
 create mfa_encryption_key "$(openssl rand -base64 32 | tr -d '\n')"
 create anthropic_api_key ""
+create openai_api_key ""
 create mail_password ""
 
 # 0644, not 0600: Compose mounts file secrets as bind mounts with the host's owner and mode

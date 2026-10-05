@@ -1,5 +1,7 @@
 package com.maximusflow.os.ai.internal.tools;
 
+import com.maximusflow.os.common.security.RequiresConfirmation;
+
 import org.springframework.ai.tool.ToolCallback;
 
 /**
@@ -8,6 +10,6 @@ import org.springframework.ai.tool.ToolCallback;
  * used to filter the catalog per user and to route state-changing calls through confirmation.
  */
 public record RegisteredTool(String name, String description, String permission, boolean requiresConfirmation,
-		String confirmationSummary, ToolCallback callback) {
+		String confirmationSummary, RequiresConfirmation.Risk risk, ToolCallback callback) {
 
 }

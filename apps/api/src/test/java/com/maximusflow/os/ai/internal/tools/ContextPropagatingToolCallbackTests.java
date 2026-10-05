@@ -34,8 +34,7 @@ class ContextPropagatingToolCallbackTests {
 		SecurityContext context = SecurityContextHolder.createEmptyContext();
 		context.setAuthentication(
 				UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
-		List<ToolEvents.Event> received = new ArrayList<>();
-		List<UiAction> uiActions = new ArrayList<>();
+		RecordingTurn turn = new RecordingTurn();
 
 		ToolCallback delegate = new ToolCallback() {
 			@Override
@@ -58,7 +57,7 @@ class ContextPropagatingToolCallbackTests {
 						+ AuditContext.current().map(AuditContext.Scope::correlationId).orElse(null);
 			}
 		};
-		var wrapped = new ContextPropagatingToolCallback(delegate, () -> context, "conv-1", received::add, uiActions::add);
+		var wrapped = new ContextPropagatingToolCallback(delegate, () -> context, "conv-1", turn);
 
 		try (var executor = Executors.newSingleThreadExecutor()) {
 			String result = CompletableFuture.supplyAsync(() -> wrapped.call("{}", null), executor).get();
@@ -69,8 +68,10 @@ class ContextPropagatingToolCallbackTests {
 					executor).get();
 			assertThat(clean).isTrue();
 		}
-		assertThat(received).containsExactly(new ToolEvents.ToolCalled("probe"));
-		assertThat(uiActions).containsExactly(new UiAction.Navigate("/tasks", "Ver tarefas"));
+		assertThat(turn.events).containsExactly(new ToolEvents.ToolCalled("probe"));
+		assertThat(turn.ui).containsExactly(new UiAction.Navigate("/tasks", "Ver tarefas"));
+		// Every event of one call carries the same call id.
+		assertThat(turn.callIds).hasSize(1);
 	}
 
 	@Test
@@ -82,7 +83,7 @@ class ContextPropagatingToolCallbackTests {
 			return (auth == null) ? "anonymous" : String.join(",", auth.getAuthorities().stream()
 				.map(org.springframework.security.core.GrantedAuthority::getAuthority).sorted().toList());
 		});
-		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contexts.removeFirst(), "conv-1", null, null);
+		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contexts.removeFirst(), "conv-1", null);
 
 		assertThat(wrapped.call("{}", null)).isEqualTo("tasks.task.read");
 		// The account was disabled between two tool calls of the same turn.
@@ -95,7 +96,7 @@ class ContextPropagatingToolCallbackTests {
 		ToolCallback delegate = probe(() -> AuditContext.current().map(AuditContext.Scope::ip).orElse(null) + "|"
 				+ org.slf4j.MDC.get("http.request.id"));
 		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contextWith(Set.of("x")), "conv-1", null,
-				null, "203.0.113.7", java.util.Map.of("http.request.id", "req-1"));
+				"203.0.113.7", java.util.Map.of("http.request.id", "req-1"));
 
 		try (var executor = Executors.newSingleThreadExecutor()) {
 			assertThat(CompletableFuture.supplyAsync(() -> wrapped.call("{}", null), executor).get())
@@ -110,15 +111,66 @@ class ContextPropagatingToolCallbackTests {
 		ToolCallback delegate = probe(() -> {
 			throw new IllegalStateException("boom");
 		});
-		List<ToolEvents.Event> received = new ArrayList<>();
-		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contextWith(Set.of("x")), "conv-1",
-				received::add, null);
+		RecordingTurn turn = new RecordingTurn();
+		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contextWith(Set.of("x")), "conv-1", turn);
 
 		assertThatThrownBy(() -> wrapped.call("{}", null)).isInstanceOf(IllegalStateException.class);
 		assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
 		assertThat(AuditContext.current()).isEmpty();
 		ToolEvents.publish(new ToolEvents.ToolCalled("after"));
-		assertThat(received).isEmpty();
+		assertThat(turn.events).isEmpty();
+	}
+
+	/** After the person stopped the turn (or left), no tool runs, not even one they allowed. */
+	@Test
+	void aStoppedTurnRunsNoFurtherTool() {
+		List<String> ran = new ArrayList<>();
+		ToolCallback delegate = probe(() -> {
+			ran.add("ran");
+			return "ok";
+		});
+		RecordingTurn turn = new RecordingTurn();
+		turn.open = false;
+		var wrapped = new ContextPropagatingToolCallback(delegate, () -> contextWith(Set.of("x")), "conv-1", turn);
+
+		assertThatThrownBy(() -> wrapped.call("{}", null)).isInstanceOf(TurnCancelledException.class);
+		assertThat(ran).isEmpty();
+	}
+
+	private static final class RecordingTurn implements TurnListener {
+
+		final List<ToolEvents.Event> events = new ArrayList<>();
+
+		final Set<UUID> callIds = new java.util.HashSet<>();
+
+		final List<UiAction> ui = new ArrayList<>();
+
+		boolean open = true;
+
+		@Override
+		public boolean isOpen() {
+			return this.open;
+		}
+
+		@Override
+		public void token(String text) {
+		}
+
+		@Override
+		public void thinking() {
+		}
+
+		@Override
+		public void tool(UUID callId, ToolEvents.Event event) {
+			this.callIds.add(callId);
+			this.events.add(event);
+		}
+
+		@Override
+		public void ui(UiAction action) {
+			this.ui.add(action);
+		}
+
 	}
 
 	private static SecurityContext contextWith(Set<String> permissions) {

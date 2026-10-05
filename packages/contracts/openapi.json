@@ -174,11 +174,17 @@
           "role" : {
             "type" : "string"
           },
+          "steps" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ToolStep"
+            },
+            "type" : "array"
+          },
           "text" : {
             "type" : "string"
           }
         },
-        "required" : [ "role", "text" ],
+        "required" : [ "role", "steps", "text" ],
         "type" : "object"
       },
       "CodeRequest" : {
@@ -190,6 +196,27 @@
           }
         },
         "required" : [ "code" ],
+        "type" : "object"
+      },
+      "ConfirmRequest" : {
+        "properties" : {
+          "scope" : {
+            "enum" : [ "ONCE", "CONVERSATION", "ALWAYS" ],
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "scope" ],
+        "type" : "object"
+      },
+      "ContinueRequest" : {
+        "properties" : {
+          "model" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "model" ],
         "type" : "object"
       },
       "ConversationSummary" : {
@@ -362,13 +389,18 @@
       },
       "MessageRequest" : {
         "properties" : {
+          "model" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
           "text" : {
             "maxLength" : 32000,
             "minLength" : 0,
             "type" : "string"
           }
         },
-        "required" : [ "text" ],
+        "required" : [ "model", "text" ],
         "type" : "object"
       },
       "Mfa" : {
@@ -417,6 +449,30 @@
           }
         },
         "required" : [ "enabled", "passkeys", "recoveryCodesLeft", "required", "totp" ],
+        "type" : "object"
+      },
+      "ModelView" : {
+        "properties" : {
+          "context" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "isDefault" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "context", "description", "id", "isDefault", "name", "provider" ],
         "type" : "object"
       },
       "NotificationEmailRequest" : {
@@ -596,6 +652,17 @@
           }
         },
         "required" : [ "recoveryCodes" ],
+        "type" : "object"
+      },
+      "RenameConversationRequest" : {
+        "properties" : {
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "title" ],
         "type" : "object"
       },
       "RenameUserRequest" : {
@@ -823,6 +890,82 @@
         "required" : [ "password", "token" ],
         "type" : "object"
       },
+      "ToolChoiceRequest" : {
+        "properties" : {
+          "choice" : {
+            "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "choice" ],
+        "type" : "object"
+      },
+      "ToolSetting" : {
+        "properties" : {
+          "action" : {
+            "type" : "boolean"
+          },
+          "allowAlwaysOff" : {
+            "type" : "boolean"
+          },
+          "choice" : {
+            "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+            "type" : "string"
+          },
+          "choices" : {
+            "items" : {
+              "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "risk" : {
+            "enum" : [ "LOW", "MEDIUM", "HIGH" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "allowAlwaysOff", "choice", "choices", "description", "expiresAt", "lastUsedAt", "name", "risk" ],
+        "type" : "object"
+      },
+      "ToolStep" : {
+        "properties" : {
+          "action" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/PendingActionView"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ]
+          },
+          "scope" : {
+            "type" : [ "string", "null" ]
+          },
+          "tool" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "kind", "reason", "scope", "tool" ],
+        "type" : "object"
+      },
       "ToolView" : {
         "properties" : {
           "description" : {
@@ -903,6 +1046,15 @@
             "type" : "string"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ConfirmRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "200" : {
             "content" : {
@@ -993,7 +1145,7 @@
     },
     "/api/ai/conversations/{id}" : {
       "delete" : {
-        "operationId" : "delete_3",
+        "operationId" : "delete_2",
         "parameters" : [ {
           "in" : "path",
           "name" : "id",
@@ -1006,6 +1158,41 @@
         "responses" : {
           "204" : {
             "description" : "No Content"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "patch" : {
+        "operationId" : "rename_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RenameConversationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ConversationSummary"
+                }
+              }
+            },
+            "description" : "OK"
           }
         },
         "tags" : [ "ai-controller" ]
@@ -1032,6 +1219,42 @@
                     "$ref" : "#/components/schemas/PendingActionView"
                   },
                   "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations/{id}/continue" : {
+      "post" : {
+        "operationId" : "continueAfterActions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ContinueRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
                 }
               }
             },
@@ -1097,6 +1320,93 @@
               "text/event-stream" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/models" : {
+      "get" : {
+        "operationId" : "models",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ModelView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/tool-preferences" : {
+      "delete" : {
+        "operationId" : "resetToolPreferences",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "get" : {
+        "operationId" : "toolPreferences",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ToolSetting"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/tool-preferences/{tool}" : {
+      "put" : {
+        "operationId" : "chooseTool",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tool",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ToolChoiceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ToolSetting"
                 }
               }
             },
@@ -2416,7 +2726,7 @@
     },
     "/api/me/passkeys/{id}" : {
       "delete" : {
-        "operationId" : "delete_2",
+        "operationId" : "delete_3",
         "parameters" : [ {
           "in" : "path",
           "name" : "id",

@@ -15,7 +15,11 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ToolEvents {
 
-	public sealed interface Event permits ToolCalled, ToolFailed, ActionPending {
+	public sealed interface Event permits ToolStarted, ToolCalled, ToolFailed, ActionPending, ActionAutoAllowed {
+	}
+
+	/** A tool began to run (a read, or an action the person allowed); {@link ToolCalled} follows when it ends. */
+	public record ToolStarted(String tool) implements Event {
 	}
 
 	public record ToolCalled(String tool) implements Event {
@@ -26,6 +30,13 @@ public final class ToolEvents {
 
 	/** {@code arguments} is the call as the model made it, shown to the person before they confirm. */
 	public record ActionPending(UUID actionId, String tool, String summary, String arguments) implements Event {
+	}
+
+	/**
+	 * An action ran without asking because the person allowed it ({@code scope}: CONVERSATION or
+	 * ALWAYS); {@code arguments} as the model made the call.
+	 */
+	public record ActionAutoAllowed(String tool, String summary, String arguments, String scope) implements Event {
 	}
 
 	private static final ScopedListener<Event> LISTENER = new ScopedListener<>();
