@@ -87,9 +87,8 @@ class MfaController {
 	}
 
 	@PostMapping("/api/iam/users/{id}/mfa/reset")
-	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void reset(@PathVariable UUID id) {
-		this.service.reset(id);
+	MfaService.SecondFactorReset reset(@PathVariable UUID id) {
+		return this.service.reset(id);
 	}
 
 }

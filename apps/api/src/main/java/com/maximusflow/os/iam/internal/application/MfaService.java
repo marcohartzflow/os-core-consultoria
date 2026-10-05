@@ -61,6 +61,15 @@ public class MfaService {
 	public record FactorAdded(List<String> recoveryCodes, boolean firstFactor) {
 	}
 
+	/**
+	 * A second factor removed by an administrator. {@code emailed}: the new-password link went to the
+	 * person by e-mail. False only without e-mail delivery (local development: production refuses to
+	 * start without it), where the link is in the API log. The link itself is never returned: choosing
+	 * the new password is what proves the e-mail again, so the administrator must not hold it.
+	 */
+	public record SecondFactorReset(boolean emailed) {
+	}
+
 	static final int RECOVERY_CODES = 10;
 
 	private static final Logger security = LoggerFactory.getLogger("SECURITY");
@@ -111,10 +120,13 @@ public class MfaService {
 
 	private final UserCredentialRepository passkeyCredentials;
 
+	private final AccountNotifier notifier;
+
 	MfaService(UserMfaRepository enrolments, MfaRecoveryCodeRepository recoveryCodes, UserRepository users,
 			LoginAttempts attempts, IamProperties properties, AuditRecorder audit, CurrentUser currentUser,
 			GrantGuard grantGuard, Clock clock, PasswordEncoder codeEncoder, ApplicationEventPublisher events,
-			UserPasskeyRepository passkeyLinks, UserCredentialRepository passkeyCredentials) {
+			UserPasskeyRepository passkeyLinks, UserCredentialRepository passkeyCredentials, AccountNotifier notifier) {
+		this.notifier = notifier;
 		this.passkeyLinks = passkeyLinks;
 		this.passkeyCredentials = passkeyCredentials;
 		this.events = events;
@@ -248,7 +260,7 @@ public class MfaService {
 	 * passed their own second factor in the last minutes (step-up, see the security configuration).
 	 */
 	@RequiresPermission(value = "iam.user.mfa.reset", description = "Redefinir o segundo fator de usuários", reserved = true)
-	public void reset(UUID userId) {
+	public SecondFactorReset reset(UUID userId) {
 		if (userId.equals(this.currentUser.require().getId())) {
 			throw new DomainRuleException("Use a sua própria tela de conta para gerenciar o seu segundo fator");
 		}
@@ -261,6 +273,7 @@ public class MfaService {
 		this.events.publishEvent(new PasswordChanged(userId));
 		this.events.publishEvent(new AccountLinkMailer.SecondFactorReset(userId));
 		this.audit.record("iam.mfa.reset", "user", userId.toString(), Map.of("password", "revoked"));
+		return new SecondFactorReset(!this.notifier.handsLinksToAdministrator());
 	}
 
 	/**

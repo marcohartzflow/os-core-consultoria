@@ -1017,6 +1017,9 @@ export interface components {
             /** Format: int64 */
             userCount: number;
         };
+        SecondFactorReset: {
+            emailed: boolean;
+        };
         SessionInfo: {
             /** Format: date-time */
             createdAt: string;
@@ -1130,6 +1133,7 @@ export type RenameUserRequest = components['schemas']['RenameUserRequest'];
 export type RoleRef = components['schemas']['RoleRef'];
 export type RoleRequest = components['schemas']['RoleRequest'];
 export type RoleSummary = components['schemas']['RoleSummary'];
+export type SecondFactorReset = components['schemas']['SecondFactorReset'];
 export type SessionInfo = components['schemas']['SessionInfo'];
 export type Setup = components['schemas']['Setup'];
 export type SetupRequest = components['schemas']['SetupRequest'];
@@ -1955,12 +1959,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No Content */
-            204: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "*/*": components["schemas"]["SecondFactorReset"];
+                };
             };
         };
     };

@@ -30,7 +30,7 @@ import { useStepUp } from "@/core/auth/StepUp";
 import { MfaBadge } from "@/core/iam/MfaBadge";
 import { AdministratorGrantConfirmation, grantsAdministrator, RolePicker } from "@/core/iam/RolePicker";
 import { StatusBadge } from "@/core/iam/StatusBadge";
-import { InvitationLinkDialog } from "@/core/iam/UserActions";
+import { InvitationLinkDialog, resetSecondFactor } from "@/core/iam/UserActions";
 import { useOpenSettings } from "@/core/settings/SettingsDialog";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
 import { EmptyState, ErrorState, fieldError, FormError, notifyError, notifySuccess } from "@/core/ui/feedback";
@@ -396,8 +396,7 @@ function UserDetail({
         description={`A senha, o aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer e todas as sessões terminam. A pessoa recebe por e-mail um link para criar uma nova senha e configura as duas etapas de novo.`}
         confirmLabel="Redefinir"
         onConfirm={async () => {
-          await withStepUp(() => api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" }));
-          notifySuccess("Duas etapas redefinidas", `Enviamos para ${user.email} um link para criar uma nova senha.`);
+          await resetSecondFactor(user, withStepUp);
           await refresh();
         }}
       />

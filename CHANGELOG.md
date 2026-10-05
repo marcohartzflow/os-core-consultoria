@@ -31,6 +31,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 ### Alterado
 
 - Permissões reservadas ao administrador do sistema: criar, editar e excluir roles, atribuir roles (`iam.user.roles.assign`, nova), redefinir o segundo fator de outra pessoa e anonimizar. Não entram em outras roles e não viram tools de IA (`iam_anonymize_user` foi removida).
+- `POST /api/iam/users/{id}/mfa/reset` responde `200` com `{emailed}` (antes `204`): sem envio de e-mail configurado (só em desenvolvimento), a tela diz que o link de nova senha ficou no log da API em vez de afirmar que foi enviado. O link nunca volta para o administrador.
+- Erros de regra (`422`) têm o título "Não foi possível concluir" em vez de "Regra de negócio", que aparecia acima da mensagem nas telas.
 - `iam.user.update` só renomeia (`PATCH /api/iam/users/{id}`, corpo `{name}`); roles vão por `PUT /api/iam/users/{id}/roles`. Convite com roles exige `iam.user.roles.assign`.
 - Pelo menos 2 administradores ativos (`os.iam.administrators.minimum`); conceder a role de sistema pede a senha de quem concede e avisa os demais administradores por e-mail.
 - Deploy de cliente (`docs/deploy.md`, `docs/fork.md`): a `develop` integra e valida, a `main` é produção. O `cd.yml` chama o `ci.yml` (`workflow_call`) e só constrói e implanta se ele passar; push na `main` não roda mais o CI duas vezes. Rollback pelo Run workflow com o SHA de um deploy anterior. Sem `environment: production` (no GitHub Free, repositório privado não tem secrets nem proteção de environment). Actions fixadas por SHA.

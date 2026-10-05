@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Copy, LogOut, Mail, MoreHorizontal, ShieldOff, UserCheck, UserRound, UserX } from "lucide-react";
 import { api } from "@/core/api/client";
-import type { InvitationIssued, UserSummary } from "@/core/api/types";
+import type { InvitationIssued, SecondFactorReset, UserSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useStepUp } from "@/core/auth/StepUp";
 import { ConfirmDialog } from "@/core/ui/confirm-dialog";
@@ -28,6 +28,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+
+/**
+ * Removes someone's second factor (behind a step-up) and says where the new-password link went. The
+ * API never returns the link: without e-mail delivery (local development only) it is in the API log.
+ */
+export async function resetSecondFactor(
+  user: Pick<UserSummary, "id" | "email">,
+  withStepUp: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  const result = await withStepUp(() =>
+    api<SecondFactorReset>(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" }),
+  );
+  notifySuccess(
+    "Duas etapas redefinidas",
+    result.emailed
+      ? `Enviamos para ${user.email} um link para criar uma nova senha.`
+      : "O envio de e-mail não está configurado: o link para criar a nova senha ficou no log da API.",
+  );
+}
 
 /** Shows an invitation link once, when e-mail delivery is not configured and the admin must hand it over. */
 export function InvitationLinkDialog({ link, email, onClose }: { link: string | null; email: string; onClose: () => void }) {
@@ -188,8 +207,7 @@ export function UserActions({ user, onChanged }: { user: UserSummary; onChanged:
         description={`A senha, o aplicativo autenticador e os códigos de recuperação de ${user.name} deixam de valer e todas as sessões terminam. A pessoa recebe por e-mail um link para criar uma nova senha e configura as duas etapas de novo.`}
         confirmLabel="Redefinir"
         onConfirm={async () => {
-          await withStepUp(() => api(`/api/iam/users/${user.id}/mfa/reset`, { method: "POST" }));
-          notifySuccess("Duas etapas redefinidas", `Enviamos para ${user.email} um link para criar uma nova senha.`);
+          await resetSecondFactor(user, withStepUp);
           await onChanged();
         }}
       />

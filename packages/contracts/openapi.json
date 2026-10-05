@@ -679,6 +679,15 @@
         "required" : [ "description", "id", "name", "permissions", "system", "userCount" ],
         "type" : "object"
       },
+      "SecondFactorReset" : {
+        "properties" : {
+          "emailed" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "emailed" ],
+        "type" : "object"
+      },
       "SessionInfo" : {
         "properties" : {
           "createdAt" : {
@@ -2071,8 +2080,15 @@
           }
         } ],
         "responses" : {
-          "204" : {
-            "description" : "No Content"
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecondFactorReset"
+                }
+              }
+            },
+            "description" : "OK"
           }
         },
         "tags" : [ "mfa-controller" ]

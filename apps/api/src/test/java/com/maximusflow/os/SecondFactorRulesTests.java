@@ -104,7 +104,9 @@ class SecondFactorRulesTests {
 			.andExpect(jsonPath("$.type").value("urn:os:problem:mfa-reverification-required"));
 		admin = verify(admin, secret);
 		this.mvc.perform(withCsrf(post("/api/iam/users/" + ruthId + "/mfa/reset"), admin))
-			.andExpect(status().isNoContent());
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.emailed").value(false))
+			.andExpect(jsonPath("$.link").doesNotExist());
 
 		// Ending sessions and changing factors also need a recent factor (ASVS 7.5.1, 7.5.2), and
 		// enrolling another factor in an old session does not count as one.

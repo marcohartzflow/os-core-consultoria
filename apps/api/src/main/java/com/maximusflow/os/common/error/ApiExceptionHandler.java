@@ -65,9 +65,10 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem(HttpStatus.BAD_REQUEST, "Parâmetros inválidos", ex.getMessage());
 	}
 
+	/** The portal shows the title above the detail, so it speaks to the person, not the developer. */
 	@ExceptionHandler(DomainRuleException.class)
 	ProblemDetail domainRule(DomainRuleException ex) {
-		return problem(HttpStatus.UNPROCESSABLE_CONTENT, "Regra de negócio", ex.getMessage());
+		return problem(HttpStatus.UNPROCESSABLE_CONTENT, "Não foi possível concluir", ex.getMessage());
 	}
 
 	@ExceptionHandler(AuthenticationException.class)
