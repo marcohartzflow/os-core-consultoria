@@ -41,7 +41,7 @@ function whyNot(tool: ToolSetting, choice: Choice): string | null {
   if (tool.choices.includes(choice)) return null;
   if (tool.allowAlwaysOff) return "A empresa desligou esta opção.";
   if (tool.risk === "HIGH") return "Ação sensível: o assistente sempre pergunta antes.";
-  return "Apaga dados: só dá para permitir dentro de uma conversa, no próprio pedido.";
+  return "Apaga ou grava dados: só dá para permitir dentro de uma conversa, no próprio pedido.";
 }
 
 function ToolRow({ tool, onChoose }: { tool: ToolSetting; onChoose: (choice: Choice) => Promise<void> }) {

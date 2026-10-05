@@ -149,6 +149,20 @@ function Details({ action }: { action: PendingActionView }) {
   );
 }
 
+/** What a call acted on, for a one-line list: the first of its title, name or e-mail, if any. */
+function subjectOf(json: string | undefined): string | null {
+  if (!json) return null;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const values = parsed as Record<string, unknown>;
+    const subject = ["title", "name", "email"].map((key) => values[key]).find((v) => typeof v === "string" && v.trim());
+    return typeof subject === "string" ? subject : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * What the assistant wants to do and waits for (AI SDK cookbook, "Human in the loop"). One action is
  * one card; several from the same answer are one card with the list, decided all at once ("Permitir
@@ -182,7 +196,7 @@ export function ActionApproval({
         <AlertTitle>{allReads ? "O assistente quer consultar isto" : "O assistente quer fazer isto"}</AlertTitle>
         <AlertDescription className="flex flex-col gap-2">
           <p className="font-medium text-foreground">{action.summary}</p>
-          <p className="text-xs">{toolLabel(action.tool)}</p>
+          <p className="text-xs">{subjectOf(action.arguments) ?? toolLabel(action.tool)}</p>
           <Details action={action} />
           <div className="mt-1 flex flex-wrap gap-2">
             <PermitButton
@@ -215,7 +229,7 @@ export function ActionApproval({
               <Item size="sm" className="items-start px-0">
                 <ItemContent className="min-w-0">
                   <ItemTitle className="text-foreground">{action.summary}</ItemTitle>
-                  <ItemDescription className="text-xs">{toolLabel(action.tool)}</ItemDescription>
+                  <ItemDescription className="truncate">{subjectOf(action.arguments) ?? toolLabel(action.tool)}</ItemDescription>
                   <Details action={action} />
                 </ItemContent>
                 <ItemActions>
@@ -286,7 +300,7 @@ export function DecidedActions({ actions }: { actions: PendingActionView[] }) {
             <Item size="sm" variant="outline">
               <ItemContent className="min-w-0">
                 <ItemTitle className="w-full truncate font-normal">{action.summary}</ItemTitle>
-                <ItemDescription className="text-xs">{toolLabel(action.tool)}</ItemDescription>
+                <ItemDescription className="truncate">{subjectOf(action.arguments) ?? toolLabel(action.tool)}</ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Badge variant={outcome.variant}>{outcome.label}</Badge>
@@ -297,24 +311,6 @@ export function DecidedActions({ actions }: { actions: PendingActionView[] }) {
       })}
     </ItemGroup>
   );
-}
-
-/**
- * Actions that ran without asking because the person allowed them: compact, with the reach they ran
- * under and, while "always" holds, a way back to asking.
- */
-/** What a call acted on, for a one-line list: the first of its title, name or e-mail, if any. */
-function subjectOf(json: string | undefined): string | null {
-  if (!json) return null;
-  try {
-    const parsed: unknown = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    const values = parsed as Record<string, unknown>;
-    const subject = ["title", "name", "email"].map((key) => values[key]).find((v) => typeof v === "string" && v.trim());
-    return typeof subject === "string" ? subject : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
