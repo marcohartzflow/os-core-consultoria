@@ -1,6 +1,7 @@
 "use client";
 
 import "./globals.css";
+import { PRODUCT_NAME } from "@/core/brand";
 import { ScreenError } from "@/core/ui/screen-error";
 
 // Replaces the root layout when it (or a group layout: the session loader, the shell) crashes, where
@@ -10,7 +11,7 @@ export default function GlobalError(props: { error: Error & { digest?: string };
   return (
     <html lang="pt-BR">
       <body className="flex min-h-svh items-center justify-center font-sans antialiased">
-        <title>Erro · OS</title>
+        <title>{`Erro · ${PRODUCT_NAME}`}</title>
         <ScreenError {...props} />
       </body>
     </html>

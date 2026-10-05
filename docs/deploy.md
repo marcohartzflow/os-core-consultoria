@@ -195,7 +195,7 @@ browser --HTTPS--> caddy --HTTP--> web (Next, porta 3000) --/api/*--> api (Sprin
 | `SPRING_MAIL_HOST`, `OS_MAIL_FROM` | sim | SMTP para convites e redefinição de senha. A API não sobe em produção sem os dois: o convite só chega por e-mail, e é recebê-lo que prova que o endereço é da pessoa |
 | `SPRING_MAIL_PORT` | sim (padrão `587`) | Porta do SMTP |
 | `SPRING_MAIL_USERNAME` | se o SMTP autentica | Usuário do SMTP; a senha fica em `secrets/mail_password` |
-| `OS_MAIL_PORTAL_NAME` | não (padrão `OS`) | Nome do portal nos e-mails |
+| `OS_MAIL_PORTAL_NAME` | não (padrão `OS`) | Nome do portal nos e-mails, no aplicativo autenticador e no prompt do agente |
 | `OS_TRUSTED_PROXIES` | não | Só com balanceador de carga ou CDN na frente do Caddy: faixas (CIDR) de onde ele conecta (seção "Como o tráfego flui"). Vazia, nenhum proxy é confiável |
 | `BACKUP_AGE_RECIPIENT`, `BACKUP_KEEP_DAYS`, `BACKUP_UPLOAD_CMD` | recipient sim | Backup criptografado (seção acima) |
 
@@ -209,6 +209,7 @@ Segredos não ficam no `.env` nem em variáveis de ambiente: ficam em `deploy/se
 | `db_owner_password` | gerado | Senha do `os_owner`, dono do schema; montada no `postgres` (criação do role) e no `migrate`, nunca na API |
 | `db_app_password` | gerado | Senha do `os_app`, role da API |
 | `bootstrap_admin_password` | gerado | Senha inicial do primeiro administrador (`os.iam.bootstrap.admin-password`); trocada no primeiro login. Esvazie o arquivo depois |
+| `ai_audit_key` | gerado | Chave do HMAC que substitui os argumentos das tools na trilha de auditoria (`argumentsHmac`). Trocar não perde dados: só as linhas antigas deixam de conferir com uma ação pendente que ainda exista |
 | `mfa_encryption_key` | gerado | Cifra os segredos TOTP. Nunca troque: todos precisariam reconfigurar o segundo fator. Guarde uma cópia com a chave privada do backup, pois o backup sem ela não restaura o MFA |
 | `anthropic_api_key` | vazio | Chave da Anthropic; preencha antes de subir |
 | `openai_api_key` | vazio | Chave da OpenAI, opcional. Vazio, os modelos GPT de `os.ai.models` não aparecem no seletor. Preencher inclui a OpenAI como suboperadora (LGPD): registre no inventário de tratamento |

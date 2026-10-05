@@ -200,6 +200,8 @@ os:
     # Per person (OWASP LLM10): turns started per minute and turns running at once; beyond either, 429.
     turns-per-minute: 20
     max-concurrent-turns-per-user: 2
+    # HMAC key for tool arguments in the audit trail. 32 random bytes in Base64: openssl rand -base64 32
+    audit-key: ${OS_AI_AUDIT_KEY:}
     # Models a person may pick in the assistant, in picker order; the first one whose provider has an
     # API key (spring.ai.<provider>.api-key) is the default. A fork trims or reorders this list. Ids
     # from https://platform.claude.com/docs/en/about-claude/models/overview and

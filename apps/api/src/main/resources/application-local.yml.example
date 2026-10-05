@@ -25,6 +25,9 @@ logging:
   level:
     org.springframework.ai.chat.client.advisor: DEBUG
 os:
+  ai:
+    # Só para desenvolvimento. Em produção vem de deploy/secrets/ai_audit_key.
+    audit-key: ZGV2LW9ubHktYXVkaXQtZGV2LW9ubHktYXVkaXQtMDE=
   # mail:
   #   from: OS <no-reply@localhost>
   iam:

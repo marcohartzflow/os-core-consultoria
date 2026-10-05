@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Layout, PanelSize } from "react-resizable-panels";
 import { usePanelRef } from "react-resizable-panels";
+import { AGENT_NAME } from "@/core/brand";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { AgentPanel } from "./AgentPanel";
 import { AgentChatProvider } from "./useAgentChat";
@@ -123,7 +124,7 @@ export function AgentWorkspace({ page, defaultLayout }: { page: React.ReactNode;
         {page}
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent side="right" showCloseButton={false} className="w-full gap-0 p-0 sm:max-w-full">
-            <SheetTitle className="sr-only">Assistente</SheetTitle>
+            <SheetTitle className="sr-only">{AGENT_NAME}</SheetTitle>
             <SheetDescription className="sr-only">Converse com o assistente do portal</SheetDescription>
             {mounted && <AgentPanel />}
           </SheetContent>
@@ -159,7 +160,7 @@ export function AgentWorkspace({ page, defaultLayout }: { page: React.ReactNode;
             onResize={onResize}
           >
             <aside
-              aria-label="Assistente"
+              aria-label={AGENT_NAME}
               className={cn(
                 "flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-background shadow-sm ring-1 ring-border",
                 !open && "invisible",

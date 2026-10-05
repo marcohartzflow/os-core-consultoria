@@ -18,6 +18,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { AGENT_NAME } from "@/core/brand";
 import { api, download, isAbortError } from "@/core/api/client";
 import { fetchPage, toQuery, type QueryValue } from "@/core/api/query";
 import { actionLabel } from "@/core/audit/labels";
@@ -53,7 +54,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 const ORIGINS: { value: AuditOrigin; label: string; icon: LucideIcon }[] = [
   { value: "REST", label: "Portal", icon: MousePointerClick },
-  { value: "AI_TOOL", label: "Assistente", icon: Bot },
+  { value: "AI_TOOL", label: AGENT_NAME, icon: Bot },
   { value: "SYSTEM", label: "Sistema", icon: Cog },
 ];
 

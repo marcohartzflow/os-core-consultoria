@@ -13,6 +13,7 @@ import com.maximusflow.os.ai.internal.application.ConversationService;
 import com.maximusflow.os.ai.internal.application.PendingActionService;
 import com.maximusflow.os.ai.internal.domain.PendingAction;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
+import com.maximusflow.os.ai.internal.tools.ToolArguments;
 import com.maximusflow.os.common.audit.AuditRecorder;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
 import com.maximusflow.os.ai.internal.tools.ToolRegistry;
@@ -61,6 +62,9 @@ class AiToolsTests {
 
 	@Autowired
 	AuditRecorder auditRecorder;
+
+	@Autowired
+	ToolArguments toolArguments;
 
 	@Autowired
 	MockMvc mvc;
@@ -131,7 +135,7 @@ class AiToolsTests {
 
 		// The agent "calls" the state-changing tool: nothing happens except a pending action.
 		var stub = new ConfirmingToolCallback(disable, (tool, args) -> this.pendingActions.park(conversationId, tool, args),
-				(input) -> null, this.auditRecorder);
+				(input) -> null, this.auditRecorder, this.toolArguments);
 		String reply = stub.call("{\"id\":\"" + UUID.randomUUID() + "\"}", new ToolContext(Map.of()));
 		assertThat(reply).contains("PENDING_CONFIRMATION");
 		var open = this.pendingActions.open(conversationId);
@@ -299,7 +303,7 @@ class AiToolsTests {
 	private java.util.function.Function<String, UUID> stub2(RegisteredTool tool, UUID conversationId) {
 		return (args) -> {
 			var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a),
-					(input) -> null, this.auditRecorder);
+					(input) -> null, this.auditRecorder, this.toolArguments);
 			String reply = stub.call(args, new ToolContext(Map.of()));
 			return UUID.fromString(reply.replaceAll(".*\"actionId\":\"([^\"]+)\".*", "$1"));
 		};

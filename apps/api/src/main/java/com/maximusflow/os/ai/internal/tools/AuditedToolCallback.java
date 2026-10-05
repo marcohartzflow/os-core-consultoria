@@ -34,10 +34,13 @@ public final class AuditedToolCallback implements ToolCallback {
 
 	private final Clock clock;
 
-	public AuditedToolCallback(ToolCallback delegate, AuditRecorder audit, Clock clock) {
+	private final ToolArguments arguments;
+
+	public AuditedToolCallback(ToolCallback delegate, AuditRecorder audit, Clock clock, ToolArguments arguments) {
 		this.delegate = delegate;
 		this.audit = audit;
 		this.clock = clock;
+		this.arguments = arguments;
 	}
 
 	@Override
@@ -94,8 +97,8 @@ public final class AuditedToolCallback implements ToolCallback {
 	}
 
 	/** Never the argument values: the trail outlives the data they may name (LGPD art. 6 III). */
-	private static Map<String, Object> details(String toolInput, String key, Object value) {
-		Map<String, Object> details = new HashMap<>(ToolArguments.auditDetails(toolInput));
+	private Map<String, Object> details(String toolInput, String key, Object value) {
+		Map<String, Object> details = new HashMap<>(this.arguments.auditDetails(toolInput));
 		details.put(key, value);
 		return details;
 	}

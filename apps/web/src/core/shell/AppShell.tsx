@@ -3,7 +3,8 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
-import { ChevronDown, CirclePlus, Command, LogOut } from "lucide-react";
+import { ChevronDown, CirclePlus, LogOut } from "lucide-react";
+import { PRODUCT_NAME, ProductMark } from "@/core/brand";
 import { AgentToggle } from "@/core/ai/AgentToggle";
 import { AgentWorkspace } from "@/core/ai/AgentWorkspace";
 import type { Layout } from "react-resizable-panels";
@@ -52,8 +53,8 @@ import {
 function Brand() {
   return (
     <>
-      <Command />
-      <span className="text-base font-semibold">OS</span>
+      <ProductMark />
+      <span className="text-base font-semibold">{PRODUCT_NAME}</span>
     </>
   );
 }

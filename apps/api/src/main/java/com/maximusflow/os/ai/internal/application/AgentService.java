@@ -18,6 +18,7 @@ import com.maximusflow.os.ai.internal.tools.AuditedToolCallback;
 import com.maximusflow.os.ai.internal.tools.ConfirmingToolCallback;
 import com.maximusflow.os.ai.internal.tools.ContextPropagatingToolCallback;
 import com.maximusflow.os.ai.internal.tools.RegisteredTool;
+import com.maximusflow.os.ai.internal.tools.ToolArguments;
 import com.maximusflow.os.ai.internal.tools.TurnCancelledException;
 import com.maximusflow.os.ai.internal.tools.TurnListener;
 import com.maximusflow.os.ai.internal.tools.ToolRegistry;
@@ -87,10 +88,14 @@ public class AgentService {
 
 	private final ToolPermissionService permissions;
 
+	private final ToolArguments toolArguments;
+
 	AgentService(AgentModels models, ToolRegistry registry, ConversationService conversations,
 			PendingActionService pendingActions, CurrentUser currentUser, AuditRecorder audit, AiProperties properties,
-			UserDirectory userDirectory, Clock clock, ToolPermissionService permissions) {
+			UserDirectory userDirectory, Clock clock, ToolPermissionService permissions,
+			ToolArguments toolArguments) {
 		this.permissions = permissions;
+		this.toolArguments = toolArguments;
 		this.models = models;
 		this.userDirectory = userDirectory;
 		this.registry = registry;
@@ -334,9 +339,10 @@ public class AgentService {
 		// An action asks by nature; a read asks when the person chose so.
 		ToolCallback inner = (tool.requiresConfirmation() || askFirst)
 				? new ConfirmingToolCallback(tool, (t, args) -> this.pendingActions.park(conversationId, t, args),
-						(arguments) -> autoAllowed(tool, conversationId, actorId, autoLeft, arguments), this.audit)
+						(arguments) -> autoAllowed(tool, conversationId, actorId, autoLeft, arguments), this.audit,
+						this.toolArguments)
 				: tool.callback();
-		return new AuditedToolCallback(inner, this.audit, this.clock);
+		return new AuditedToolCallback(inner, this.audit, this.clock, this.toolArguments);
 	}
 
 }

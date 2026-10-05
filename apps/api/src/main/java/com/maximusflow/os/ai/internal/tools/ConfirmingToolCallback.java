@@ -31,12 +31,15 @@ public final class ConfirmingToolCallback implements ToolCallback {
 
 	private final AuditRecorder audit;
 
+	private final ToolArguments arguments;
+
 	public ConfirmingToolCallback(RegisteredTool tool, BiFunction<RegisteredTool, String, UUID> park,
-			Function<String, @Nullable String> autoAllowed, AuditRecorder audit) {
+			Function<String, @Nullable String> autoAllowed, AuditRecorder audit, ToolArguments arguments) {
 		this.tool = tool;
 		this.park = park;
 		this.autoAllowed = autoAllowed;
 		this.audit = audit;
+		this.arguments = arguments;
 	}
 
 	@Override
@@ -66,14 +69,14 @@ public final class ConfirmingToolCallback implements ToolCallback {
 			catch (RuntimeException ex) {
 				// AuditedToolCallback records the failure; this row says it was a call that ran without asking.
 				if (this.tool.requiresConfirmation()) {
-					Map<String, Object> failed = new HashMap<>(ToolArguments.auditDetails(toolInput));
+					Map<String, Object> failed = new HashMap<>(this.arguments.auditDetails(toolInput));
 					failed.put("scope", scope);
 					failed.put("outcome", "failed");
 					this.audit.record("ai.action.auto_allowed", "ai_tool", this.tool.name(), failed);
 				}
 				throw ex;
 			}
-			Map<String, Object> details = new HashMap<>(ToolArguments.auditDetails(toolInput));
+			Map<String, Object> details = new HashMap<>(this.arguments.auditDetails(toolInput));
 			if (!this.tool.requiresConfirmation()) {
 				// A read the person approved: an ordinary read from here on, in the trail and on screen.
 				this.audit.record("ai.tool.executed", "ai_tool", this.tool.name(), details);

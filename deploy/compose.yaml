@@ -178,6 +178,8 @@ services:
         target: spring.ai.openai.api-key
       - source: mfa_encryption_key
         target: os.iam.mfa.encryption-key
+      - source: ai_audit_key
+        target: os.ai.audit-key
       - source: mail_password
         target: spring.mail.password
       # The JVM sizes its heap from this limit, not from the host (MaxRAMPercentage in the image).
@@ -281,6 +283,8 @@ secrets:
     file: ./secrets/openai_api_key
   mfa_encryption_key:
     file: ./secrets/mfa_encryption_key
+  ai_audit_key:
+    file: ./secrets/ai_audit_key
   mail_password:
     file: ./secrets/mail_password
 

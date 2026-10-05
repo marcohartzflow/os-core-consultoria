@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { AGENT_NAME, AgentMark } from "@/core/brand";
 import { useAgentWindow } from "./agent-context";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -14,11 +14,11 @@ export function AgentToggle() {
       variant={agent.open ? "secondary" : "outline"}
       size="sm"
       aria-pressed={agent.open}
-      aria-label="Assistente"
+      aria-label={AGENT_NAME}
       onClick={agent.toggle}
     >
-      <Sparkles data-icon="inline-start" />
-      <span className="hidden @lg/page:inline">Assistente</span>
+      <AgentMark data-icon="inline-start" />
+      <span className="hidden @lg/page:inline">{AGENT_NAME}</span>
       <Kbd className="hidden @3xl/page:inline-flex">⌘I</Kbd>
     </Button>
   );

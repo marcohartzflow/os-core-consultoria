@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -48,7 +49,12 @@ public record AiProperties(@DefaultValue("5m") Duration pendingActionTtl, @Defau
 		 * Actions one turn may run without asking; beyond it the rest ask again, so an injected "do it
 		 * for every record" stops at the person.
 		 */
-		@DefaultValue("5") @Min(0) int maxAutoActionsPerTurn) {
+		@DefaultValue("5") @Min(0) int maxAutoActionsPerTurn,
+		/**
+		 * Key of the HMAC that stands in for a tool call's arguments in the audit trail (32 random bytes,
+		 * Base64). Without it a hash of short arguments (an id, a name) could be reversed by guessing.
+		 */
+		@Nullable String auditKey) {
 
 	/** Upper bound for {@code os.ai.max-user-message-length}; the REST body is validated against it. */
 	public static final int MAX_USER_MESSAGE_LENGTH_CEILING = 32_000;

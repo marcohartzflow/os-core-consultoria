@@ -71,10 +71,14 @@ public class PendingActionService {
 
 	private final ToolPermissionService permissions;
 
+	private final ToolArguments toolArguments;
+
 	PendingActionService(PendingActionRepository actions, ToolRegistry registry, ChatMemory chatMemory,
 			CurrentUser currentUser, AuditRecorder audit, AiProperties properties,
-			PlatformTransactionManager transactionManager, Clock clock, ToolPermissionService permissions) {
+			PlatformTransactionManager transactionManager, Clock clock, ToolPermissionService permissions,
+			ToolArguments toolArguments) {
 		this.permissions = permissions;
+		this.toolArguments = toolArguments;
 		this.actions = actions;
 		this.registry = registry;
 		this.chatMemory = chatMemory;
@@ -99,7 +103,7 @@ public class PendingActionService {
 				tool.confirmationSummary(), arguments, now, now.plus(this.properties.pendingActionTtl())));
 		// Argument names and hash only: the values stay in ai_pending_action, which is purged, and never
 		// in the append-only trail (LGPD art. 6 III).
-		Map<String, Object> details = new HashMap<>(ToolArguments.auditDetails(arguments));
+		Map<String, Object> details = new HashMap<>(this.toolArguments.auditDetails(arguments));
 		details.put("tool", tool.name());
 		this.audit.record("ai.action.parked", "ai_action", action.getId().toString(), details);
 		return action.getId();

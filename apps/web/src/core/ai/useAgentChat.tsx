@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AGENT_NAME } from "@/core/brand";
 import { api, errorMessage, isGated, mutationHeaders, problem, UserFacingError } from "@/core/api/client";
 import type { ChatMessage, ConversationSummary, ModelView, PendingActionView, ToolSetting } from "@/core/api/types";
 import { announceDataChanged } from "@/core/api/useLoad";
@@ -54,7 +55,7 @@ function asMarkdown(title: string, messages: { role: string; text: string }[]) {
   return [
     `# ${title}`,
     "",
-    ...messages.flatMap((m) => [`**${m.role === "user" ? "Você" : "Assistente"}:**`, "", m.text, ""]),
+    ...messages.flatMap((m) => [`**${m.role === "user" ? "Você" : AGENT_NAME}:**`, "", m.text, ""]),
   ].join("\n");
 }
 

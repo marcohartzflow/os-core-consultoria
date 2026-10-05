@@ -341,7 +341,8 @@
       become_user: "{{ os_deploy_user }}"
       ansible.builtin.command:
         cmd: "{{ os_path }}/deploy/init-secrets.sh"
-        creates: "{{ os_path }}/deploy/secrets/mfa_encryption_key"
+        # The newest secret: an older install runs the script again and gets only what is missing.
+        creates: "{{ os_path }}/deploy/secrets/ai_audit_key"
 
     # Backup, daily. Output goes to the journal (journalctl -t os-backup); with a heartbeat URL, a
     # missed or failed backup shows up at the monitoring service that expects the ping.

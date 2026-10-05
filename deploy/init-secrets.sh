@@ -9,6 +9,7 @@
 #   bootstrap_admin_password  generated here; first administrator's password, to be replaced at the
 #                             first login. Empty the file afterwards (: > secrets/bootstrap_admin_password)
 #   mfa_encryption_key        generated here; back it up with the database backups' private key
+#   ai_audit_key              generated here; HMAC key for tool arguments in the audit trail
 #   anthropic_api_key         empty: paste the key (printf '%s' 'sk-ant-...' > secrets/anthropic_api_key)
 #   openai_api_key            empty: optional; with a key the OpenAI models of os.ai.models are offered
 #   mail_password             empty unless SMTP needs a password
@@ -33,6 +34,7 @@ create db_owner_password "$(openssl rand -base64 32 | tr -d '\n')"
 create db_app_password "$(openssl rand -base64 32 | tr -d '\n')"
 create bootstrap_admin_password "$(openssl rand -base64 32 | tr -d '\n')"
 create mfa_encryption_key "$(openssl rand -base64 32 | tr -d '\n')"
+create ai_audit_key "$(openssl rand -base64 32 | tr -d '\n')"
 create anthropic_api_key ""
 create openai_api_key ""
 create mail_password ""

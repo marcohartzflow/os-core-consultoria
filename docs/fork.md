@@ -30,7 +30,7 @@ O `dependabot.yml` sai do fork porque as versões das dependências chegam pelo 
 Depois, no fork:
 
 1. Identidade visual: `cd apps/web && pnpm dlx shadcn@latest apply --preset <codigo>`. Nenhum componente é editado à mão.
-2. Nome do portal: `OS_MAIL_PORTAL_NAME` e o texto "OS" em `apps/web/src/core/shell/AppShell.tsx`, `apps/web/src/app/layout.tsx` (metadata) e `apps/web/src/app/(public)/layout.tsx`.
+2. Nome do portal: `OS_MAIL_PORTAL_NAME` (e-mails, aplicativo autenticador e prompt do agente) e `apps/web/src/core/brand.ts` (nome e marca do portal e do agente na tela). As frases que citam o agente ("o assistente quer…") ficam escritas onde aparecem, pela concordância; ao renomear o agente, revise-as buscando por "assistente".
 3. Módulos de negócio: siga `new-module.md`. O módulo de exemplo `tasks` pode ficar ou ser removido (pacote `com.maximusflow.os.tasks`, migração `V6__tasks.sql` só se o banco ainda não existe, `src/modules/tasks`, entradas em `src/modules/navigation.ts` e `src/modules/dashboard.ts`, rota `src/app/(os)/tasks`).
 4. Servidor e deploy: `deploy.md`, "Preparar o servidor" (Ansible) e "Deploy contínuo" (`cd.yml`, que fica inativo sem a variável `DEPLOY_HOST`).
 

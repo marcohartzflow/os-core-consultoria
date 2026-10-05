@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { AGENT_NAME } from "@/core/brand";
 import type { AuditActivityDay } from "@/core/api/types";
 import { ErrorState } from "@/core/ui/feedback";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,7 @@ import { parseDay } from "./labels";
 
 const chartConfig = {
   rest: { label: "Portal", color: "var(--chart-1)" },
-  aiTool: { label: "Assistente", color: "var(--chart-2)" },
+  aiTool: { label: AGENT_NAME, color: "var(--chart-2)" },
   system: { label: "Sistema", color: "var(--chart-3)" },
 } satisfies ChartConfig;
 

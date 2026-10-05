@@ -70,6 +70,9 @@ class AiSafeguardsTests {
 	AuditRecorder auditRecorder;
 
 	@Autowired
+	ToolArguments toolArguments;
+
+	@Autowired
 	MockMvc mvc;
 
 	@Autowired
@@ -201,12 +204,12 @@ class AiSafeguardsTests {
 		String details = this.jdbc.queryForObject(
 				"SELECT details::text FROM audit_event WHERE action = 'ai.action.parked' AND entity_id = ?", String.class,
 				actionId.toString());
-		assertThat(details).doesNotContain(taskId.toString())
-			.contains("\"argumentNames\": [\"id\"]", ToolArguments.sha256(arguments), "tasks_delete");
-		// While the pending action exists, its stored arguments match the hash in the trail.
-		assertThat(ToolArguments.sha256(this.jdbc.queryForObject(
-				"SELECT arguments FROM ai_pending_action WHERE id = ?", String.class, actionId)))
-			.isEqualTo(ToolArguments.sha256(arguments));
+		assertThat(details).doesNotContain(taskId.toString(), ToolArguments.sha256(arguments))
+			.contains("\"argumentNames\": [\"id\"]", "tasks_delete");
+		// While the pending action exists, its stored arguments match the keyed fingerprint in the trail.
+		String stored = this.jdbc.queryForObject("SELECT arguments FROM ai_pending_action WHERE id = ?", String.class,
+				actionId);
+		assertThat(details).contains("\"argumentsHmac\": \"" + this.toolArguments.auditDetails(stored).get("argumentsHmac"));
 	}
 
 	/** A tool removed between parking and confirming must not leave the action EXECUTING forever. */
@@ -265,7 +268,7 @@ class AiSafeguardsTests {
 
 	private UUID park(RegisteredTool tool, UUID conversationId, String arguments) {
 		var stub = new ConfirmingToolCallback(tool, (t, a) -> this.pendingActions.park(conversationId, t, a),
-				(input) -> null, this.auditRecorder);
+				(input) -> null, this.auditRecorder, this.toolArguments);
 		String reply = stub.call(arguments, new ToolContext(Map.of()));
 		return UUID.fromString(reply.replaceAll(".*\"actionId\":\"([^\"]+)\".*", "$1"));
 	}

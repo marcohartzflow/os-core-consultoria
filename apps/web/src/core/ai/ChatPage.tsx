@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { PanelLeft, Search, Settings, SquarePen } from "lucide-react";
+import { AGENT_NAME } from "@/core/brand";
 import type { ConversationSummary } from "@/core/api/types";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { ErrorState } from "@/core/ui/feedback";
@@ -97,7 +98,7 @@ export function ChatPage() {
         )
       )}
 
-      <section aria-label="Assistente" className="flex min-w-0 flex-1 flex-col">
+      <section aria-label={AGENT_NAME} className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
           <Tooltip>
             <TooltipTrigger asChild>

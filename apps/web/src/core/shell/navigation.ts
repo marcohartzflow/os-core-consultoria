@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ScrollText, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
+import { LayoutDashboard, ScrollText, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { AGENT_NAME, AgentMark } from "@/core/brand";
 import { moduleNavigation, moduleQuickCreate } from "@/modules/navigation";
 
 export interface NavItem {
@@ -22,7 +23,7 @@ export function navigationFor(hasPermission: (permission: string) => boolean): N
       title: "Início",
       items: [
         { label: "Painel", href: "/", icon: LayoutDashboard },
-        { label: "Assistente", href: "/chat", icon: Sparkles, permission: "ai.chat.use" },
+        { label: AGENT_NAME, href: "/chat", icon: AgentMark, permission: "ai.chat.use" },
       ],
     },
     ...moduleNavigation,

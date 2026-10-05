@@ -68,7 +68,7 @@ class AiControllerTurnLimitTests {
 		AiProperties.Model model = new AiProperties.Model("claude-opus-5-5", AiProvider.ANTHROPIC, "Claude Opus 5.5",
 				"Padrão", "1M");
 		AiProperties properties = new AiProperties(Duration.ofMinutes(5), 40, Duration.ofMinutes(5), 100, 2, 4000,
-				List.of(model), true, Duration.ofDays(30), 5);
+				List.of(model), true, Duration.ofDays(30), 5, null);
 		AgentModels models = new AgentModels(properties.models(), Map.of(AiProvider.ANTHROPIC, mock(ChatClient.class)));
 		AiController controller = new AiController(mock(AgentService.class), models, mock(ConversationService.class),
 				mock(PendingActionService.class), mock(ToolPermissionService.class), queue, mock(TaskScheduler.class),
@@ -97,7 +97,7 @@ class AiControllerTurnLimitTests {
 		AiProperties.Model model = new AiProperties.Model("claude-opus-5-5", AiProvider.ANTHROPIC, "Claude Opus 5.5",
 				"Padrão", "1M");
 		AiProperties properties = new AiProperties(Duration.ofMinutes(5), 40, Duration.ofMinutes(5), 100, 5, 4000,
-				List.of(model), true, Duration.ofDays(30), 5);
+				List.of(model), true, Duration.ofDays(30), 5, null);
 		AgentModels models = new AgentModels(properties.models(), Map.of(AiProvider.ANTHROPIC, mock(ChatClient.class)));
 		AiController controller = new AiController(mock(AgentService.class), models, mock(ConversationService.class),
 				mock(PendingActionService.class), mock(ToolPermissionService.class), mock(AsyncTaskExecutor.class),

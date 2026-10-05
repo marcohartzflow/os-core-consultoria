@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Bot, ChevronRight, Cog, ScrollText, ShieldCheck, ShieldX } from "lucide-react";
+import { AGENT_NAME } from "@/core/brand";
 import type { AdministratorStatus, AuditEventView } from "@/core/api/types";
 import type { NavItem } from "@/core/shell/navigation";
 import { EmptyState, ErrorState } from "@/core/ui/feedback";
@@ -204,7 +205,7 @@ export function RecentActivityCard({
                     <ItemTitle className="w-full min-w-0"><span className="truncate">{actionLabel(event.action)}</span></ItemTitle>
                     <ItemDescription className="truncate">
                       {event.origin === "AI_TOOL"
-                        ? `Assistente, a pedido de ${event.actorEmail ?? "alguém"}`
+                        ? `${AGENT_NAME}, a pedido de ${event.actorEmail ?? "alguém"}`
                         : (event.actorEmail ?? "Sistema")}
                     </ItemDescription>
                   </ItemContent>

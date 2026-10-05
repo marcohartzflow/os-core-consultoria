@@ -13,6 +13,7 @@ os:
   ai:
     # The chat tests share one administrator across test classes; the limit has its own test.
     turns-per-minute: 1000
+    audit-key: dGVzdC1hdWRpdC10ZXN0LWF1ZGl0LXRlc3QtYXVkaXQ=
   iam:
     password:
       check-compromised: false

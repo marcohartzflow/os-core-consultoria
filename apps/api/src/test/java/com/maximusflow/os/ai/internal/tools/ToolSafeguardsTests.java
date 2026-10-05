@@ -70,13 +70,14 @@ class ToolSafeguardsTests {
 		AuditRecorder audit = mock(AuditRecorder.class);
 		ToolCallback failing = new FailingCallback(wrapped(new AuthorizationDeniedException("Access Denied")));
 		List<ToolEvents.Event> events = new ArrayList<>();
-		var callback = new AuditedToolCallback(failing, audit, Clock.systemUTC());
+		ToolArguments arguments = new ToolArguments(ToolArgumentsTests.KEY);
+		var callback = new AuditedToolCallback(failing, audit, Clock.systemUTC(), arguments);
 
 		assertThatExceptionOfType(ToolExecutionException.class)
 			.isThrownBy(() -> ToolEvents.listen(events::add, () -> callback.call("{}", new ToolContext(Map.of()))));
 
 		verify(audit).record(eq("ai.tool.failed"), eq("ai_tool"), eq("tasks_probe"),
-				eq(Map.of("argumentNames", List.of(), "argumentsSha256", ToolArguments.sha256("{}"), "reason",
+				eq(Map.of("argumentNames", List.of(), "argumentsHmac", arguments.hmac("{}"), "reason",
 						"AuthorizationDeniedException")));
 		assertThat(events).containsExactly(new ToolEvents.ToolStarted("tasks_probe"),
 				new ToolEvents.ToolFailed("tasks_probe", "sem permissão"));

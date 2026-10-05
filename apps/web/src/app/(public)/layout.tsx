@@ -1,4 +1,5 @@
-import { Command, LockKeyhole } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
+import { PRODUCT_NAME, ProductMark } from "@/core/brand";
 import { Separator } from "@/components/ui/separator";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -6,8 +7,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     <main className="grid min-h-dvh p-2 lg:grid-cols-2">
       <div className="relative order-2 hidden rounded-3xl bg-primary lg:flex">
         <div className="absolute top-10 space-y-1 px-10 text-primary-foreground">
-          <Command className="size-10" />
-          <h1 className="text-2xl font-medium">OS</h1>
+          <ProductMark className="size-10" />
+          <h1 className="text-2xl font-medium">{PRODUCT_NAME}</h1>
           <p className="text-sm">Portal único da empresa.</p>
         </div>
         <div className="absolute bottom-10 flex w-full justify-between px-10">
@@ -27,13 +28,13 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </div>
       <div className="relative order-1 flex flex-col">
         <div className="flex items-center gap-2 px-6 pt-5 font-medium lg:hidden">
-          <Command className="size-5" />
-          OS
+          <ProductMark className="size-5" />
+          {PRODUCT_NAME}
         </div>
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="w-full sm:w-[350px]">{children}</div>
         </div>
-        <div className="px-10 pb-5 text-sm text-muted-foreground">© {new Date().getFullYear()} OS</div>
+        <div className="px-10 pb-5 text-sm text-muted-foreground">© {new Date().getFullYear()} {PRODUCT_NAME}</div>
       </div>
     </main>
   );

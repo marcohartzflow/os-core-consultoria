@@ -71,6 +71,9 @@ class AiChatStreamTests {
 		/** The model id each call asked for, as the provider would receive it. */
 		static final List<String> MODELS = new CopyOnWriteArrayList<>();
 
+		/** The system prompt each call carried, as rendered from prompts/system.st. */
+		static final List<String> SYSTEMS = new CopyOnWriteArrayList<>();
+
 		/** Stands in for every provider; only Anthropic has a key in the test profile. */
 		@Bean
 		@Primary
@@ -97,6 +100,7 @@ class AiChatStreamTests {
 							? options.getToolCallbacks() : List.of();
 					OFFERED.add(tools.stream().map((t) -> t.getToolDefinition().name()).sorted().toList());
 					MODELS.add(String.valueOf(prompt.getOptions().getModel()));
+					SYSTEMS.add(prompt.getSystemMessage().getText());
 					String text = prompt.getUserMessage().getText();
 					if (text.contains("usuarios")) {
 						return Flux.defer(() -> {
@@ -226,6 +230,8 @@ class AiChatStreamTests {
 		String conversation = newConversation(admin);
 		MvcResult result = start(admin, conversation, "Quanto custa?");
 		assertThat(awaitEnd(result)).contains("event:done", "Olá, tudo certo.");
+		assertThat(ScriptedModel.SYSTEMS.getLast()).startsWith("Você é o assistente do OS, o portal interno")
+			.doesNotContain("{portal}");
 		String requestId = result.getResponse().getHeader("X-Request-Id");
 		assertThat(requestId).isNotBlank();
 
@@ -255,7 +261,7 @@ class AiChatStreamTests {
 			.andExpect(jsonPath("$[1].steps[0].tool").value("iam_list_users"));
 		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM audit_event WHERE action = 'ai.tool.executed'"
 				+ " AND entity_id = 'iam_list_users' AND origin = 'AI_TOOL' AND correlation_id = ?"
-				+ " AND ip = '127.0.0.1' AND details->>'argumentsSha256' IS NOT NULL AND details->>'arguments' IS NULL",
+				+ " AND ip = '127.0.0.1' AND details->>'argumentsHmac' IS NOT NULL AND details->>'arguments' IS NULL",
 				Integer.class, conversation)).isEqualTo(1);
 	}
 
