@@ -3,14 +3,17 @@ spring:
   ai:
     anthropic:
       api-key: sk-ant-...
-# Para testar e-mail localmente (ex.: Mailpit em localhost:1025), descomente:
-# spring:
-#   mail:
-#     host: localhost
-#     port: 1025
-# os:
-#   mail:
-#     from: OS <no-reply@localhost>
+  # Sem SMTP, os links de convite e de senha vão para o log da API (e o convite aparece na tela).
+  # Para receber os e-mails de verdade, suba o Mailpit (caixa de entrada em http://localhost:8025):
+  #   docker run -d --name os-mailpit -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 axllent/mailpit
+  # e descomente este bloco e o os.mail.from abaixo. O Mailpit não tem login nem TLS.
+  # mail:
+  #   host: localhost
+  #   port: 1025
+  #   properties:
+  #     mail.smtp.auth: false
+  #     mail.smtp.starttls.enable: false
+  #     mail.smtp.starttls.required: false
 springdoc:
   swagger-ui:
     enabled: true
@@ -19,6 +22,8 @@ logging:
   level:
     org.springframework.ai.chat.client.advisor: DEBUG
 os:
+  # mail:
+  #   from: OS <no-reply@localhost>
   iam:
     mfa:
       # openssl rand -base64 32 (só para desenvolvimento local)

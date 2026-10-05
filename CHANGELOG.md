@@ -32,6 +32,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versões s
 
 - Permissões reservadas ao administrador do sistema: criar, editar e excluir roles, atribuir roles (`iam.user.roles.assign`, nova), redefinir o segundo fator de outra pessoa e anonimizar. Não entram em outras roles e não viram tools de IA (`iam_anonymize_user` foi removida).
 - `POST /api/iam/users/{id}/mfa/reset` responde `200` com `{emailed}` (antes `204`): sem envio de e-mail configurado (só em desenvolvimento), a tela diz que o link de nova senha ficou no log da API em vez de afirmar que foi enviado. O link nunca volta para o administrador.
+- `application-local.yml.example`: o bloco de e-mail local (Mailpit) funciona ao ser descomentado. Antes repetia as chaves `spring` e `os` (YAML inválido) e herdava `mail.smtp.auth` e STARTTLS obrigatório, que o Mailpit não tem.
 - Erros de regra (`422`) têm o título "Não foi possível concluir" em vez de "Regra de negócio", que aparecia acima da mensagem nas telas.
 - `iam.user.update` só renomeia (`PATCH /api/iam/users/{id}`, corpo `{name}`); roles vão por `PUT /api/iam/users/{id}/roles`. Convite com roles exige `iam.user.roles.assign`.
 - Pelo menos 2 administradores ativos (`os.iam.administrators.minimum`); conceder a role de sistema pede a senha de quem concede e avisa os demais administradores por e-mail.
