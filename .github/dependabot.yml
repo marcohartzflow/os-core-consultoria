@@ -1,9 +1,13 @@
 # Version updates wait 7 days after a release is published (cooldown): a compromised release is
 # usually found and pulled within days, and a version that old has had that time. Security updates
 # are not delayed by it.
+# Every update targets develop, like any other change: it reaches main with the next develop -> main
+# pull request (docs/deploy.md, "Fluxo de branches"). Security updates ignore target-branch and open
+# against main: retarget them to develop (gh pr edit <n> --base develop) before merging.
 version: 2
 updates:
   - package-ecosystem: gradle
+    target-branch: develop
     directory: /apps/api
     schedule:
       interval: weekly
@@ -19,6 +23,7 @@ updates:
         exclude-patterns:
           - "org.springframework*"
   - package-ecosystem: npm
+    target-branch: develop
     directory: /
     schedule:
       interval: weekly
@@ -40,12 +45,14 @@ updates:
           - "react-dom"
           - "eslint-config-next"
   - package-ecosystem: github-actions
+    target-branch: develop
     directory: /
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
   - package-ecosystem: docker
+    target-branch: develop
     directories:
       - /apps/api
       - /apps/web
