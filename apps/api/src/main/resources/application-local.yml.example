@@ -1,0 +1,47 @@
+# Copie para application-local.yml (ignorado pelo git) e ative com SPRING_PROFILES_ACTIVE=local.
+spring:
+  ai:
+    anthropic:
+      api-key: sk-ant-...
+    # Opcional: com a chave, os modelos GPT de os.ai.models aparecem no seletor do assistente.
+    # openai:
+    #   api-key: sk-...
+  # Sem SMTP, os links de convite e de senha vão para o log da API (e o convite aparece na tela).
+  # Para receber os e-mails de verdade, suba o Mailpit (caixa de entrada em http://localhost:8025):
+  #   docker run -d --name os-mailpit -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 axllent/mailpit
+  # e descomente este bloco e o os.mail.from abaixo. O Mailpit não tem login nem TLS.
+  # mail:
+  #   host: localhost
+  #   port: 1025
+  #   properties:
+  #     mail.smtp.auth: false
+  #     mail.smtp.starttls.enable: false
+  #     mail.smtp.starttls.required: false
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /api/swagger-ui.html
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor: DEBUG
+os:
+  ai:
+    # Só para desenvolvimento. Em produção vem de deploy/secrets/ai_audit_key.
+    audit-key: ZGV2LW9ubHktYXVkaXQtZGV2LW9ubHktYXVkaXQtMDE=
+  # mail:
+  #   from: OS <no-reply@localhost>
+  iam:
+    mfa:
+      # openssl rand -base64 32 (só para desenvolvimento local)
+      encryption-key: ZGV2LW9ubHktZGV2LW9ubHktZGV2LW9ubHktZGV2MDE=
+    password:
+      # Evita chamar o Have I Been Pwned em desenvolvimento.
+      check-compromised: false
+    bootstrap:
+      admin-email: admin@example.com
+      admin-password: troque-esta-senha-local
+      admin-name: Admin Local
+  auth:
+    session:
+      # http://localhost sem TLS
+      cookie-secure: false

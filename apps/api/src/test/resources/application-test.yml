@@ -1,0 +1,34 @@
+spring:
+  ai:
+    anthropic:
+      api-key: test-key
+os:
+  auth:
+    session:
+      cookie-secure: false
+    rate-limit:
+      # The flow tests fire many requests from one address; the limiter itself has a unit test.
+      login-per-minute: 1000
+      recovery-per-minute: 1000
+  ai:
+    # The chat tests share one administrator across test classes; the limit has its own test.
+    turns-per-minute: 1000
+    audit-key: dGVzdC1hdWRpdC10ZXN0LWF1ZGl0LXRlc3QtYXVkaXQ=
+  iam:
+    password:
+      check-compromised: false
+      # Required by the startup check while flow tests run without a second factor for everyone.
+      min-length: 15
+    bootstrap:
+      admin-email: admin@example.com
+      admin-password: Bootstrap-Secret-2026
+      admin-name: Admin
+      require-password-change: false
+    mfa:
+      # Flow tests use the bootstrap administrator without a second factor; MfaTests turn the policy on.
+      require-for-system-role: false
+      require-for-all: false
+      encryption-key: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdCE=
+logging:
+  level:
+    SECURITY: INFO

@@ -1,0 +1,3090 @@
+{
+  "components" : {
+    "schemas" : {
+      "AdministratorStatus" : {
+        "properties" : {
+          "active" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "belowMinimum" : {
+            "type" : "boolean"
+          },
+          "minimum" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "active", "belowMinimum", "minimum" ],
+        "type" : "object"
+      },
+      "AssignRolesRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "roleIds" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "currentPassword", "roleIds" ],
+        "type" : "object"
+      },
+      "Assignee" : {
+        "properties" : {
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "name" ],
+        "type" : "object"
+      },
+      "AuditActivityDay" : {
+        "properties" : {
+          "aiTool" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "day" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "loginFailure" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "loginSuccess" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "rest" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "system" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "aiTool", "day", "loginFailure", "loginSuccess", "rest", "system" ],
+        "type" : "object"
+      },
+      "AuditEventPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AuditEventView"
+            },
+            "type" : "array"
+          },
+          "next" : {
+            "description" : "Position of the older page; null on the oldest page",
+            "type" : [ "string", "null" ]
+          },
+          "previous" : {
+            "description" : "Position of the newer page; null on the newest page",
+            "type" : [ "string", "null" ]
+          },
+          "total" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalExact" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "content", "next", "previous", "total", "totalExact" ],
+        "type" : "object"
+      },
+      "AuditEventView" : {
+        "properties" : {
+          "action" : {
+            "type" : "string"
+          },
+          "actorEmail" : {
+            "type" : [ "string", "null" ]
+          },
+          "actorId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "correlationId" : {
+            "type" : [ "string", "null" ]
+          },
+          "details" : {
+            "description" : "JSON document with the action details",
+            "type" : [ "object", "null" ]
+          },
+          "entityId" : {
+            "type" : [ "string", "null" ]
+          },
+          "entityType" : {
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "ip" : {
+            "type" : [ "string", "null" ]
+          },
+          "occurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "origin" : {
+            "enum" : [ "REST", "AI_TOOL", "SYSTEM" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "actorEmail", "actorId", "correlationId", "details", "entityId", "entityType", "id", "ip", "occurredAt", "origin" ],
+        "type" : "object"
+      },
+      "ChangePasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "newPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword", "newPassword" ],
+        "type" : "object"
+      },
+      "ChatMessage" : {
+        "properties" : {
+          "role" : {
+            "type" : "string"
+          },
+          "steps" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ToolStep"
+            },
+            "type" : "array"
+          },
+          "text" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "role", "steps", "text" ],
+        "type" : "object"
+      },
+      "CodeRequest" : {
+        "properties" : {
+          "code" : {
+            "maxLength" : 20,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "code" ],
+        "type" : "object"
+      },
+      "ConfirmRequest" : {
+        "properties" : {
+          "scope" : {
+            "enum" : [ "ONCE", "CONVERSATION", "ALWAYS" ],
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "scope" ],
+        "type" : "object"
+      },
+      "ContinueRequest" : {
+        "properties" : {
+          "model" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "model" ],
+        "type" : "object"
+      },
+      "ConversationSummary" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "createdAt", "id", "title", "updatedAt" ],
+        "type" : "object"
+      },
+      "CreateConversationRequest" : {
+        "properties" : {
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "title" ],
+        "type" : "object"
+      },
+      "CsrfToken" : {
+        "properties" : {
+          "headerName" : {
+            "type" : "string"
+          },
+          "parameterName" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DisableRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
+        "type" : "object"
+      },
+      "EmailRequest" : {
+        "properties" : {
+          "email" : {
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email" ],
+        "type" : "object"
+      },
+      "InvitationIssued" : {
+        "properties" : {
+          "invitationLink" : {
+            "type" : [ "string", "null" ]
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/UserSummary"
+          }
+        },
+        "required" : [ "invitationLink", "user" ],
+        "type" : "object"
+      },
+      "InviteUserRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "name" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "roleIds" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "type" : [ "array", "null" ],
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "currentPassword", "email", "name", "roleIds" ],
+        "type" : "object"
+      },
+      "LoginRequest" : {
+        "properties" : {
+          "email" : {
+            "maxLength" : 320,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "password" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "password" ],
+        "type" : "object"
+      },
+      "MeResponse" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "mfa" : {
+            "$ref" : "#/components/schemas/Mfa"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "notificationEmail" : {
+            "type" : [ "string", "null" ]
+          },
+          "passwordChangeRequired" : {
+            "type" : "boolean"
+          },
+          "permissions" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "roles" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "email", "id", "mfa", "name", "notificationEmail", "passwordChangeRequired", "permissions", "roles" ],
+        "type" : "object"
+      },
+      "MessageRequest" : {
+        "properties" : {
+          "model" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "text" : {
+            "maxLength" : 32000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "model", "text" ],
+        "type" : "object"
+      },
+      "Mfa" : {
+        "properties" : {
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "verified" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "MfaRequest" : {
+        "properties" : {
+          "code" : {
+            "maxLength" : 20,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "code" ],
+        "type" : "object"
+      },
+      "MfaStatus" : {
+        "properties" : {
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "passkeys" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "recoveryCodesLeft" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "totp" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "enabled", "passkeys", "recoveryCodesLeft", "required", "totp" ],
+        "type" : "object"
+      },
+      "ModelView" : {
+        "properties" : {
+          "context" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "isDefault" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "context", "description", "id", "isDefault", "name", "provider" ],
+        "type" : "object"
+      },
+      "NotificationEmailRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "notificationEmail" : {
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "currentPassword", "notificationEmail" ],
+        "type" : "object"
+      },
+      "PageMetadata" : {
+        "properties" : {
+          "number" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PagedModelRoleSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RoleSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
+      "PagedModelTaskSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TaskSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
+      "PagedModelUserSummary" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/UserSummary"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "type" : "object"
+      },
+      "Passkey" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "createdAt", "id", "label", "lastUsedAt" ],
+        "type" : "object"
+      },
+      "PasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
+        "type" : "object"
+      },
+      "PendingActionView" : {
+        "properties" : {
+          "arguments" : {
+            "type" : "string"
+          },
+          "conversationId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "result" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "enum" : [ "PENDING", "EXECUTING", "CONFIRMED", "REJECTED", "EXPIRED", "FAILED" ],
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "tool" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "arguments", "conversationId", "createdAt", "expiresAt", "id", "result", "status", "summary", "tool" ],
+        "type" : "object"
+      },
+      "PermissionDefinition" : {
+        "properties" : {
+          "description" : {
+            "type" : "string"
+          },
+          "key" : {
+            "type" : "string"
+          },
+          "module" : {
+            "type" : "string"
+          },
+          "reserved" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "description", "key", "module", "reserved" ],
+        "type" : "object"
+      },
+      "RecoveryCodes" : {
+        "properties" : {
+          "recoveryCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "recoveryCodes" ],
+        "type" : "object"
+      },
+      "RenameConversationRequest" : {
+        "properties" : {
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "title" ],
+        "type" : "object"
+      },
+      "RenameUserRequest" : {
+        "properties" : {
+          "name" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "name" ],
+        "type" : "object"
+      },
+      "RoleRef" : {
+        "properties" : {
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "name" ],
+        "type" : "object"
+      },
+      "RoleRequest" : {
+        "properties" : {
+          "description" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "permissions" : {
+            "items" : {
+              "maxLength" : 100,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 500,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "description", "name", "permissions" ],
+        "type" : "object"
+      },
+      "RoleSummary" : {
+        "properties" : {
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "permissions" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "system" : {
+            "type" : "boolean"
+          },
+          "userCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "description", "id", "name", "permissions", "system", "userCount" ],
+        "type" : "object"
+      },
+      "SecondFactorReset" : {
+        "properties" : {
+          "emailed" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "emailed" ],
+        "type" : "object"
+      },
+      "SessionInfo" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "lastAccessedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "createdAt", "current", "id", "lastAccessedAt" ],
+        "type" : "object"
+      },
+      "Setup" : {
+        "properties" : {
+          "otpauthUri" : {
+            "type" : "string"
+          },
+          "secret" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "otpauthUri", "secret" ],
+        "type" : "object"
+      },
+      "SetupRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
+        "type" : "object"
+      },
+      "SseEmitter" : {
+        "properties" : {
+          "timeout" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "TaskRequest" : {
+        "properties" : {
+          "assigneeId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "description" : {
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : [ "string", "null" ]
+          },
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "assigneeId", "description", "dueDate", "title" ],
+        "type" : "object"
+      },
+      "TaskSummary" : {
+        "properties" : {
+          "assignee" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Assignee"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "OPEN", "DONE" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "assignee", "completedAt", "createdAt", "description", "dueDate", "id", "status", "title", "updatedAt" ],
+        "type" : "object"
+      },
+      "TokenAndPassword" : {
+        "properties" : {
+          "password" : {
+            "maxLength" : 512,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "token" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "password", "token" ],
+        "type" : "object"
+      },
+      "ToolChoiceRequest" : {
+        "properties" : {
+          "choice" : {
+            "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "choice" ],
+        "type" : "object"
+      },
+      "ToolSetting" : {
+        "properties" : {
+          "action" : {
+            "type" : "boolean"
+          },
+          "allowAlwaysOff" : {
+            "type" : "boolean"
+          },
+          "choice" : {
+            "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+            "type" : "string"
+          },
+          "choices" : {
+            "items" : {
+              "enum" : [ "ALLOW", "ASK", "BLOCK" ],
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "risk" : {
+            "enum" : [ "LOW", "MEDIUM", "HIGH" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "allowAlwaysOff", "choice", "choices", "description", "expiresAt", "lastUsedAt", "name", "risk" ],
+        "type" : "object"
+      },
+      "ToolStep" : {
+        "properties" : {
+          "action" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/PendingActionView"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ]
+          },
+          "scope" : {
+            "type" : [ "string", "null" ]
+          },
+          "tool" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "kind", "reason", "scope", "tool" ],
+        "type" : "object"
+      },
+      "ToolView" : {
+        "properties" : {
+          "description" : {
+            "type" : "string"
+          },
+          "destructive" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "description", "destructive", "name" ],
+        "type" : "object"
+      },
+      "UserSummary" : {
+        "properties" : {
+          "anonymizedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "lastLoginAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "locked" : {
+            "type" : "boolean"
+          },
+          "mfaEnabled" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "roles" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RoleRef"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "status" : {
+            "enum" : [ "INVITED", "ACTIVE", "DISABLED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "anonymizedAt", "createdAt", "email", "id", "lastLoginAt", "locked", "mfaEnabled", "name", "roles", "status" ],
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/ai/actions/{id}/confirm" : {
+      "post" : {
+        "operationId" : "confirm_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PendingActionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/actions/{id}/reject" : {
+      "post" : {
+        "operationId" : "reject",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PendingActionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations" : {
+      "get" : {
+        "operationId" : "conversations",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ConversationSummary"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_2",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateConversationRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ConversationSummary"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations/{id}" : {
+      "delete" : {
+        "operationId" : "delete_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "patch" : {
+        "operationId" : "rename_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RenameConversationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ConversationSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations/{id}/actions" : {
+      "get" : {
+        "operationId" : "openActions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/PendingActionView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations/{id}/continue" : {
+      "post" : {
+        "operationId" : "continueAfterActions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ContinueRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/conversations/{id}/messages" : {
+      "get" : {
+        "operationId" : "messages",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ChatMessage"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "post" : {
+        "operationId" : "send",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MessageRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/models" : {
+      "get" : {
+        "operationId" : "models",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ModelView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/tool-preferences" : {
+      "delete" : {
+        "operationId" : "resetToolPreferences",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      },
+      "get" : {
+        "operationId" : "toolPreferences",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ToolSetting"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/tool-preferences/{tool}" : {
+      "put" : {
+        "operationId" : "chooseTool",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tool",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ToolChoiceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ToolSetting"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/ai/tools" : {
+      "get" : {
+        "operationId" : "tools",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ToolView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ai-controller" ]
+      }
+    },
+    "/api/audit/activity" : {
+      "get" : {
+        "operationId" : "activity",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "days",
+          "required" : false,
+          "schema" : {
+            "default" : 30,
+            "format" : "int32",
+            "maximum" : 90,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "zone",
+          "required" : false,
+          "schema" : {
+            "default" : "UTC",
+            "maxLength" : 64,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AuditActivityDay"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/audit/events" : {
+      "get" : {
+        "operationId" : "search_3",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "actorEmail",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 320,
+            "minLength" : 3,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "action",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityType",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "origin",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "REST", "AI_TOOL", "SYSTEM" ],
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "correlationId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "after",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "before",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "oldest",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuditEventPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/audit/events.csv" : {
+      "get" : {
+        "operationId" : "export",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "actorEmail",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 320,
+            "minLength" : 3,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "action",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityType",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "origin",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "REST", "AI_TOOL", "SYSTEM" ],
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "correlationId",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/auth/csrf" : {
+      "get" : {
+        "operationId" : "csrf",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/CsrfToken"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/login" : {
+      "post" : {
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/mfa" : {
+      "post" : {
+        "operationId" : "verifyMfa",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MfaRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/mfa/passkey" : {
+      "post" : {
+        "operationId" : "verify",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/mfa/passkey/options" : {
+      "post" : {
+        "operationId" : "authenticationOptions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/iam/invitations/accept" : {
+      "post" : {
+        "operationId" : "acceptInvitation",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TokenAndPassword"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "account-recovery-controller" ]
+      }
+    },
+    "/api/iam/password-reset/confirm" : {
+      "post" : {
+        "operationId" : "confirmPasswordReset",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TokenAndPassword"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "account-recovery-controller" ]
+      }
+    },
+    "/api/iam/password-reset/request" : {
+      "post" : {
+        "operationId" : "requestPasswordReset",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "account-recovery-controller" ]
+      }
+    },
+    "/api/iam/permissions" : {
+      "get" : {
+        "operationId" : "list_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/PermissionDefinition"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "permission-controller" ]
+      }
+    },
+    "/api/iam/roles" : {
+      "get" : {
+        "operationId" : "search_2",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "system",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelRoleSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "role-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RoleSummary"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "role-controller" ]
+      }
+    },
+    "/api/iam/roles/{id}" : {
+      "delete" : {
+        "operationId" : "delete_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "role-controller" ]
+      },
+      "get" : {
+        "operationId" : "get_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RoleSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "role-controller" ]
+      },
+      "put" : {
+        "operationId" : "update_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RoleSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "role-controller" ]
+      }
+    },
+    "/api/iam/users" : {
+      "get" : {
+        "operationId" : "search_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "state",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "ACTIVE", "INVITED", "LOCKED", "DISABLED", "ANONYMIZED" ],
+              "type" : "string"
+            },
+            "maxItems" : 5,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "roleId",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 50,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "mfa",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelUserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      },
+      "post" : {
+        "operationId" : "invite",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InviteUserRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InvitationIssued"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/administrators" : {
+      "get" : {
+        "operationId" : "administrators",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdministratorStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}" : {
+      "get" : {
+        "operationId" : "get_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      },
+      "patch" : {
+        "operationId" : "rename",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RenameUserRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/anonymize" : {
+      "post" : {
+        "operationId" : "anonymize",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/disable" : {
+      "post" : {
+        "operationId" : "disable_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/enable" : {
+      "post" : {
+        "operationId" : "enable",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/invitations" : {
+      "post" : {
+        "operationId" : "resendInvitation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InvitationIssued"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/mfa/reset" : {
+      "post" : {
+        "operationId" : "reset",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecondFactorReset"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/roles" : {
+      "put" : {
+        "operationId" : "assignRoles",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AssignRolesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/iam/users/{id}/sessions" : {
+      "delete" : {
+        "operationId" : "terminateUserSessions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me" : {
+      "get" : {
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/data" : {
+      "get" : {
+        "operationId" : "exportData",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/mfa" : {
+      "get" : {
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MfaStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/mfa/confirm" : {
+      "post" : {
+        "operationId" : "confirm",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CodeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/mfa/disable" : {
+      "post" : {
+        "operationId" : "disable",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DisableRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/mfa/recovery-codes" : {
+      "post" : {
+        "operationId" : "regenerateRecoveryCodes",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/mfa/setup" : {
+      "post" : {
+        "operationId" : "setup",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Setup"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/me/notification-email" : {
+      "put" : {
+        "operationId" : "changeNotificationEmail",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationEmailRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/passkeys" : {
+      "get" : {
+        "operationId" : "list",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/Passkey"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      },
+      "post" : {
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/me/passkeys/options" : {
+      "post" : {
+        "operationId" : "registrationOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/me/passkeys/{id}" : {
+      "delete" : {
+        "operationId" : "delete_3",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/me/password" : {
+      "post" : {
+        "operationId" : "changePassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/sessions" : {
+      "delete" : {
+        "operationId" : "terminateOtherSessions",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      },
+      "get" : {
+        "operationId" : "sessions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SessionInfo"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/me/sessions/{id}" : {
+      "delete" : {
+        "operationId" : "terminateSession",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "me-controller" ]
+      }
+    },
+    "/api/tasks" : {
+      "get" : {
+        "operationId" : "search",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "enum" : [ "OPEN", "DONE" ],
+              "type" : "string"
+            },
+            "maxItems" : 2,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "assigneeId",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "format" : "uuid",
+              "type" : "string"
+            },
+            "maxItems" : 200,
+            "minItems" : 0,
+            "type" : "array",
+            "uniqueItems" : true
+          }
+        }, {
+          "in" : "query",
+          "name" : "unassigned",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "dueBefore",
+          "required" : false,
+          "schema" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelTaskSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      },
+      "post" : {
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TaskRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskSummary"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      }
+    },
+    "/api/tasks/{id}" : {
+      "delete" : {
+        "operationId" : "delete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      },
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      },
+      "put" : {
+        "operationId" : "update",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TaskRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      }
+    },
+    "/api/tasks/{id}/complete" : {
+      "post" : {
+        "operationId" : "complete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      }
+    },
+    "/api/tasks/{id}/reopen" : {
+      "post" : {
+        "operationId" : "reopen",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
+      }
+    }
+  },
+  "servers" : [ {
+    "description" : "Generated server url",
+    "url" : "http://localhost"
+  } ]
+}

@@ -1,0 +1,57 @@
+# Como criar um módulo de negócio
+
+Guia para o fork de cliente (`<cliente>-os`). O módulo `tasks` do `os-core` é a referência: copie a estrutura dele e troque o domínio. Nada no módulo `ai`, `auth` ou `iam` precisa mudar para o novo módulo aparecer no portal e no agente.
+
+## 1. Backend (`apps/api`)
+
+Crie o pacote `com.maximusflow.os.<modulo>` com esta estrutura:
+
+```
+<modulo>/
+  package-info.java                      @ApplicationModule(allowedDependencies = { "common", ... })
+  internal/
+    domain/       entidades JPA (estendem AuditableEntity), enums
+    persistence/  repositórios Spring Data
+    application/  use cases (@Service) e records de saída (DTOs)
+    web/          controller fino (@RestController)
+```
+
+1. **Migração Flyway** em `src/main/resources/db/migration/V<n>__<modulo>.sql`. Inclua as colunas de auditoria de linha (`created_at`, `created_by`, `updated_at`, `updated_by`). Não crie FK para tabelas de outros módulos; valide o vínculo pela API pública do módulo dono (ex.: `UserDirectory` do `iam`).
+2. **`package-info.java`** com `@ApplicationModule(allowedDependencies = { "common", "iam" })`. Liste só o que o módulo usa. O `ModularityTests` falha se o código importar algo fora da lista ou um pacote `internal` de outro módulo.
+3. **Use cases** em uma classe `@Service @Transactional`. Cada método público é um caso de uso e recebe:
+   - `@RequiresPermission(value = "<modulo>.<recurso>.<acao>", description = "...")`. A permissão passa a existir no catálogo por causa dessa anotação, e a role de sistema a recebe automaticamente. A descrição aparece na tela de roles. Use `reserved = true` só para permissão que decide quem acessa o quê; ela fica exclusiva da role de sistema e não pode ter `@Tool`.
+   - `@Tool(name = "<modulo>_<acao>", description = "...")` se o agente deve poder executar. Escreva a descrição para o modelo: quando usar, o que devolve, como obter os ids que ele precisa. Parâmetros com `@ToolParam(description = ...)`; opcionais com `required = false` e `@Nullable`.
+   - Toda `@Tool` leva exatamente uma de duas: `@ReadOnlyTool` se só lê, ou `@RequiresConfirmation("frase mostrada na confirmação")` se altera qualquer coisa (criar, editar, concluir, apagar, enviar). Sem uma delas a aplicação não sobe. Pelo agente, a segunda só executa depois que a pessoa confirma no portal. Declare também o risco, que limita até onde a pessoa pode dispensar a confirmação: `@RequiresConfirmation(value = "...", risk = Risk.LOW)` para ação leve e reversível (pode virar "permitir sempre"), `Risk.MEDIUM` para o que apaga, sobrescreve ou grava texto livre (no máximo "permitir nesta conversa"; texto livre porque uma instrução injetada poderia copiar dados para ele) e `Risk.HIGH`, o padrão, para acesso, contas e tudo sensível (pergunta sempre). Na dúvida, não declare: fica HIGH.
+   - Validação de tamanho e regra de negócio dentro do método (o JSON do modelo não passa por Bean Validation). Erros de regra lançam `DomainRuleException` (422), ausência lança `NotFoundException` (404), duplicidade lança `ConflictException` (409).
+   - `AuditRecorder.record("<modulo>.<recurso>.<evento>", "<entidade>", id, detalhes)` em toda ação que altera dado.
+   - Retorno sempre por record de saída, nunca a entidade.
+4. **Controller** só mapeia HTTP para o use case: `@Valid` no request, `@ResponseStatus` adequado, nenhuma regra. O prefixo é `/api/<modulo>`; tudo sob `/api/**` já exige sessão.
+5. **Teste** em `src/test/java/...`: siga `TasksModuleTests`. O mínimo é provar que as tools aparecem no `ToolRegistry` com a permissão certa, que REST e tool executam o mesmo use case e que sem permissão a tool é negada.
+
+**Listagens paginadas.** Todo endpoint de lista segue o mesmo contrato: `page`, `size` (1 a 100, padrão 20) e `sort=campo,asc|desc`, convertidos por `PageQuery.of(...)` (`common.paging`) com um mapa `SORTABLE` de nomes permitidos, e a resposta é `PagedModel` (`{content, page}`). Filtros e busca viram uma `Specification` num record `XxxQuery` (veja `TaskQuery`); a busca por texto usa `PageQuery.contains`, que trata `%` e `_` como texto. Ordenar por campo fora do mapa responde 400, assim ninguém ordena por uma coluna que a lista não mostra. As tools de IA continuam com métodos de lista limitados (`MAX_LIST`). Tabela que só cresce (log, histórico) pagina por posição com contagem limitada, como a auditoria; índices, busca por texto e medição seguem `docs/performance.md`.
+
+## 2. Frontend (`apps/web`)
+
+1. **Tipos** em `src/modules/<modulo>/types.ts`, reexportados de `@maximusflow/contracts` (gerados: `pnpm api:test` escreve `packages/contracts/openapi.json`, `pnpm contracts` gera os tipos; o CI falha se estiverem desatualizados). Nada é escrito à mão, como em `src/modules/tasks/types.ts`.
+2. **Tela** em `src/modules/<modulo>/<Modulo>Page.tsx`, usando só componentes de `src/components/ui` (shadcn) e tokens semânticos, como `src/modules/tasks/TasksPage.tsx`. Componente que falte, adicione com `pnpm dlx shadcn@latest add <componente>`. Botões de ação ficam dentro de `<RequirePermission permission="...">`; a API valida de qualquer forma. Use as peças prontas do portal:
+   - `useLoad` (`src/core/api/useLoad.ts`) para carregar dados, com `refresh` depois de uma ação e `retry` no erro;
+   - `useServerTable` com `DataTableCard`, `DataTable`, `DataTableFacetedFilter`, `DataTableViewOptions` e `DataTablePagination` (`src/core/ui/data-table/`, TanStack Table v9) para listas: paginação, ordenação (só as colunas do `SORTABLE` da API), busca e filtros vão para a API, e o estado fica na URL;
+   - `fetchPage`/`fetchAll` (`src/core/api/query.ts`) para ler listas paginadas fora de tabelas (contagens, seletores);
+   - `StatCard`/`StatGrid` para indicadores, `ErrorState`, `EmptyState`, `FormError`, `fieldError`, `notifySuccess`, `notifyError` (`src/core/ui/feedback.tsx`) e `ConfirmDialog` para ações difíceis de desfazer.
+3. **Rota** em `src/app/(os)/<modulo>/page.tsx` que só renderiza a tela do módulo. O layout `(os)` já cuida de sessão e shell.
+4. **Menu** em `src/modules/navigation.ts`: adicione uma seção ou item com `permission` igual à permissão de leitura do módulo. Se o módulo cria algo, registre também em `moduleQuickCreate` (menu "Criar" da sidebar, com um parâmetro na URL que a tela lê para abrir o diálogo, como `/tasks?nova`).
+5. **Painel** (opcional) em `src/modules/dashboard.ts`: um indicador (`stat`) e/ou um card (`card`) que carregam os próprios dados, com a permissão de leitura do módulo. O painel nunca importa o módulo diretamente, então remover o módulo é apagar a pasta e as entradas desses arquivos.
+
+## 3. O que acontece sozinho
+
+- A permissão nova entra no catálogo (`GET /api/iam/permissions`) e na role de sistema no próximo boot.
+- O agente descobre as tools no boot e as oferece só a quem tem a permissão; tools com `@RequiresConfirmation` param para confirmação; toda chamada é auditada.
+- A migração roda no boot; `ddl-auto=validate` confere o mapeamento.
+
+## 4. O que nunca fazer
+
+- Editar `common`, `auth`, `iam` ou `ai`. Se o core precisa mudar, a mudança nasce no `os-core` e desce por merge.
+- Importar `internal` de outro módulo ou criar FK de banco entre módulos.
+- Colocar regra de negócio ou checagem de permissão no controller ou no front.
+- Criar tool sem `@RequiresPermission` (o boot recusa) ou tool "genérica" (SQL livre, HTTP livre).
+- Devolver entidade JPA em resposta ou em tool.

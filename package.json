@@ -1,0 +1,18 @@
+{
+  "name": "os-core",
+  "private": true,
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @maximusflow/web dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "check-types": "pnpm -r run check-types",
+    "api": "cd apps/api && ./gradlew bootRun",
+    "api:test": "cd apps/api && ./gradlew test",
+    "contracts": "pnpm --filter @maximusflow/contracts generate",
+    "demo:data": "node scripts/demo-data.mjs"
+  }
+}

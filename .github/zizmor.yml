@@ -1,0 +1,7 @@
+# zizmor configuration (https://docs.zizmor.sh/configuration/).
+rules:
+  # The audit asks for the "$/" self-repository syntax. The one in-repo reference is cd.yml calling
+  # ci.yml as a reusable workflow, which GitHub already resolves at the caller's commit, not from a
+  # checkout; and actionlint, which validates these files, does not accept "$/" yet.
+  self-repository:
+    disable: true

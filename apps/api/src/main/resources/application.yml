@@ -1,0 +1,244 @@
+spring:
+  application:
+    name: os-api
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      # Lazy collections of a page (a user's roles, a role's permissions) load in one query per
+      # 100 owners instead of one per row. A fetch join would page in memory instead, so that is
+      # made an error rather than a silent full load.
+      hibernate.default_batch_fetch_size: 100
+      hibernate.query.fail_on_pagination_over_collection_fetch: true
+      # IN lists padded to powers of two: fewer distinct statements for the plan cache.
+      hibernate.query.in_clause_parameter_padding: true
+      # Logged under org.hibernate.SQL_SLOW with the statement, to find what to index.
+      hibernate.log_slow_query: 500
+  datasource:
+    hikari:
+      # Every pooled connection:
+      # - plans each execution with its own values. After five runs the JDBC driver prepares a
+      #   statement on the server, and a generic plan cannot see a LIKE pattern or a rare filter
+      #   value; measured on the audit trail it turned a 0.04 ms search into 1.3 s.
+      # - gives up on any statement after 15 s instead of holding a connection and the database.
+      connection-init-sql: SET plan_cache_mode = force_custom_plan; SET statement_timeout = '15s'
+      # Waiting longer than 5 s for a connection means the database is down or saturated: the
+      # request fails then instead of holding a server thread for HikariCP's default 30 s, and the
+      # health check reports DOWN (503) within the container check's own 5 s timeout.
+      connection-timeout: 5000
+  flyway:
+    locations: classpath:db/migration
+    # Index builds on big tables run CONCURRENTLY (outside a transaction, V13); the transactional
+    # lock would make Flyway wait on itself, and the pool's statement timeout must not cut them.
+    # The connections the migration used are retired afterwards (common/persistence/FlywayConfig).
+    postgresql:
+      transactional-lock: false
+    init-sqls: SET statement_timeout = 0
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+  modulith:
+    events:
+      completion-mode: ARCHIVE
+      republish-outstanding-events-on-restart: true
+      jdbc:
+        schema-initialization:
+          enabled: false
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        # Default only; each turn names the model picked from os.ai.models.
+        model: claude-opus-5-5
+        max-tokens: 16000
+        cache-options:
+          strategy: SYSTEM_ONLY
+    # Second provider, optional: without OPENAI_API_KEY its models are not offered.
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          # Same cap as Anthropic (LLM10). max_completion_tokens is the parameter current OpenAI models take.
+          max-completion-tokens: 16000
+    # Only the chat model of each starter; the OpenAI starter would also configure embedding, image,
+    # audio and moderation clients the portal never uses.
+    model:
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: never
+    tools:
+      limits:
+        # Caps per agent turn (LLM10 unbounded consumption, LLM06 excessive agency).
+        max-calls-per-tool-default: 10
+        max-total-tool-calls: 30
+        on-limit-exceeded: RETURN_ERROR_RESPONSE
+  docker:
+    compose:
+      skip:
+        in-tests: true
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      # Only the status ({"status":"UP"}): the liveness and readiness groups are Kubernetes probes,
+      # which this deploy does not use.
+      probes:
+        enabled: false
+      # /api/health is public and checks the database: one answer per 5 s at most, however many
+      # requests arrive (the CD's check, the uptime monitor, anyone).
+      cache:
+        time-to-live: 5s
+  health:
+    mail:
+      # /actuator/health drives the container health check; an SMTP outage must not restart the app.
+      enabled: false
+
+springdoc:
+  api-docs:
+    path: /api/v3/api-docs
+  swagger-ui:
+    enabled: false
+
+spring.mail:
+  # SMTP (SPRING_MAIL_HOST and OS_MAIL_FROM; PORT, USERNAME, PASSWORD as the server needs) is
+  # required in production: invitations and password resets are delivered only by e-mail, and under
+  # the prod profile the API refuses to start without it (iam ProductionMailCheck). Only in local
+  # development may the host be left unset; the links are then written to the log and returned to
+  # the administrator.
+  properties:
+    mail.smtp.auth: true
+    mail.smtp.starttls.enable: true
+    mail.smtp.starttls.required: true
+    mail.smtp.connectiontimeout: 5000
+    mail.smtp.timeout: 10000
+    mail.smtp.writetimeout: 10000
+
+os:
+  app:
+    # Base URL of the web portal, used in invitation and password-reset links.
+    base-url: ${OS_APP_BASE_URL:http://localhost:3000}
+  mail:
+    # Sender of invitation and reset e-mails; required whenever spring.mail.host is set
+    # (MailAccountNotifier), so in production always (spring.mail above).
+    from: ${OS_MAIL_FROM:}
+    portal-name: ${OS_MAIL_PORTAL_NAME:OS}
+  auth:
+    session:
+      absolute-timeout: 12h
+      max-concurrent: 3
+      # Cookies __Host-OS_SESSION (HttpOnly) and __Host-XSRF-TOKEN, SameSite=Lax. Plain-HTTP dev (profile local)
+      # sets this to false: no Secure flag and no __Host- prefix (OS_SESSION, XSRF-TOKEN).
+      cookie-secure: true
+  iam:
+    lockout:
+      # Every 5 consecutive failures lock the account 15 minutes longer than the previous lock (at most
+      # 6 hours); the count starts over after 12 hours without failures. 100 consecutive failures lock
+      # it until the password is reset (NIST SP 800-63B-4 cap).
+      max-attempts: 5
+      wait-increment: 15m
+      max-wait: 6h
+      failure-reset: 12h
+      permanent-after: 100
+    password:
+      min-length: 12
+      max-length: 128
+      check-compromised: true
+    tokens:
+      invitation-ttl: 48h
+      password-reset-ttl: 1h
+    bootstrap:
+      # First administrator, created only when the users table is empty.
+      admin-email: ${OS_BOOTSTRAP_ADMIN_EMAIL:}
+      admin-password: ${OS_BOOTSTRAP_ADMIN_PASSWORD:}
+      admin-name: ${OS_BOOTSTRAP_ADMIN_NAME:Administrador}
+      # The bootstrap password was typed into a config file, so the administrator must replace it on first login.
+      require-password-change: true
+    administrators:
+      # Active system administrators the portal always keeps; removing or disabling one below this is refused.
+      minimum: 2
+    mfa:
+      # Everyone enrols a second factor (OWASP ASVS 5.0 6.3.3). Turning require-for-all off leaves it
+      # to administrators (system role) only, and then password.min-length must be at least 15
+      # (NIST SP 800-63B-4 for a password that is the only factor); startup refuses otherwise.
+      require-for-system-role: true
+      require-for-all: true
+      # Protects TOTP secrets at rest. 32 random bytes in Base64: openssl rand -base64 32
+      encryption-key: ${OS_MFA_ENCRYPTION_KEY:}
+      issuer: ${OS_MAIL_PORTAL_NAME:OS}
+  ai:
+    pending-action-ttl: 5m
+    max-messages: 40
+    # Characters per message to the assistant (at most 32000, the request body bound).
+    max-user-message-length: 4000
+    # Per person (OWASP LLM10): turns started per minute and turns running at once; beyond either, 429.
+    turns-per-minute: 20
+    max-concurrent-turns-per-user: 2
+    # HMAC key for tool arguments in the audit trail. 32 random bytes in Base64: openssl rand -base64 32
+    audit-key: ${OS_AI_AUDIT_KEY:}
+    # Models a person may pick in the assistant, in picker order; the first one whose provider has an
+    # API key (spring.ai.<provider>.api-key) is the default. A fork trims or reorders this list. Ids
+    # from https://platform.claude.com/docs/en/about-claude/models/overview and
+    # https://developers.openai.com/api/docs/models (checked 2026-10-05).
+    models:
+      - id: claude-opus-5-5
+        provider: anthropic
+        name: Claude Opus 5.5
+        description: Complexo, agêntico e trabalho profissional
+        context: 1M
+      - id: claude-fable-5-1
+        provider: anthropic
+        name: Claude Fable 5.1
+        description: Raciocínio mais exigente e tarefas longas
+        context: 1M
+      - id: claude-sonnet-5-5
+        provider: anthropic
+        name: Claude Sonnet 5.5
+        description: Melhor equilíbrio entre velocidade e inteligência
+        context: 1M
+      - id: claude-haiku-4-5
+        provider: anthropic
+        name: Claude Haiku 4.5
+        description: Mais rápido, para o dia a dia
+        context: 200K
+      - id: gpt-6-astra
+        provider: openai
+        name: GPT-6 Astra
+        description: Mais capaz, para o trabalho mais exigente
+        context: 1M
+      - id: gpt-6.1-sol
+        provider: openai
+        name: GPT-6.1 Sol
+        description: Quase Astra em tarefas complexas, custo menor
+        context: 1M
+      - id: gpt-6-luna
+        provider: openai
+        name: GPT-6 Luna
+        description: Mais eficiente, para tarefas focadas
+        context: 1M

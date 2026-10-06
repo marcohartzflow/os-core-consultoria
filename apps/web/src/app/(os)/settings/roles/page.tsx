@@ -1,0 +1,705 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import {
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  ShieldHalf,
+  Trash2,
+  UserCog,
+} from "lucide-react";
+import { api } from "@/core/api/client";
+import { DataTableCard, DataTableCardFooter, DataTableCardHeader } from "@/core/ui/data-table/DataTableCard";
+import { fetchAll } from "@/core/api/query";
+import { useLoad } from "@/core/api/useLoad";
+import type { PermissionDefinition, RoleSummary } from "@/core/api/types";
+import { RequirePermission, useAuth } from "@/core/auth/AuthProvider";
+import { ConfirmDialog } from "@/core/ui/confirm-dialog";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableFacetedFilter,
+  DataTablePagination,
+  DataTableResetFilters,
+  DataTableViewOptions,
+  type FacetOption,
+} from "@/core/ui/data-table/DataTable";
+import type { DataTableColumnDef } from "@/core/ui/data-table/features";
+import { useServerTable } from "@/core/ui/data-table/useServerTable";
+import { EmptyState, ErrorState, fieldError, FormError, notifySuccess, TableSkeleton } from "@/core/ui/feedback";
+import { PageHeader } from "@/core/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const TYPE_OPTIONS: FacetOption[] = [
+  { value: "system", label: "Sistema", icon: ShieldCheck },
+  { value: "custom", label: "Personalizada", icon: UserCog },
+];
+
+const COLUMN_LABELS: Record<string, string> = {
+  type: "Tipo",
+  userCount: "Pessoas",
+  permissions: "Permissões",
+};
+
+const EMPTY_PERMISSIONS: PermissionDefinition[] = [];
+
+function permissionCount(count: number): string {
+  return `${count} ${count === 1 ? "permissão" : "permissões"}`;
+}
+
+function groupByModule(permissions: PermissionDefinition[]): [string, PermissionDefinition[]][] {
+  const byModule = new Map<string, PermissionDefinition[]>();
+  for (const permission of permissions) {
+    byModule.set(permission.module, [...(byModule.get(permission.module) ?? []), permission]);
+  }
+  return [...byModule.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+    .map(([module, items]) => [module, [...items].sort((a, b) => a.key.localeCompare(b.key))]);
+}
+
+export default function RolesPage() {
+  const { hasPermission } = useAuth();
+  const mayReadCatalog = hasPermission("iam.permission.read");
+  const [editing, setEditing] = useState<RoleSummary | "new" | null>(null);
+  // The role to delete stays set while the dialog closes, so its title does not change mid-animation.
+  const [deleting, setDeleting] = useState<RoleSummary | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const askDelete = useCallback((role: RoleSummary) => {
+    setDeleting(role);
+    setConfirmingDelete(true);
+  }, []);
+
+  // The catalog (for the coverage bar and the dialog) and every role (for "held by" in the
+  // catalog tab) come apart from the paged table.
+  const catalogLoad = useLoad((signal) =>
+    mayReadCatalog ? api<PermissionDefinition[]>("/api/iam/permissions", { signal }) : Promise.resolve(null),
+  );
+  const allRoles = useLoad((signal) => (mayReadCatalog ? fetchAll<RoleSummary>("/api/iam/roles", {}, { signal }) : Promise.resolve(null)));
+  const catalog = catalogLoad.data;
+
+  const columns = useMemo<DataTableColumnDef<RoleSummary>[]>(
+    () => [
+      {
+        id: "name",
+        accessorFn: (role) => role.name,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
+        cell: ({ row }) => (
+          <div className="grid min-w-48 gap-0.5">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-medium">{row.original.name}</span>
+              {row.original.system && (
+                <Badge variant="secondary">
+                  <ShieldCheck />
+                  Sistema
+                </Badge>
+              )}
+            </div>
+            <span className="line-clamp-1 max-w-md text-xs text-muted-foreground">
+              {row.original.description || "Sem descrição"}
+            </span>
+          </div>
+        ),
+        enableHiding: false,
+      },
+      {
+        id: "type",
+        accessorFn: (role) => (role.system ? "system" : "custom"),
+        enableSorting: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">{row.original.system ? "Sistema" : "Personalizada"}</span>
+        ),
+      },
+      {
+        id: "userCount",
+        accessorFn: (role) => role.userCount,
+        enableSorting: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Pessoas" />,
+        cell: ({ row }) => (
+          <span className="tabular-nums">
+            {row.original.userCount} {row.original.userCount === 1 ? "pessoa" : "pessoas"}
+          </span>
+        ),
+      },
+      {
+        id: "permissions",
+        accessorFn: (role) => role.permissions.length,
+        enableSorting: false,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Permissões" />,
+        cell: ({ row }) => {
+          const count = row.original.permissions.length;
+          return catalog && catalog.length > 0 ? (
+            <div className="flex min-w-36 items-center gap-3">
+              <Progress
+                value={Math.round((count / catalog.length) * 100)}
+                className="h-1.5 w-20"
+                aria-label={`${count} de ${catalog.length} permissões`}
+              />
+              <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                {count} de {catalog.length}
+              </span>
+            </div>
+          ) : (
+            <span className="tabular-nums">{count}</span>
+          );
+        },
+      },
+      {
+        id: "actions",
+        enableSorting: false,
+        enableHiding: false,
+        header: () => <span className="sr-only">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <RoleActions role={row.original} onOpen={setEditing} onDelete={askDelete} />
+          </div>
+        ),
+      },
+    ],
+    [catalog, askDelete],
+  );
+
+  const { table, page, error, loading, refresh, retry, search, setSearch, filtered, clearFilters } = useServerTable({
+    sortable: ["name"],
+    path: "/api/iam/roles",
+    columns,
+    filters: ["type"],
+    // Both types or none selected means no filter.
+    toParams: (filters) => ({
+      system: filters.type.length === 1 ? String(filters.type[0] === "system") : undefined,
+    }),
+    defaultSort: { id: "name", desc: false },
+    getRowId: (role) => role.id,
+  });
+
+  async function reload() {
+    await Promise.all([refresh(), allRoles.refresh()]);
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Roles e permissões"
+        description="Uma role é um conjunto de permissões. Permissões existem porque um caso de uso as exige."
+        actions={
+          <RequirePermission permission="iam.role.create">
+            <Button onClick={() => setEditing("new")}>
+              <Plus />
+              Nova role
+            </Button>
+          </RequirePermission>
+        }
+      />
+
+
+      <Tabs defaultValue="roles" className="gap-4">
+        <TabsList variant="line" className="w-full justify-start border-b ps-0 *:data-[slot=tabs-trigger]:flex-none">
+          <TabsTrigger value="roles">Roles</TabsTrigger>
+          {mayReadCatalog && <TabsTrigger value="catalog">Catálogo de permissões</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="roles">
+          <DataTableCard>
+            <DataTableCardHeader>
+              <CardTitle className="text-xl leading-none">Roles</CardTitle>
+              <CardDescription>
+                A role de sistema tem acesso total e não pode ser alterada. Clique em uma role para ver ou editar.
+              </CardDescription>
+              <div className="col-span-full mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-1 flex-wrap items-center gap-2">
+                  <InputGroup className="w-full sm:w-64">
+                    <InputGroupAddon align="inline-start">
+                      <Search />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      aria-label="Buscar roles"
+                      placeholder="Buscar por nome ou descrição…"
+                      maxLength={200}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </InputGroup>
+                  <DataTableFacetedFilter column={table.getColumn("type")} title="Tipo" options={TYPE_OPTIONS} />
+                  <DataTableResetFilters visible={filtered} onReset={clearFilters} />
+                </div>
+                <DataTableViewOptions table={table} labels={COLUMN_LABELS} />
+              </div>
+            </DataTableCardHeader>
+            <CardContent className="px-0">
+              {error ? (
+                <ErrorState error={error} onRetry={retry} />
+              ) : !page ? (
+                <TableSkeleton columns={4} />
+              ) : page.page.totalElements === 0 && !filtered ? (
+                <EmptyState
+                  icon={ShieldHalf}
+                  title="Nenhuma role"
+                  description="Crie uma role para agrupar as permissões que uma função da empresa precisa."
+                />
+              ) : (
+                <DataTable
+                  table={table}
+                  loading={loading}
+                  onRowClick={setEditing}
+                  empty={
+                    <EmptyState
+                      icon={Search}
+                      title="Nenhuma role encontrada"
+                      description="Nenhuma role atende à busca e aos filtros escolhidos."
+                      action={
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Limpar filtros
+                        </Button>
+                      }
+                    />
+                  }
+                />
+              )}
+            </CardContent>
+            {page && page.page.totalElements > 0 && !error && (
+              <DataTableCardFooter>
+                <DataTablePagination table={table} noun={["role", "roles"]} />
+              </DataTableCardFooter>
+            )}
+          </DataTableCard>
+        </TabsContent>
+
+        {mayReadCatalog && (
+          <TabsContent value="catalog">
+            <PermissionCatalog
+              catalog={catalog}
+              roles={allRoles.data}
+              error={catalogLoad.error ?? allRoles.error}
+              onRetry={() => {
+                catalogLoad.retry();
+                allRoles.retry();
+              }}
+            />
+          </TabsContent>
+        )}
+      </Tabs>
+
+      {editing && (
+        <RoleDialog
+          role={editing === "new" ? null : editing}
+          permissions={mayReadCatalog ? catalog : EMPTY_PERMISSIONS}
+          permissionsError={mayReadCatalog ? catalogLoad.error : null}
+          onRetryPermissions={catalogLoad.retry}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await reload();
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        destructive
+        title={`Excluir a role ${deleting?.name ?? ""}?`}
+        description="A role deixa de existir. Esta ação não pode ser desfeita."
+        confirmLabel="Excluir role"
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api(`/api/iam/roles/${deleting.id}`, { method: "DELETE" });
+          notifySuccess("Role excluída", `${deleting.name} foi removida.`);
+          await reload();
+        }}
+      />
+    </>
+  );
+}
+
+function RoleActions({
+  role,
+  onOpen,
+  onDelete,
+}: {
+  role: RoleSummary;
+  onOpen: (role: RoleSummary) => void;
+  onDelete: (role: RoleSummary) => void;
+}) {
+  const { hasPermission } = useAuth();
+  const mayEdit = !role.system && hasPermission("iam.role.update");
+  const mayDelete = !role.system && hasPermission("iam.role.delete");
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          aria-label={`Ações para ${role.name}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48" onClick={(event) => event.stopPropagation()}>
+        <DropdownMenuLabel className="truncate">{role.name}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onOpen(role)}>
+          {mayEdit ? <Pencil /> : <ShieldCheck />}
+          {mayEdit ? "Editar" : "Ver permissões"}
+        </DropdownMenuItem>
+        {mayDelete && (
+          <>
+            <DropdownMenuSeparator />
+            {/* The API refuses to delete a role people still hold (409); say so instead of offering it. */}
+            <DropdownMenuItem variant="destructive" disabled={role.userCount > 0} onSelect={() => onDelete(role)}>
+              <Trash2 />
+              Excluir
+            </DropdownMenuItem>
+            {role.userCount > 0 && (
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {role.userCount === 1 ? "1 pessoa tem" : `${role.userCount} pessoas têm`} esta role. Remova antes de
+                excluir.
+              </DropdownMenuLabel>
+            )}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function PermissionCatalog({
+  catalog,
+  roles,
+  error,
+  onRetry,
+}: {
+  catalog: PermissionDefinition[] | null;
+  roles: RoleSummary[] | null;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const holders = useMemo(() => {
+    const byKey = new Map<string, string[]>();
+    for (const role of roles ?? []) {
+      for (const key of role.permissions) byKey.set(key, [...(byKey.get(key) ?? []), role.name]);
+    }
+    return byKey;
+  }, [roles]);
+  const groups = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("pt-BR");
+    const matching = (catalog ?? []).filter(
+      (permission) =>
+        !needle ||
+        permission.key.toLocaleLowerCase("pt-BR").includes(needle) ||
+        permission.description.toLocaleLowerCase("pt-BR").includes(needle),
+    );
+    return groupByModule(matching);
+  }, [catalog, query]);
+
+  return (
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle className="text-xl leading-none">Catálogo de permissões</CardTitle>
+        <CardDescription>
+          Cada permissão protege um caso de uso, no portal e no assistente. As reservadas só a role de sistema concede.
+        </CardDescription>
+        <div className="col-span-full mt-3">
+          <InputGroup className="w-full sm:w-72">
+            <InputGroupAddon align="inline-start">
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              aria-label="Buscar permissões"
+              placeholder="Buscar por chave ou descrição…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </InputGroup>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <ErrorState error={error} onRetry={onRetry} />
+        ) : !catalog ? (
+          <TableSkeleton columns={3} />
+        ) : groups.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="Nenhuma permissão encontrada"
+            description="Nenhuma permissão tem essa chave ou descrição."
+          />
+        ) : (
+          <div className="flex flex-col gap-6">
+            {groups.map(([module, items]) => (
+              <section key={module} className="flex flex-col gap-3" aria-labelledby={`module-${module}`}>
+                <div className="flex items-center gap-2">
+                  <h3 id={`module-${module}`} className="font-medium capitalize">
+                    {module}
+                  </h3>
+                  <Badge variant="outline" className="tabular-nums">
+                    {items.length}
+                  </Badge>
+                </div>
+                <ItemGroup className="gap-2">
+                  {items.map((permission) => {
+                    const heldBy = holders.get(permission.key) ?? [];
+                    return (
+                      <Item key={permission.key} variant="outline" size="sm">
+                        <ItemContent>
+                          <ItemTitle>
+                            {permission.description || permission.key}
+                            {permission.reserved && (
+                              <Badge variant="outline">
+                                <Lock />
+                                Só administrador
+                              </Badge>
+                            )}
+                          </ItemTitle>
+                          <ItemDescription className="font-mono text-xs">{permission.key}</ItemDescription>
+                        </ItemContent>
+                        <ItemActions className="flex-wrap justify-end">
+                          {heldBy.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">Nenhuma role</span>
+                          ) : (
+                            heldBy.map((name) => (
+                              <Badge key={name} variant="secondary">
+                                {name}
+                              </Badge>
+                            ))
+                          )}
+                        </ItemActions>
+                      </Item>
+                    );
+                  })}
+                </ItemGroup>
+              </section>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RoleDialog({
+  role,
+  permissions,
+  permissionsError,
+  onRetryPermissions,
+  onClose,
+  onSaved,
+}: {
+  role: RoleSummary | null;
+  /** Null while the catalog loads; empty when the person may not read it. */
+  permissions: PermissionDefinition[] | null;
+  permissionsError: unknown;
+  onRetryPermissions: () => void;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { me, hasPermission, refresh: refreshMe } = useAuth();
+  const readOnly = role ? role.system || !hasPermission("iam.role.update") : false;
+  const [name, setName] = useState(role?.name ?? "");
+  const [description, setDescription] = useState(role?.description ?? "");
+  const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []));
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+
+  const groups = useMemo(() => groupByModule(permissions ?? EMPTY_PERMISSIONS), [permissions]);
+
+  function toggle(keys: string[], checked: boolean) {
+    const next = new Set(selected);
+    for (const key of keys) {
+      if (checked) next.add(key);
+      else next.delete(key);
+    }
+    setSelected(next);
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    const body = { name, description: description || null, permissions: [...selected] };
+    try {
+      if (role) await api(`/api/iam/roles/${role.id}`, { method: "PUT", body });
+      else await api("/api/iam/roles", { method: "POST", body });
+      notifySuccess(role ? "Role atualizada" : "Role criada", `${name} tem ${permissionCount(selected.size)}.`);
+      // A role the viewer holds changes what this session may do: re-read it (me.roles holds names).
+      await Promise.all([onSaved(), role && me.roles.includes(role.name) ? refreshMe() : undefined]);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nameError = fieldError(error, "name");
+  const descriptionError = fieldError(error, "description");
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{role ? role.name : "Nova role"}</DialogTitle>
+          <DialogDescription>
+            {role?.system
+              ? "A role de sistema recebe automaticamente toda permissão nova e não pode ser editada."
+              : readOnly
+                ? "Você pode ver as permissões desta role, mas não alterá-las."
+                : "Marque as permissões que esta role concede. A mudança vale na próxima requisição de cada pessoa."}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={save}>
+          <FieldGroup>
+            <FormError error={error} />
+            <Field data-invalid={!!nameError}>
+              <FieldLabel htmlFor="role-name">Nome</FieldLabel>
+              <Input
+                id="role-name"
+                required
+                maxLength={100}
+                disabled={readOnly}
+                placeholder="Financeiro"
+                aria-invalid={!!nameError}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              {nameError && <FieldError>{nameError}</FieldError>}
+            </Field>
+            <Field data-invalid={!!descriptionError}>
+              <FieldLabel htmlFor="role-description">Descrição</FieldLabel>
+              <Input
+                id="role-description"
+                maxLength={500}
+                disabled={readOnly}
+                placeholder="O que esta função faz no portal"
+                aria-invalid={!!descriptionError}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+              {descriptionError && <FieldError>{descriptionError}</FieldError>}
+            </Field>
+            {permissionsError ? (
+              <ErrorState error={permissionsError} onRetry={onRetryPermissions} className="p-4" />
+            ) : !permissions ? (
+              <div className="flex flex-col gap-2" aria-busy="true" aria-label="Carregando permissões">
+                {Array.from({ length: 4 }, (_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : groups.length === 0 ? (
+              <FieldDescription>
+                {role ? `${permissionCount(role.permissions.length)}.` : "Sem acesso ao catálogo de permissões."}
+              </FieldDescription>
+            ) : (
+              groups.map(([module, items]) => {
+                // Reserved permissions belong to the system role only; the API refuses them elsewhere.
+                const selectable = items.filter((permission) => !permission.reserved).map((p) => p.key);
+                const chosen = items.filter((permission) => selected.has(permission.key)).length;
+                const chosenSelectable = selectable.filter((key) => selected.has(key)).length;
+                const all = selectable.length > 0 && chosenSelectable === selectable.length;
+                return (
+                  <FieldSet key={module}>
+                    <div className="flex items-center justify-between gap-2">
+                      <FieldLegend variant="label" className="mb-0 capitalize">
+                        {module}
+                      </FieldLegend>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {chosen} de {items.length}
+                        </span>
+                        {!readOnly && selectable.length > 0 && (
+                          <FieldLabel htmlFor={`all-${module}`} className="gap-2 text-xs font-normal">
+                            <Checkbox
+                              id={`all-${module}`}
+                              checked={all ? true : chosenSelectable > 0 ? "indeterminate" : false}
+                              onCheckedChange={(checked) => toggle(selectable, checked === true)}
+                            />
+                            Todas
+                          </FieldLabel>
+                        )}
+                      </div>
+                    </div>
+                    <ItemGroup className="gap-2">
+                      {items.map((permission) => (
+                        <Item key={permission.key} variant="outline" size="sm" asChild>
+                          <label htmlFor={`perm-${permission.key}`}>
+                            <Checkbox
+                              id={`perm-${permission.key}`}
+                              disabled={readOnly || permission.reserved}
+                              checked={selected.has(permission.key)}
+                              onCheckedChange={(checked) => toggle([permission.key], checked === true)}
+                            />
+                            <ItemContent>
+                              <ItemTitle>
+                                {permission.description || permission.key}
+                                {permission.reserved && (
+                                  <Badge variant="outline">
+                                    <Lock />
+                                    Só administrador
+                                  </Badge>
+                                )}
+                              </ItemTitle>
+                              <ItemDescription className="font-mono text-xs">{permission.key}</ItemDescription>
+                            </ItemContent>
+                          </label>
+                        </Item>
+                      ))}
+                    </ItemGroup>
+                  </FieldSet>
+                );
+              })
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+                {readOnly ? "Fechar" : "Cancelar"}
+              </Button>
+              {!readOnly && (
+                <Button type="submit" disabled={busy}>
+                  {busy && <Spinner data-icon="inline-start" />}
+                  {busy ? "Salvando…" : role ? "Salvar alterações" : "Criar role"}
+                </Button>
+              )}
+            </DialogFooter>
+          </FieldGroup>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

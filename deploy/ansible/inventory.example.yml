@@ -1,0 +1,20 @@
+# Copy to inventory.yml (not committed: it names the client's server and people) and fill in.
+all:
+  hosts:
+    cliente-os:
+      # The VPS address. The first run logs in as root with the SSH key added in the provider's
+      # panel when the VPS was created; the playbook then turns root and password logins off.
+      ansible_host: 203.0.113.10
+      # The client's repository (SSH form). The server reads it with its own read-only deploy key.
+      os_repository: git@github.com:cliente/cliente-os.git
+      # People who administer the server: SSH login with these keys and sudo. The list is the whole
+      # list: keys removed here are removed from the server on the next run.
+      os_admins:
+        - name: maria
+          ssh_keys:
+            - ssh-ed25519 AAAA... maria@empresa
+      # Public half of the CD workflow's key (its private half is the DEPLOY_SSH_KEY secret).
+      os_ci_deploy_public_key: ssh-ed25519 AAAA... cd
+      # Optional: URL pinged after each successful backup (a monitoring service that alerts when the
+      # ping does not arrive).
+      # os_backup_heartbeat_url: https://...

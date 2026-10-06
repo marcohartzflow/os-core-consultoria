@@ -1,0 +1,56 @@
+# Version updates wait 7 days after a release is published (cooldown): a compromised release is
+# usually found and pulled within days, and a version that old has had that time. Security updates
+# are not delayed by it.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /apps/api
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      spring:
+        patterns:
+          - "org.springframework*"
+      all-others:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "org.springframework*"
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+      all-others:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/web
+      - /deploy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
