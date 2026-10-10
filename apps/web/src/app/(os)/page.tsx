@@ -76,6 +76,10 @@ export default function DashboardPage() {
   const widgets = moduleDashboard.filter((widget) => hasPermission(widget.permission));
   const moduleStats = widgets.flatMap((widget) => (widget.stat ? [widget.stat] : []));
   const moduleCards = widgets.flatMap((widget) => (widget.card ? [widget.card] : []));
+  const moduleCharts = widgets.flatMap((widget) => (widget.chart ? [widget.chart] : []));
+  const moduleHeroes = widgets.flatMap((widget) => (widget.hero ? [widget.hero] : []));
+  // A module with a hero owns the dashboard: the portal's security, activity and shortcut cards step aside.
+  const focused = moduleHeroes.length > 0;
   const moduleStatCount = moduleStats.length;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -115,7 +119,7 @@ export default function DashboardPage() {
         key: "logins",
         icon: LogIn,
         label: "Logins em 7 dias",
-        value: activity.error ? "—" : logins,
+        value: activity.error ? "-" : logins,
         badge: days && <Trend current={logins ?? 0} previous={sum(previous7, (d) => d.loginSuccess)} />,
         hint: activity.error ? "Não foi possível carregar" : "Comparado aos 7 dias anteriores",
       });
@@ -123,7 +127,7 @@ export default function DashboardPage() {
         key: "failures",
         icon: ShieldX,
         label: "Logins com falha em 7 dias",
-        value: activity.error ? "—" : failures,
+        value: activity.error ? "-" : failures,
         badge: days && (failures ? <Badge variant="destructive">Verifique</Badge> : <Badge variant="secondary">Nenhuma</Badge>),
         hint: "Senha errada ou conta inexistente",
       });
@@ -134,7 +138,7 @@ export default function DashboardPage() {
         key: "users",
         icon: Users,
         label: "Contas ativas",
-        value: people.error ? "—" : (accounts?.active ?? null),
+        value: people.error ? "-" : (accounts?.active ?? null),
         badge:
           accounts &&
           (withoutMfa > 0 ? (
@@ -177,7 +181,8 @@ export default function DashboardPage() {
     return list;
   })();
 
-  const portalStats = (mayAudit ? 2 : 0) + (mayUsers ? 1 : 0);
+  // A full row of module indicators takes the place of the portal's own numbers.
+  const portalStats = moduleStatCount >= 4 ? 0 : (mayAudit ? 2 : 0) + (mayUsers ? 1 : 0);
   const shortcuts = navigationFor(hasPermission)
     .flatMap((section) => section.items)
     .filter((item) => item.href !== "/");
@@ -187,7 +192,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title={`Olá, ${me.name.split(" ")[0]}`}
-        description={`${TODAY.format(new Date()).replace(/^./, (c) => c.toUpperCase())} · Visão geral do portal`}
+        description={`${TODAY.format(new Date()).replace(/^./, (c) => c.toUpperCase())} · ${focused ? "O que foi combinado com cada cliente e ainda não tem dono" : "Visão geral do portal"}`}
       />
 
       <StatGrid>
@@ -198,19 +203,28 @@ export default function DashboardPage() {
         {moduleStats.map((Stat, index) => (
           <Stat key={index} />
         ))}
-        {stats.slice(portalStats).map(({ key, ...card }) => (
+        {stats.slice(moduleStatCount >= 4 ? stats.length : portalStats).map(({ key, ...card }) => (
           <StatCard key={key} {...card} />
         ))}
       </StatGrid>
 
-      {mayAudit && <ActivityChart days={days} error={activity.error} onRetry={activity.retry} />}
+      {moduleHeroes.map((Hero, index) => (
+        <Hero key={index} />
+      ))}
 
-      {(mayUsers || moduleCards.length > 0 || mayAudit) && (
+      {mayAudit && moduleCharts.length === 0 && !focused && (
+        <ActivityChart days={days} error={activity.error} onRetry={activity.retry} />
+      )}
+
+      {(mayUsers || moduleCards.length > 0 || moduleCharts.length > 0 || mayAudit) && (
         <div className="grid gap-4 md:gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          {moduleCharts.map((Chart, index) => (
+            <Chart key={index} />
+          ))}
           {moduleCards.map((Card, index) => (
             <Card key={index} />
           ))}
-          {(mayUsers || mayAudit) && (
+          {!focused && (mayUsers || mayAudit) && (
             <SecurityCard
               administrators={mayUsers ? (people.data?.administrators ?? null) : undefined}
               accounts={mayUsers ? accounts : undefined}
@@ -219,7 +233,7 @@ export default function DashboardPage() {
               onRetry={people.retry}
             />
           )}
-          {mayAudit && (
+          {!focused && mayAudit && (
             <RecentActivityCard
               events={events.data ? events.data.content : null}
               error={events.error}
@@ -229,7 +243,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <QuickAccessCard items={shortcuts} />
+      {!focused && <QuickAccessCard items={shortcuts} />}
     </>
   );
 }

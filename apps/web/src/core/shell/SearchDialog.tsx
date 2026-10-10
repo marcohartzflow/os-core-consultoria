@@ -63,7 +63,7 @@ export function SearchDialog() {
               <Fragment key={section.title}>
                 {index > 0 && <CommandSeparator />}
                 <CommandGroup heading={section.title}>
-                  {section.items.map((item) => (
+                  {section.items.flatMap((entry) => entry.children ?? [entry]).map((item) => (
                     <CommandItem
                       key={item.href}
                       value={`${section.title} ${item.label}`}

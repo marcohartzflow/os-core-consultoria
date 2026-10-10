@@ -9,6 +9,11 @@ export interface NavItem {
   icon: LucideIcon;
   /** Permission required to see the item. The API enforces it on every call regardless. */
   permission?: string;
+  /**
+   * Screens grouped under a folder of the sidebar (opens and closes in place). The folder itself is
+   * not a screen: its `href` only names it, and it is hidden when the user may open none of them.
+   */
+  children?: NavItem[];
 }
 
 export interface NavSection {
@@ -36,10 +41,14 @@ export function navigationFor(hasPermission: (permission: string) => boolean): N
       ],
     },
   ];
+  const allowed = (item: NavItem) => !item.permission || hasPermission(item.permission);
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.permission || hasPermission(item.permission)),
+      items: section.items
+        .filter(allowed)
+        .map((item) => (item.children ? { ...item, children: item.children.filter(allowed) } : item))
+        .filter((item) => !item.children || item.children.length > 0),
     }))
     .filter((section) => section.items.length > 0);
 }
@@ -60,11 +69,16 @@ export function breadcrumbFor(
 ): { label: string; href?: string }[] {
   if (pathname === "/") return [{ label: "Painel" }];
   for (const section of navigationFor(hasPermission)) {
-    for (const item of section.items) {
-      if (item.href === "/") continue;
-      if (pathname === item.href) return [{ label: section.title }, { label: item.label }];
-      if (pathname.startsWith(item.href + "/")) {
-        return [{ label: section.title }, { label: item.label, href: item.href }, { label: "Detalhes" }];
+    for (const entry of section.items) {
+      // A folder adds its own name to the trail of the screens inside it.
+      const items = entry.children ?? [entry];
+      const trail = entry.children ? [{ label: section.title }, { label: entry.label }] : [{ label: section.title }];
+      for (const item of items) {
+        if (item.href === "/") continue;
+        if (pathname === item.href) return [...trail, { label: item.label }];
+        if (pathname.startsWith(item.href + "/")) {
+          return [...trail, { label: item.label, href: item.href }, { label: "Detalhes" }];
+        }
       }
     }
   }

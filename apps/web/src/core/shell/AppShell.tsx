@@ -3,15 +3,16 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
-import { ChevronDown, CirclePlus, LogOut } from "lucide-react";
-import { PRODUCT_NAME, ProductMark } from "@/core/brand";
+import { ChevronDown, ChevronRight, CirclePlus, LogOut } from "lucide-react";
+import { COMPANY } from "@/core/brand";
+import { BrandLogo } from "@/core/BrandLogo";
 import { AgentToggle } from "@/core/ai/AgentToggle";
 import { AgentWorkspace } from "@/core/ai/AgentWorkspace";
 import type { Layout } from "react-resizable-panels";
 import { AccountOnboarding } from "@/core/auth/AccountOnboarding";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { SettingsProvider } from "@/core/settings/SettingsDialog";
-import { breadcrumbFor, navigationFor, quickCreateFor } from "./navigation";
+import { breadcrumbFor, navigationFor, quickCreateFor, type NavItem } from "./navigation";
 import { NavUser } from "./NavUser";
 import { SearchDialog } from "./SearchDialog";
 import { ThemeSwitcher } from "./ThemeSwitcher";
@@ -31,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
@@ -53,8 +58,11 @@ import {
 function Brand() {
   return (
     <>
-      <ProductMark />
-      <span className="text-base font-semibold">{PRODUCT_NAME}</span>
+      <BrandLogo className="h-4 text-base group-data-[collapsible=icon]:hidden" />
+      {/* "CoreOS" already says OS; a client name ("Sabiá") gets the OS tag next to it. */}
+      {!COMPANY.name.endsWith("OS") && (
+        <span className="rounded-sm bg-primary px-1.5 py-0.5 text-[10px] font-semibold tracking-widest text-primary-foreground">OS</span>
+      )}
     </>
   );
 }
@@ -144,6 +152,40 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 }
 
+/** A folder of the sidebar: opens in place (open by default) and lists its screens one level in. */
+function NavFolder({ item, pathname }: { item: NavItem; pathname: string }) {
+  const children = item.children ?? [];
+  const current = children.some((child) => isActive(pathname, child.href));
+  return (
+    <Collapsible asChild defaultOpen className="group/collapsible">
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton tooltip={item.label} isActive={current} className="data-[active=true]:bg-transparent data-[active=true]:font-medium">
+            <item.icon />
+            <span>{item.label}</span>
+            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+          <SidebarMenuSub className="mt-1">
+            {children.map((child) => (
+              <SidebarMenuSubItem key={child.href}>
+                <SidebarMenuSubButton asChild isActive={isActive(pathname, child.href)}>
+                  <Link href={child.href}>
+                    <child.icon />
+                    <span>{child.label}</span>
+                    <NavPending />
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  );
+}
+
 export function AppShell({
   sidebarOpen,
   agentLayout,
@@ -214,7 +256,10 @@ export function AppShell({
                 <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {section.items.map((item) => (
+                    {section.items.map((item) =>
+                      item.children ? (
+                        <NavFolder key={item.href} item={item} pathname={pathname} />
+                      ) : (
                       <SidebarMenuItem key={item.href}>
                         <SidebarMenuButton asChild tooltip={item.label} isActive={isActive(pathname, item.href)}>
                           <Link href={item.href}>
@@ -224,7 +269,8 @@ export function AppShell({
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    ))}
+                      ),
+                    )}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -254,6 +300,9 @@ export function AppShell({
                 <Trail pathname={pathname} hasPermission={hasPermission} />
               </div>
               <div className="flex items-center gap-2">
+                <span className="hidden rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground xl:inline">
+                  Demonstração · dados fictícios
+                </span>
                 <SearchDialog />
                 <ThemeSwitcher />
                 <AgentToggle />

@@ -1,16 +1,21 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
-const apiUrl = process.env.API_URL ?? "http://localhost:8080";
+// Demo fork: without API_URL the portal answers /api/* from its own mock (src/app/api, src/mock),
+// so it runs with no backend and no database. Set API_URL to point at the real Spring API.
+const apiUrl = process.env.API_URL;
 
 const nextConfig: NextConfig = {
   // Imagem Docker mínima (apps/web/Dockerfile). A raiz do monorepo entra no trace para o pnpm workspace.
   output: "standalone",
   poweredByHeader: false,
+  // Demo recorded on video: no Next.js badge in the corner.
+  devIndicators: false,
   outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
   // Uma origem só: o browser fala com /api/* no Next, o Next repassa ao Spring.
   // Sem CORS, cookie de sessão fica first-party, SSE do chat funciona com EventSource.
   rewrites() {
+    if (!apiUrl) return { beforeFiles: [] };
     return {
       beforeFiles: [
         // The API's health (status only, no details) under the public origin, for the CD's check

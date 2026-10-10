@@ -1,0 +1,30 @@
+/*
+ * The client's colour. Change --brand (and --brand-foreground, the text drawn on it) and the whole
+ * portal follows: buttons, sign-in panel, active menu, focus rings and the five chart shades.
+ * Loaded after globals.css (see app/layout.tsx), so these win over the neutral preset.
+ */
+:root {
+  --brand: #0f766e;
+  --brand-foreground: #ffffff;
+}
+
+:root,
+.dark {
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --ring: color-mix(in oklch, var(--brand) 40%, transparent);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-foreground);
+  --chart-1: var(--brand);
+  --chart-2: color-mix(in oklch, var(--brand) 78%, white);
+  --chart-3: color-mix(in oklch, var(--brand) 58%, white);
+  --chart-4: color-mix(in oklch, var(--brand) 38%, white);
+  --chart-5: color-mix(in oklch, var(--brand) 22%, white);
+}
+
+.dark {
+  --chart-2: color-mix(in oklch, var(--brand) 78%, black);
+  --chart-3: color-mix(in oklch, var(--brand) 58%, black);
+  --chart-4: color-mix(in oklch, var(--brand) 40%, black);
+  --chart-5: color-mix(in oklch, var(--brand) 25%, black);
+}

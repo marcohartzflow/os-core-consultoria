@@ -1,5 +1,6 @@
 import { LockKeyhole } from "lucide-react";
-import { PRODUCT_NAME, ProductMark } from "@/core/brand";
+import { COMPANY, PRODUCT_NAME } from "@/core/brand";
+import { BrandLogo } from "@/core/BrandLogo";
 import { Separator } from "@/components/ui/separator";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -7,9 +8,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     <main className="grid min-h-dvh p-2 lg:grid-cols-2">
       <div className="relative order-2 hidden rounded-3xl bg-primary lg:flex">
         <div className="absolute top-10 space-y-1 px-10 text-primary-foreground">
-          <ProductMark className="size-10" />
-          <h1 className="text-2xl font-medium">{PRODUCT_NAME}</h1>
-          <p className="text-sm">Portal único da empresa.</p>
+          <BrandLogo onPrimary className="h-7 text-2xl" />
+          <h1 className="pt-6 text-3xl font-medium tracking-tight">{COMPANY.headline}</h1>
+          <p className="max-w-md text-sm text-primary-foreground/70">{COMPANY.pitch}</p>
         </div>
         <div className="absolute bottom-10 flex w-full justify-between px-10">
           <div className="flex-1 space-y-1 text-primary-foreground">
@@ -28,8 +29,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </div>
       <div className="relative order-1 flex flex-col">
         <div className="flex items-center gap-2 px-6 pt-5 font-medium lg:hidden">
-          <ProductMark className="size-5" />
-          {PRODUCT_NAME}
+          <BrandLogo className="h-4" />
         </div>
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="w-full sm:w-[350px]">{children}</div>

@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
+import "./brand.css";
 import { cn } from "@/lib/utils";
 
 // shadcn maps `font-sans` to --font-sans and `font-mono` to --font-geist-mono (see globals.css).
@@ -37,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={cn("h-full", "antialiased", fontMono.variable, "font-sans", inter.variable)}
     >
       <body className="flex min-h-full flex-col">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange nonce={nonce}>
           <TooltipProvider>
             {children}
             <Toaster closeButton position="top-right" />

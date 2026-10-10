@@ -64,7 +64,7 @@ export const config = {
       // Everything except the API proxy, Next internals and the favicon; skip prefetches. No
       // extension-based exclusion: `public/` is empty, and `/settings/users/x.png` is a page that
       // needs its CSP like any other.
-      source: "/((?!api(?:/|$)|_next/static|_next/image|favicon.ico).*)",
+      source: "/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|brand/).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

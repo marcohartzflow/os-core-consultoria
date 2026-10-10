@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { api, ApiError } from "@/core/api/client";
+import { COMPANY } from "@/core/brand";
 import type { Me } from "@/core/api/types";
 import { AuthHeading } from "@/core/auth/AuthHeading";
 import { PasswordInput } from "@/core/auth/PasswordInput";
@@ -26,8 +27,8 @@ function safeInternalPath(candidate: string | null): string {
 function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(`${COMPANY.owner.first.toLowerCase()}@${COMPANY.domain}`); // demo: any password signs in
+  const [password, setPassword] = useState("demonstracao");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
